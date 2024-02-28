@@ -1,0 +1,6 @@
+.idea
+.wwebjs_cache
+.env
+build
+node_modules
+whatsapp-gpt.iml

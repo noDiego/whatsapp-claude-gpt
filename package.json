@@ -1,0 +1,25 @@
+{
+  "name": "whatsapp-gpt",
+  "version": "1.0.0",
+  "author": "Diego Beltran <diego.beltran88@gmail.com>",
+  "main": "index.js",
+  "scripts": {
+    "start": "npm run build && node build/index.js",
+    "debug": "ts-node src/index.ts",
+    "build": "rimraf ./build && tsc"
+  },
+  "dependencies": {
+    "dotenv": "^16.0.3",
+    "openai": "^4.28.0",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "https://github.com/Julzk/whatsapp-web.js/tarball/jkr_hotfix_8",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.11.9",
+    "nodemon": "^2.0.20",
+    "rimraf": "^3.0.2",
+    "ts-node": "^10.9.1",
+    "typescript": "^4.9.3"
+  }
+}
