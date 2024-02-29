@@ -1,8 +1,27 @@
 {
-  "name": "whatsapp-gpt",
+  "name": "whatsapp-gpt-bot",
   "version": "1.0.0",
+  "license": "MIT",
   "author": "Diego Beltran <diego.beltran88@gmail.com>",
+  "description": "WhatsApp-GPT Bot is an AI-driven chatbot for WhatsApp, leveraging OpenAI's latest models for dynamic conversation, image creation, and text-to-speech functionalities. It offers interactive engagement through automatic responses, customizable for various user interactions.",
+  "repository": "noDiego/whatsapp-gpt",
+  "keywords": [
+    "openai",
+    "chatgpt",
+    "gpt",
+    "gpt-4",
+    "whatsapp",
+    "bot",
+    "typescript",
+    "ai",
+    "dall-e",
+    "speech"
+  ],
   "main": "index.js",
+  "files": [
+    "src",
+    "README.md"
+  ],
   "scripts": {
     "start": "npm run build && node build/index.js",
     "debug": "ts-node src/index.ts",

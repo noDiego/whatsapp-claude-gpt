@@ -36,7 +36,7 @@ botConfig.prompt = `You are a helpful and friendly assistant operating on WhatsA
 
 // The exported configuration which combines both OpenAI and general bot configurations
 export const CONFIG = {
-  appName: 'Whatsapp-GPT', // The name of the application, used for logging and identification purposes
+  appName: 'Whatsapp-GPT-Bot', // The name of the application, used for logging and identification purposes
   botConfig,
   openAI
 };
