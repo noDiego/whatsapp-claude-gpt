@@ -159,7 +159,7 @@ export class Roboto {
       const timeDifferenceHours = (actualDate.getTime() - msgDate.getTime()) / (1000 * 60 * 60);
       if (timeDifferenceHours > this.botConfig.maxHoursLimit) continue;
 
-      if ((msg.type !== 'chat' && msg.type !== 'image') || msg.body === '') continue;
+      if ((msg.type !== 'chat' && msg.type !== 'image') || (msg.type === 'chat' && msg.body === '')) continue;
 
       // Check if the message includes media
       const media = msg.type === 'image' ? await msg.downloadMedia() : null;

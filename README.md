@@ -39,7 +39,7 @@ Before initializing the bot, make sure you have [Node.js](https://nodejs.org/en/
 
 1. Clone the repository and navigate to the project directory:
    ```
-   git clone <repository_url>
+   git clone https://github.com/noDiego/whatsapp-gpt-bot.git
    cd whatsapp-gpt
    ```
 2. Install the dependencies:

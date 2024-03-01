@@ -1,10 +1,10 @@
 {
   "name": "whatsapp-gpt-bot",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "license": "MIT",
   "author": "Diego Beltran <diego.beltran88@gmail.com>",
   "description": "WhatsApp-GPT Bot is an AI-driven chatbot for WhatsApp, leveraging OpenAI's latest models for dynamic conversation, image creation, and text-to-speech functionalities. It offers interactive engagement through automatic responses, customizable for various user interactions.",
-  "repository": "noDiego/whatsapp-gpt",
+  "repository": "noDiego/whatsapp-gpt-bot",
   "keywords": [
     "openai",
     "chatgpt",
