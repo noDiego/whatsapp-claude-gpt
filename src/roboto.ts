@@ -1,5 +1,5 @@
 import { ChatGTP } from './services/chatgpt';
-import { Chat, Message, MessageMedia } from 'whatsapp-web.js';
+import { Chat, Message, MessageMedia, MessageTypes } from 'whatsapp-web.js';
 import { getContactName, includeName, logMessage, parseCommand } from './utils';
 import { GPTRol } from './interfaces/gpt-rol';
 import logger from './logger';
@@ -11,6 +11,7 @@ export class Roboto {
 
   private chatGpt: ChatGTP;
   private botConfig = CONFIG.botConfig;
+  private allowedTypes = [MessageTypes.STICKER, MessageTypes.TEXT, MessageTypes.IMAGE];
 
   public constructor() {
     this.chatGpt = new ChatGTP();
@@ -43,6 +44,9 @@ export class Roboto {
 
       // If it's a "Broadcast" message, it's not processed
       if(chatData.id.user == 'status' || chatData.id._serialized == 'status@broadcast') return false;
+
+      // Evaluates whether the message type will be processed
+      if(!this.allowedTypes.includes(message.type)) return false;
 
       // Evaluates if it should respond
       const isSelfMention = message.hasQuotedMsg ? (await message.getQuotedMessage()).fromMe : false;
@@ -157,19 +161,21 @@ export class Roboto {
       // Validate if the message was written less than 24 (or maxHoursLimit) hours ago; if older, it's not considered
       const msgDate = new Date(msg.timestamp * 1000);
       const timeDifferenceHours = (actualDate.getTime() - msgDate.getTime()) / (1000 * 60 * 60);
+      const isImage = MessageTypes.STICKER || msg.type === MessageTypes.IMAGE;
+
       if (timeDifferenceHours > this.botConfig.maxHoursLimit) continue;
 
-      if ((msg.type !== 'chat' && msg.type !== 'image') || (msg.type === 'chat' && msg.body === '')) continue;
+      if (!this.allowedTypes.includes(msg.type) || (msg.type === 'chat' && msg.body === '')) continue;
 
       // Check if the message includes media
-      const media = msg.type === 'image' ? await msg.downloadMedia() : null;
+      const media = isImage? await msg.downloadMedia() : null;
 
       const role = msg.fromMe ? GPTRol.ASSISTANT : GPTRol.USER;
       const name = msg.fromMe ? GPTRol.ASSISTANT : (await getContactName(msg));
 
       // Assemble the content as a mix of text and any included media
       const content: string | Array<ChatCompletionContentPart> = [];
-      if (msg.type === 'image' && media) {
+      if (isImage && media) {
         content.push({
           type: 'image_url', "image_url": {
             "url": `data:image/jpeg;base64,${media.data}`
