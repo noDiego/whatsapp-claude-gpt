@@ -11,7 +11,7 @@ export class Roboto {
 
   private chatGpt: ChatGTP;
   private botConfig = CONFIG.botConfig;
-  private allowedTypes = [MessageTypes.STICKER, MessageTypes.TEXT, MessageTypes.IMAGE];
+  private allowedTypes = [MessageTypes.STICKER, MessageTypes.TEXT, MessageTypes.IMAGE, MessageTypes.AUDIO];
 
   public constructor() {
     this.chatGpt = new ChatGTP();
@@ -46,7 +46,7 @@ export class Roboto {
       if(chatData.id.user == 'status' || chatData.id._serialized == 'status@broadcast') return false;
 
       // Evaluates whether the message type will be processed
-      if(!this.allowedTypes.includes(message.type)) return false;
+      if(!this.allowedTypes.includes(message.type) || message.type == MessageTypes.AUDIO) return false;
 
       // Evaluates if it should respond
       const isSelfMention = message.hasQuotedMsg ? (await message.getQuotedMessage()).fromMe : false;
@@ -161,7 +161,7 @@ export class Roboto {
       // Validate if the message was written less than 24 (or maxHoursLimit) hours ago; if older, it's not considered
       const msgDate = new Date(msg.timestamp * 1000);
       const timeDifferenceHours = (actualDate.getTime() - msgDate.getTime()) / (1000 * 60 * 60);
-      const isImage = MessageTypes.STICKER || msg.type === MessageTypes.IMAGE;
+      const isImage = msg.type === MessageTypes.STICKER || msg.type === MessageTypes.IMAGE;
 
       if (timeDifferenceHours > this.botConfig.maxHoursLimit) continue;
 
@@ -182,6 +182,8 @@ export class Roboto {
           }
         });
       }
+
+      if (msg.type == MessageTypes.AUDIO) content.push({ type: 'text', text: `<Audio Message>` });
 
       if (msg.body) content.push({ type: 'text', text: msg.body });
 
