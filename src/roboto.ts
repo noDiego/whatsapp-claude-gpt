@@ -1,20 +1,27 @@
 import { ChatGTP } from './services/chatgpt';
-import { Chat, Message, MessageMedia, MessageTypes } from 'whatsapp-web.js';
+import { Chat, Client, Message, MessageMedia, MessageTypes } from 'whatsapp-web.js';
 import { getContactName, includeName, logMessage, parseCommand } from './utils';
-import { GPTRol } from './interfaces/gpt-rol';
 import logger from './logger';
 import { CONFIG } from './config';
+import { AiContent, AiLanguage, AiMessage, AiRole } from './interfaces/ai-message';
+import Anthropic from '@anthropic-ai/sdk';
+import { ChatCompletionMessageParam } from 'openai/resources';
 import OpenAI from 'openai';
+import { Claude } from './services/claude';
+import { ImageBlockParam, TextBlock } from '@anthropic-ai/sdk/src/resources/messages';
+import MessageParam = Anthropic.MessageParam;
 import ChatCompletionContentPart = OpenAI.ChatCompletionContentPart;
 
 export class Roboto {
 
   private chatGpt: ChatGTP;
+  private claude: Claude;
   private botConfig = CONFIG.botConfig;
-  private allowedTypes = [MessageTypes.STICKER, MessageTypes.TEXT, MessageTypes.IMAGE, MessageTypes.AUDIO];
+  private allowedTypes = [MessageTypes.STICKER, MessageTypes.TEXT, MessageTypes.IMAGE];
 
   public constructor() {
     this.chatGpt = new ChatGTP();
+    this.claude = new Claude();
   }
 
   /**
@@ -35,7 +42,7 @@ export class Roboto {
    * Returns:
    * - A promise that resolves to a boolean value indicating whether a response was successfully sent back to the user or not.
    */
-  public async readMessage(message: Message) {
+  public async readMessage(message: Message, client: Client) {
     try {
 
       // Extract the data input (extracts command e.g., "-a", and the message)
@@ -46,7 +53,7 @@ export class Roboto {
       if(chatData.id.user == 'status' || chatData.id._serialized == 'status@broadcast') return false;
 
       // Evaluates whether the message type will be processed
-      if(!this.allowedTypes.includes(message.type) || message.type == MessageTypes.AUDIO) return false;
+      if(!this.allowedTypes.includes(message.type)) return false;
 
       // Evaluates if it should respond
       const isSelfMention = message.hasQuotedMsg ? (await message.getQuotedMessage()).fromMe : false;
@@ -71,7 +78,10 @@ export class Roboto {
       chatData.clearState();
 
       if(!chatResponseString) return;
-      return message.reply(chatResponseString);
+
+      if(chatData.isGroup) return message.reply(chatResponseString);
+      else return client.sendMessage(message.from, chatResponseString);
+
     } catch (e: any) {
       logger.error(e.message);
       return message.reply('Error 😔');
@@ -145,10 +155,7 @@ export class Roboto {
     const actualDate = new Date();
 
     // Initialize an array of messages
-    const messageList: any[] = [];
-
-    // The first element will be the system message
-    messageList.push({ role: GPTRol.SYSTEM, content: this.botConfig.prompt });
+    const messageList: AiMessage[] = [];
 
     // Retrieve the last 'limit' number of messages to send them in order
     const fetchedMessages = await chatData.fetchMessages({ limit: this.botConfig.maxMsgsLimit });
@@ -161,31 +168,22 @@ export class Roboto {
       // Validate if the message was written less than 24 (or maxHoursLimit) hours ago; if older, it's not considered
       const msgDate = new Date(msg.timestamp * 1000);
       const timeDifferenceHours = (actualDate.getTime() - msgDate.getTime()) / (1000 * 60 * 60);
-      const isImage = msg.type === MessageTypes.STICKER || msg.type === MessageTypes.IMAGE;
-
       if (timeDifferenceHours > this.botConfig.maxHoursLimit) continue;
 
-      if (!this.allowedTypes.includes(msg.type) || (msg.type === 'chat' && msg.body === '')) continue;
-
       // Check if the message includes media
+      const isImage = msg.type ===  MessageTypes.STICKER || msg.type === MessageTypes.IMAGE;
+      const isAudio = msg.type ==   MessageTypes.AUDIO || msg.type == MessageTypes.VOICE;
+      if (!this.allowedTypes.includes(msg.type) && !isAudio) continue;
       const media = isImage? await msg.downloadMedia() : null;
 
-      const role = msg.fromMe ? GPTRol.ASSISTANT : GPTRol.USER;
-      const name = msg.fromMe ? GPTRol.ASSISTANT : (await getContactName(msg));
+      const role = msg.fromMe ? AiRole.ASSISTANT : AiRole.USER;
+      const name = msg.fromMe ? '' : (await getContactName(msg));
 
       // Assemble the content as a mix of text and any included media
-      const content: string | Array<ChatCompletionContentPart> = [];
-      if (isImage && media) {
-        content.push({
-          type: 'image_url', "image_url": {
-            "url": `data:image/jpeg;base64,${media.data}`
-          }
-        });
-      }
-
-      if (msg.type == MessageTypes.AUDIO) content.push({ type: 'text', text: `<Audio Message>` });
-
-      if (msg.body) content.push({ type: 'text', text: msg.body });
+      const content: Array<AiContent> = [];
+      if (isImage && media) content.push({ type: 'image', value: media.data });
+      if (isAudio)          content.push({ type: 'text', value: `<Audio Message>` });
+      if (msg.body)         content.push({ type: 'text', value: chatData.isGroup && !msg.fromMe? `${name}: ` : '' + msg.body });
 
       messageList.push({ role: role, name: name, content: content });
     }
@@ -193,17 +191,24 @@ export class Roboto {
     // Limit the number of processed images to only the last few, as defined in bot configuration (maxSentImages)
     let imageCount = 0;
     for (let i = messageList.length - 1; i >= 0; i--) {
-      if (messageList[i].content.type === 'image_url') {
+      const haveImg = messageList[i].content.find(c => c.type == 'image');
+      if (haveImg) {
         imageCount++;
         if (imageCount > this.botConfig.maxImages) messageList.splice(i, 1);
       }
     }
 
     // If no new messages are present, return without action
-    if (messageList.length == 1) return;
+    if (messageList.length == 0) return;
 
     // Send the message and return the text response
-    return await this.chatGpt.sendCompletion(messageList);
+    if (CONFIG.botConfig.aiLanguage == AiLanguage.OPENAI) {
+      const convertedMessageList: ChatCompletionMessageParam[] = this.convertIaMessagesLang(messageList, AiLanguage.OPENAI) as ChatCompletionMessageParam[];
+      return await this.chatGpt.sendCompletion(convertedMessageList, this.botConfig.prompt);
+    } else if (CONFIG.botConfig.aiLanguage == AiLanguage.ANTHROPIC) {
+      const convertedMessageList: MessageParam[] = this.convertIaMessagesLang(messageList, AiLanguage.ANTHROPIC) as MessageParam[];
+      return await this.claude.sendChat(convertedMessageList, this.botConfig.prompt);
+    }
   }
 
   /**
@@ -274,6 +279,67 @@ export class Roboto {
       if(msg.fromMe && msg.body.length>1) lastMessageBot = msg.body;
     }
     return lastMessageBot;
+  }
+
+  /**
+   * Converts AI message structures between different language models (OPENAI and ANTHROPIC).
+   * This function takes a list of AI messages, which may include text and image content,
+   * and converts this list into a format compatible with the specified AI language model.
+   * It supports conversion to both OpenAI and Anthropic message formats.
+   *
+   * Parameters:
+   * - messageList: An array of AiMessage, representing the messages to be converted.
+   * - lang: An AiLanguage enum value indicating the target language model (OPENAI or ANTHROPIC).
+   *
+   * Returns:
+   * - An array of MessageParam (for Anthropic) or ChatCompletionMessageParam (for OpenAI),
+   *   formatted according to the specified language model. The type of array returned depends
+   *   on the target language model indicated by the lang parameter.
+   */
+  private convertIaMessagesLang(messageList: AiMessage[], lang: AiLanguage ): MessageParam[] | ChatCompletionMessageParam[]{
+    switch (lang){
+      case AiLanguage.ANTHROPIC:
+
+        const claudeMessageList: MessageParam[] = [];
+        let currentRole: AiRole = AiRole.USER;
+        let gptContent: Array<TextBlock | ImageBlockParam> = [];
+        messageList.forEach((msg, index) => {
+          const role = msg.role === AiRole.ASSISTANT && msg.content.find(c => c.type === 'image') ? AiRole.USER : msg.role;
+          if (role !== currentRole) { // Change role or if it's the last message
+            if (gptContent.length > 0) {
+              claudeMessageList.push({ role: currentRole, content: gptContent });
+              gptContent = []; // Reset for the next block of messages
+            }
+            currentRole = role; // Ensure role alternation
+          }
+
+          // Add content to the current block
+          msg.content.forEach(c => {
+            if (c.type === 'text') gptContent.push({ type: 'text', text:<string> c.value });
+            else if (c.type === 'image') gptContent.push({ type: 'image', source: { data: <string>c.value, media_type: 'image/jpeg', type: 'base64' } });
+          });
+        });
+        // Ensure the last block is not left out
+        if (gptContent.length > 0) claudeMessageList.push({ role: currentRole, content: gptContent });
+
+        return claudeMessageList;
+
+      case AiLanguage.OPENAI:
+
+        const chatgptMessageList: any[] = [];
+        messageList.forEach(msg => {
+          const gptContent: Array<ChatCompletionContentPart> = [];
+          msg.content.forEach(c => {
+            if(c.type == 'image') gptContent.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${c.value}`} });
+            if(c.type == 'text') gptContent.push({ type: 'text', text: <string> c.value });
+          })
+          chatgptMessageList.push({content: gptContent, name: msg.name, role: msg.role});
+        })
+        return chatgptMessageList;
+
+      default:
+        return [];
+    }
   }
 
 }

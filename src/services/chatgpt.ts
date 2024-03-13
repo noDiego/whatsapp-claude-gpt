@@ -26,14 +26,16 @@ export class ChatGTP {
    * Returns:
    * - A promise that resolves to the generated completion string, which is the API's response based on the provided context.
    */
-  async sendCompletion(messageList: ChatCompletionMessageParam[]) {
+  async sendCompletion(messageList: ChatCompletionMessageParam[], systemPrompt: string) {
 
     logger.debug(`[ChatGTP->sendCompletion] Sending ${messageList.length} messages.`);
+
+    messageList.unshift({role: 'system', content:systemPrompt});
 
     const completion = await this.openai.chat.completions.create({
       model: CONFIG.openAI.chatCompletionModel,
       messages: messageList,
-      max_tokens: 512,
+      max_tokens: 1024,
       top_p: 1,
       frequency_penalty: 0.5,
       presence_penalty: 0

@@ -17,7 +17,7 @@ client.on('ready', () => {
 });
 
 client.on('message', async (message: Message) => {
-  roboto.readMessage(message);
+  roboto.readMessage(message, client);
 });
 
 try {
