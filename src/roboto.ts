@@ -166,7 +166,7 @@ export class Roboto {
       if (timeDifferenceHours > this.botConfig.maxHoursLimit) continue;
 
       // Check if the message includes media
-      const isImage = msg.type ===  MessageTypes.STICKER || msg.type === MessageTypes.IMAGE;
+      const isImage = msg.type === MessageTypes.IMAGE || msg.type ===  MessageTypes.STICKER;
       const isAudio = msg.type ==   MessageTypes.AUDIO || msg.type == MessageTypes.VOICE;
       if (!this.allowedTypes.includes(msg.type) && !isAudio) continue;
       const media = isImage? await msg.downloadMedia() : null;
@@ -176,7 +176,7 @@ export class Roboto {
 
       // Assemble the content as a mix of text and any included media
       const content: Array<AiContent> = [];
-      if (isImage && media) content.push({ type: 'image', value: media.data });
+      if (isImage && media) content.push({ type: 'image', value: media.data, media_type: media.mimetype });
       if (isAudio)          content.push({ type: 'text', value: `<Audio Message>` });
       if (msg.body)         content.push({ type: 'text', value: (chatData.isGroup && !msg.fromMe? `${name}: ` : '') + msg.body });
 
@@ -311,7 +311,7 @@ export class Roboto {
           // Add content to the current block
           msg.content.forEach(c => {
             if (c.type === 'text') gptContent.push({ type: 'text', text:<string> c.value });
-            else if (c.type === 'image') gptContent.push({ type: 'image', source: { data: <string>c.value, media_type: 'image/jpeg', type: 'base64' } });
+            else if (c.type === 'image') gptContent.push({ type: 'image', source: { data: <string>c.value, media_type: c.media_type as any, type: 'base64' } });
           });
         });
         // Ensure the last block is not left out
@@ -325,7 +325,7 @@ export class Roboto {
         messageList.forEach(msg => {
           const gptContent: Array<ChatCompletionContentPart> = [];
           msg.content.forEach(c => {
-            if(c.type == 'image') gptContent.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${c.value}`} });
+            if(c.type == 'image') gptContent.push({ type: 'image_url', image_url: { url: `data:${c.media_type};base64,${c.value}`} });
             if(c.type == 'text') gptContent.push({ type: 'text', text: <string> c.value });
           })
           chatgptMessageList.push({content: gptContent, name: msg.name, role: msg.role});

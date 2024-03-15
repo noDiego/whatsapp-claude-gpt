@@ -12,6 +12,7 @@ export enum AiRole {
 export interface AiContent {
   value?: string;
   type: 'text' | 'image';
+  media_type?: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' | string;
 }
 
 export enum AiLanguage {
