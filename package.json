@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-claude-gpt",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "license": "MIT",
   "author": "Diego Beltran <diego.beltran88@gmail.com>",
   "description": "Introducing WhatsApp-Claude-GPT Bot, a cutting-edge AI conversational agent that brings the power of OpenAI's GPT models and Anthropic's CLAUDE to WhatsApp. Featuring dual AI capabilities, this bot leverages GPT-4 for enriched dialogues, DALL-E 3 for imaginative image creations directly from text prompts, and advanced TTS models for lifelike speech synthesis - all within the convenience of WhatsApp. Crafted with flexibility in mind, the bot is configurable to utilize either OpenAI's expansive models or Anthropic's precise and nuanced CLAUDE, enabling users to tailor interactions according to their preferences. This bot is your encounter point for AI-driven conversational magic, image generation marvels, and text-to-speech wonders, making it an ideal companion for users seeking interactive, helpful, and entertaining experiences on their favorite messaging platform. Developed in Typescript, the WhatsApp-Claude-GPT Bot is a testament to the seamless integration of advanced AI technologies in everyday communication apps, ensuring users engage in meaningful, creative, and seamless conversations anytime, anywhere.",
@@ -33,11 +33,12 @@
     "build": "rimraf ./build && tsc"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.17.1",
+    "@anthropic-ai/sdk": "^0.25.2",
     "dotenv": "^16.0.3",
-    "openai": "^4.28.0",
+    "node-cache": "^5.1.2",
+    "openai": "^4.55.4",
     "qrcode-terminal": "^0.12.0",
-    "whatsapp-web.js": "https://github.com/Julzk/whatsapp-web.js/tarball/jkr_hotfix_8",
+    "whatsapp-web.js": "1.25.0",
     "winston": "^3.11.0"
   },
   "devDependencies": {

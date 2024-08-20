@@ -4,12 +4,21 @@ WhatsApp-Claude-GPT is a chatbot application designed for seamless interaction o
 
 Please note that image and audio creation functionalities are exclusive to OpenAI. To use these features, you must provide an OpenAI API Key, even if you choose to use Anthropic's Claude for text generation.
 
+## Updates in Version 1.1.0
+
+With this latest update, the bot has gained the ability to understand and respond to voice messages. Users can now send voice messages to the bot, and it will transcribe and interpret them as part of the conversation. Additionally, if a user requests an audio response, the bot can generate and send a voice message in reply.
+
+**Removed Feature:**
+- The `-speak` command has been removed. It is no longer necessary due to the new functionality of handling voice messages directly.
+
+This enhancement improves the bot's interactivity and makes conversations more natural and engaging.
+
 ## Key Features
 
 - **Automatic Responses**: Generates coherent and contextual responses to received messages.
 - **Image Creation** (OpenAI only): Can create images from text descriptions using the `-image` command.
-- **Speech Synthesis** (OpenAI only): Capable of converting text into audio using the `-speak` command. If no text is specified after the command, it will use the last message sent by the bot as the input text.
-- **Group Interaction**: When added to a group, the bot requires that its name be mentioned to activate and respond. Example: "Hi *Roboto*, how are you?"
+- **Voice Interaction**: Capable of both understanding voice messages and responding with its own voice messages upon request.
+- **Group Interaction**: When added to a group, the bot requires that its name be mentioned to activate and respond. Example: "Hi Roboto, how are you?"
 
 ## Setting Up Your OpenAI API Key
 
@@ -97,7 +106,8 @@ In the `src/config/index.ts` file, you can adjust several settings to customize 
 - **maxMsgsLimit**: The maximum number of messages the bot will remember and use for generating responses.
 - **maxHoursLimit**: The time frame in hours for the bot to consider recent messages.
 - **prompt**: The initial system prompt used to guide the conversation flow. It's automatically configured but can be manually adjusted if needed.
-- **imageCreationEnabled** and **audioCreationEnabled**: Flags to enable or disable image creation and speech synthesis functionalities.
+- **imageCreationEnabled**: Flag to enable or disable image creation functionality.
+- **nodeCacheTime**: This determines how long transcriptions and other data are kept in cache before they are considered stale and removed (e.g., 259200 for 3 days)
 
 ### OpenAI Configuration
 
@@ -106,6 +116,7 @@ In the `src/config/index.ts` file, you can adjust several settings to customize 
 - **imageCreationModel**: The model used by OpenAI for generating images based on text descriptions.
 - **speechModel**: The model used by OpenAI for generating speech from text.
 - **speechVoice**: Specifies the voice model to be used in speech synthesis.
+- **transcriptionLanguage**: The language used for transcribing audio, in ISO-639-1 format (e.g., "en" for English).
 
 ### Anthropic Configuration
 
@@ -128,17 +139,20 @@ Example:
 
 <img src="https://i.imgur.com/mAlBnl9.jpg" width="650">
 
-### Generating Audio with `-speak`
+### Requesting Audio Responses
+The bot can now respond with audio messages as well as understand voice messages from users. To request an audio response from the bot, you can include a specific request in your message. For example:
+```bash
+Please respond with an audio message.
+```
+Or:
+```bash
+Can you say this as an audio?
+```
 
-The `-speak` command allows you to convert text into audio. For example:
-```
--speak This is a test message.
-```
-Or simply use `-speak` to generate audio from the last message sent by the bot.
+Additionally, the bot is capable of processing and understanding voice messages sent by users. It will transcribe and consider the content of these voice messages when generating its responses, ensuring a seamless voice interaction.
 
 Example:
-
-<img src="https://i.imgur.com/UEqnvBM.jpg" width="650">
+<img src="https://i.imgur.com/hvmd9z5.jpg" width="650">
 
 ### Resetting Chat Context with `-reset`
 

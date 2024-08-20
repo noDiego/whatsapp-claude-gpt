@@ -5,6 +5,7 @@ import logger from './logger';
 const qrcode = require('qrcode-terminal');
 const { Client } = require('whatsapp-web.js');
 const client = new Client();
+
 const roboto: Roboto = new Roboto();
 require('dotenv').config();
 

@@ -1,5 +1,5 @@
 import logger from '../logger';
-import OpenAI from 'openai';
+import OpenAI, { toFile } from 'openai';
 import { ChatCompletionMessageParam } from 'openai/resources';
 import { CONFIG } from '../config';
 
@@ -85,17 +85,52 @@ export class ChatGTP {
    * Returns:
    * - A promise that resolves to a buffer containing the audio data in MP3 format. This buffer can be played back or sent as an audio message.
    */
-  async speech(message){
+  async speech(message, responseFormat?){
 
-    logger.debug(`[ChatGTP->createImage] Creating speech audio for: "${message}"`);
+    logger.debug(`[ChatGTP->speech] Creating speech audio for: "${message}"`);
 
     const response: any = await this.openai.audio.speech.create({
       model: CONFIG.openAI.speechModel,
       voice: <any>CONFIG.openAI.speechVoice,
       input: message,
-      response_format: 'mp3'
+      response_format: responseFormat || 'mp3'
     });
+
+    logger.debug(`[ChatGTP->speech] Audio Creation OK`);
+
     return Buffer.from(await response.arrayBuffer());
+  }
+
+  /**
+   * Transcribes audio content into text using OpenAI's transcription capabilities.
+   * This function takes an audio file and sends a request to OpenAI's API to generate a textual representation of the spoken words.
+   * It leverages the Whisper model for high-quality transcription, converting audio inputs into readable text output.
+   *
+   * Parameters:
+   * - message: A string indicating the audio file path or description for logging purposes. Currently, it is not used in the function's implementation but can be helpful for future extensions or logging clarity.
+   *
+   * Returns:
+   * - A promise that resolves to a string containing the transcribed text. This string is the result of processing the provided audio through OpenAI's transcription model.
+   *
+   * Throws:
+   * - Any errors encountered during the process of reading the audio file or interacting with OpenAI's API will be thrown and should be handled by the caller function.
+   */
+  async transcription(stream: any) {
+    logger.debug(`[ChatGTP->transcription] Creating transcription text for audio"`);
+    try {
+      // Convertir ReadStream a File o Blob
+      const file = await toFile(stream, 'audio.ogg', { type: 'audio/ogg' });
+      // Enviar el archivo convertido a la API de transcripción
+      const response = await this.openai.audio.transcriptions.create({
+        file: file,
+        model: "whisper-1",
+        language: CONFIG.openAI.transcriptionLanguage
+      });
+      return response.text;
+    } catch (e: any) {
+      logger.error(e.message);
+      throw e;
+    }
   }
 
 }

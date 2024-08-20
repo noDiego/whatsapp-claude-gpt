@@ -1,5 +1,6 @@
 import { Chat, Message } from 'whatsapp-web.js';
 import logger from '../logger';
+import { Readable } from 'stream';
 
 export function getFormattedDate() {
   const now = new Date();
@@ -46,4 +47,23 @@ export async function getContactName(message: Message){
   const contactInfo = await message.getContact();
   const name = contactInfo.shortName || contactInfo.name || contactInfo.pushname || contactInfo.number;
   return removeNonAlphanumeric(name);
+}
+
+export function bufferToStream(buffer) {
+  const stream = new Readable();
+  stream.push(buffer);
+  stream.push(null);
+  return stream;
+}
+
+export function addNameToMessage(name, message) {
+  // Regex to detect "[Type]"
+  const pattern = /^\[.*?\]/;
+
+  // Adding Name
+  const modifiedMessage = message.replace(pattern, (match) => {
+    return `${match.trim()} ${name}:`;
+  });
+
+  return modifiedMessage;
 }
