@@ -9,9 +9,9 @@ import { ChatCompletionMessageParam } from 'openai/resources';
 import OpenAI from 'openai';
 import { Claude } from './services/claude';
 import { ImageBlockParam, TextBlock } from '@anthropic-ai/sdk/src/resources/messages';
+import NodeCache from 'node-cache';
 import MessageParam = Anthropic.MessageParam;
 import ChatCompletionContentPart = OpenAI.ChatCompletionContentPart;
-import NodeCache from 'node-cache';
 
 export class Roboto {
 
@@ -50,13 +50,14 @@ export class Roboto {
 
       // Extract the data input (extracts command e.g., "-a", and the message)
       const chatData: Chat = await message.getChat();
+      const isAudioMsg = message.type == MessageTypes.VOICE || message.type == MessageTypes.AUDIO;
       const { command, commandMessage } = parseCommand(message.body);
 
       // If it's a "Broadcast" message, it's not processed
       if(chatData.id.user == 'status' || chatData.id._serialized == 'status@broadcast') return false;
 
       // Evaluates whether the message type will be processed
-      if(!this.allowedTypes.includes(message.type)) return false;
+      if(!this.allowedTypes.includes(message.type) || (isAudioMsg && !this.botConfig.voiceMessagesEnabled)) return false;
 
       // Evaluates if it should respond
       const isSelfMention = message.hasQuotedMsg ? (await message.getQuotedMessage()).fromMe : false;
@@ -177,7 +178,8 @@ export class Roboto {
       // Check if the message includes media
       const isImage = msg.type === MessageTypes.IMAGE || msg.type ===  MessageTypes.STICKER;
       const isAudio = msg.type === MessageTypes.VOICE || msg.type === MessageTypes.AUDIO;
-      if (!this.allowedTypes.includes(msg.type) && !isAudio) continue;
+      if ((!this.allowedTypes.includes(msg.type) && !isAudio) || (isAudio && !this.botConfig.voiceMessagesEnabled)) continue;
+      if ((msg.fromMe && isImage)) continue;
       const media = isImage || isAudio? await msg.downloadMedia() : null;
 
       const role = msg.fromMe ? AiRole.ASSISTANT : AiRole.USER;
@@ -404,7 +406,6 @@ export class Roboto {
 
       // Convert the base64 media data to a Buffer
       const audioBuffer = Buffer.from(media.data, 'base64');
-      logger.debug(`Created audio buffer with size: ${audioBuffer.length}`);
 
       // Convert the buffer to a stream
       const audioStream = bufferToStream(audioBuffer);

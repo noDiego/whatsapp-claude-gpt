@@ -4,67 +4,51 @@ WhatsApp-Claude-GPT is a chatbot application designed for seamless interaction o
 
 Please note that image and audio creation functionalities are exclusive to OpenAI. To use these features, you must provide an OpenAI API Key, even if you choose to use Anthropic's Claude for text generation.
 
-## Updates in Version 1.1.0
-
-With this latest update, the bot has gained the ability to understand and respond to voice messages. Users can now send voice messages to the bot, and it will transcribe and interpret them as part of the conversation. Additionally, if a user requests an audio response, the bot can generate and send a voice message in reply.
-
-**Removed Feature:**
-- The `-speak` command has been removed. It is no longer necessary due to the new functionality of handling voice messages directly.
-
-This enhancement improves the bot's interactivity and makes conversations more natural and engaging.
-
 ## Key Features
 
 - **Automatic Responses**: Generates coherent and contextual responses to received messages.
 - **Image Creation** (OpenAI only): Can create images from text descriptions using the `-image` command.
-- **Voice Interaction**: Capable of both understanding voice messages and responding with its own voice messages upon request.
+- **Voice Interaction** (OpenAI only): Capable of both understanding voice messages and responding with its own voice messages upon request.
 - **Group Interaction**: When added to a group, the bot requires that its name be mentioned to activate and respond. Example: "Hi Roboto, how are you?"
 
-## Setting Up Your OpenAI API Key
+## Setting Up Your API Keys
 
-Before you begin using WhatsApp-Claude-GPT, you need to provide your API keys to authenticate requests made to the OpenAI and Anthropic services. You can provide your API keys in two ways:
+### Using the .env File
 
-1. **Environment Variables**: This is the recommended way to set your API keys. In the root of your project, you will find a file named `.env`. Open this file and add the following lines:
-   ```
-   OPENAI_API_KEY=your_openai_key_here
-   CLAUDE_API_KEY=your_anthropic_key_here
-   ```
-   Replace `your_openai_key_here` with your actual OpenAI API key and `your_anthropic_key_here` with your actual Anthropic API key.
+Before you begin using WhatsApp-Claude-GPT, you need to provide your API keys to authenticate requests made to the OpenAI and Anthropic services. This can be done by adding your keys to the `.env` file in the project root.
 
-2. **Directly in Configuration**: As an alternative, you can directly set your API keys in the `src/config/index.ts` file:
-    - For OpenAI, locate the `openAI` configuration object and set the `apiKey` property:
-      ```typescript
-      const openAI = {
-        apiKey: "your_openai_key_here", // Replace this with your actual OpenAI API key
-        // Remaining properties
-      };
-      ```
-    - For Anthropic, locate the `anthropic` configuration object and set the `apiKey` property:
-      ```typescript
-      const anthropic = {
-        apiKey: "your_anthropic_key_here", // Replace this with your actual Anthropic API key
-        // Remaining properties
-      };
-      ```
+Here is an example of the `.env` file and explanations for each variable:
 
-    - Furthermore, ensure the `aiLanguage` within `botConfig` in `src/config/index.ts` is appropriately selected to use either "OPENAI" or "ANTHROPIC" based on your preference. This setting can also be configured through the `.env` file by adding the line:
+```
+## OPENAI CONFIG
+OPENAI_API_KEY=your_openai_api_key
+CHAT_COMPLETION_MODEL=gpt-4o-mini   # Model for chat completions
+IMAGE_CREATION_MODEL=dall-e-3       # Model for image generation
+SPEECH_MODEL=tts-1                  # Model for speech synthesis
+SPEECH_VOICE=nova                   # Voice model for speech synthesis
+TRANSCRIPTION_LANGUAGE=en           # The language used for transcribing audio, in ISO-639-1 format (e.g., "en" for English).
 
-      ```
-      AI_LANGUAGE=OPENAI
-      ```
+## CLAUDE CONFIG
+CLAUDE_API_KEY=your_claude_api_key
+CLAUDE_CHAT_MODEL=claude-3-sonnet-20240229  # Model for Claude chat interactions
 
-      or
+## BOT CONFIG
+AI_LANGUAGE=OPENAI                    # Specifies the AI language model to be used. It can be set to either "ANTHROPIC" or "OPENAI".
+PREFERRED_LANGUAGE=                   # The default language for the bot. If not specified, the bot will use the language of the chat it is responding to.
+MAX_CHARACTERS=2000                   # The maximum number of characters the chat model will output in a single completion
+BOT_NAME=Roboto                       # The name the bot will respond to in groups.
+MAX_IMAGES=3                          # The maximum number of images the bot can process from the recent messages
+MAX_MSGS_LIMIT=30                     # The maximum number of messages the bot will remember and use for generating responses
+MAX_HOURS_LIMIT=24                    # The time frame in hours for the bot to consider recent messages
+NODE_CACHE_TIME=259200                # Cache time for stored data in seconds (3 days)
 
-      ```
-      AI_LANGUAGE=ANTHROPIC
-      ```
-      depending on which service you intend to use.
+IMAGE_CREATION_ENABLED=false           # Enable image creation (OpenAI Only)
+VOICE_MESSAGES_ENABLED=false           # Enable voice responses (OpenAI Only)
+```
 
 **You can find your OpenAI API key in your [OpenAI Account Settings](https://platform.openai.com/account/api-keys).**
 
 **You can find your Anthropic API key in your [Anthropic Account Settings](https://www.anthropic.com/account/api-keys).**
-
-
 
 
 ## Requirements
@@ -83,7 +67,7 @@ Before initializing the bot, make sure you have [Node.js](https://nodejs.org/en/
    ```
    npm install
    ```
-3. Set up your OpenAI and Anthropic API keys by following the [Setting Up Your OpenAI and Anthropic API Keys](#setting-up-your-openai-and-anthropic-api-keys) section and ensuring the `aiLanguage` is correctly chosen.
+3. Set up your API keys in the `.env` file as described above.
 
 Once the installation and configuration are complete, you are all set to start and enjoy the functionalities of WhatsApp-Claude-GPT.
 
@@ -94,37 +78,6 @@ To start the bot, run the following command in the terminal:
 npm run start
 ```
 Upon startup, the bot will display a QR code in the terminal. Scan this QR code using the WhatsApp application on your mobile phone to link the bot to your WhatsApp account.
-
-## Configuration Options (`src/config/index.ts`)
-
-In the `src/config/index.ts` file, you can adjust several settings to customize the bot's behavior. Here are some of the key parameters you can modify:
-
-- **aiLanguage**: Specifies the AI language model to be used. It can be set to either "ANTHROPIC" or "OPENAI".
-- **botName**: The name the bot will respond to in groups.
-- **maxCharacters**: The maximum number of characters the chat model will output in a single completion.
-- **maxImages**: The maximum number of images the bot can process from the recent messages.
-- **maxMsgsLimit**: The maximum number of messages the bot will remember and use for generating responses.
-- **maxHoursLimit**: The time frame in hours for the bot to consider recent messages.
-- **prompt**: The initial system prompt used to guide the conversation flow. It's automatically configured but can be manually adjusted if needed.
-- **imageCreationEnabled**: Flag to enable or disable image creation functionality.
-- **nodeCacheTime**: This determines how long transcriptions and other data are kept in cache before they are considered stale and removed (e.g., 259200 for 3 days)
-
-### OpenAI Configuration
-
-- **apiKey**: Your OpenAI API key for authentication against the OpenAI services.
-- **chatCompletionModel**: The model used by OpenAI for chat completions. It can be changed to use different models. It is important to use a "vision" version to be able to identify images.
-- **imageCreationModel**: The model used by OpenAI for generating images based on text descriptions.
-- **speechModel**: The model used by OpenAI for generating speech from text.
-- **speechVoice**: Specifies the voice model to be used in speech synthesis.
-- **transcriptionLanguage**: The language used for transcribing audio, in ISO-639-1 format (e.g., "en" for English).
-
-### Anthropic Configuration
-
-- **apiKey**: Your Anthropic API key for authentication against the Anthropic services.
-- **chatModel**: The model used by Anthropic for chat interactions.
-- **maxCharacters**: The maximum number of characters the Anthropic chat model will output in a single completion.
-
-Other configurations related to OpenAI models (e.g., `chatCompletionModel`, `imageCreationModel`, `speechModel`) can also be adjusted here to use different versions or models provided by OpenAI.
 
 ## Using Commands
 
@@ -164,6 +117,22 @@ To use the `-reset` command, simply type and send:
 ```
 
 This command has no additional parameters. Once sent, any subsequent messages will be treated as the beginning of a new conversation, without consideration for what was discussed previously. This can enhance the relevancy and accuracy of the chatbot's responses moving forward.
+
+
+## Updates in Version 1.1.0
+
+With this latest update, the bot has gained the ability to understand and respond to voice messages. Users can now send voice messages to the bot, and it will transcribe and interpret them as part of the conversation. Additionally, if a user requests an audio response, the bot can generate and send a voice message in reply.
+
+**Removed Feature:**
+- The `-speak` command has been removed. It is no longer necessary due to the new functionality of handling voice messages directly.
+
+This enhancement improves the bot's interactivity and makes conversations more natural and engaging.
+
+## Updates in Version 1.1.1
+In this version, we have made the following enhancements:
+
+- **Default Communication Language**: A new environment variable, `PREFERRED_LANGUAGE`, has been introduced. This allows users to specify a default language for the bot to use when communicating. If left empty, the bot will automatically detect and respond in the language of the chat it is replying to.
+- **Configuration Management**: Users are now required to set configurations in the `.env` file instead of directly modifying the `config/index.ts` file. This change aims to simplify the setup process and improve manageability.
 
 ## Final Notes
 
