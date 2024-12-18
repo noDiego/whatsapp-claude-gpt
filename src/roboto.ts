@@ -71,7 +71,7 @@ export class Roboto {
       // Evaluates if it should go to the command flow
       if(!!command){
         await chatData.sendStateTyping();
-        await this.commandSelect(message, chatData);
+        await this.commandSelect(message);
         await chatData.clearState();
         return true;
       }
@@ -121,7 +121,7 @@ export class Roboto {
    *   initiated, or `void` if no recognized command is found or the command functionality is
    *   disabled through the bot's configuration.
    */
-  private async commandSelect(message: Message, chatData: Chat) {
+  private async commandSelect(message: Message) {
     const { command, commandMessage } = parseCommand(message.body);
     switch (command) {
       case "image":
@@ -149,7 +149,6 @@ export class Roboto {
    * The generated response is then returned as a string.
    *
    * @param chatData - The Chat object representing the conversation context.
-   * @param chatCfg - The ChatCfg object containing configuration settings for the bot's behavior.
    * @returns A promise that resolves with the generated response string, or null if no response is needed.
    */
   private async processMesage(chatData: Chat) {
