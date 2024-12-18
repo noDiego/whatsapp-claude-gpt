@@ -182,7 +182,7 @@ export class Roboto {
       if ((msg.fromMe && isImage)) continue;
       const media = isImage || isAudio? await msg.downloadMedia() : null;
 
-      const role = msg.fromMe ? AiRole.ASSISTANT : AiRole.USER;
+      const role = (!msg.fromMe || isImage) ? AiRole.USER :AiRole.ASSISTANT;
       const name = msg.fromMe ? (CONFIG.botConfig.botName) : (await getContactName(msg));
 
       // Assemble the content as a mix of text and any included media
