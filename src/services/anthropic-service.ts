@@ -4,13 +4,13 @@ import { CONFIG } from '../config';
 import MessageParam = Anthropic.MessageParam;
 import { TextBlock } from '@anthropic-ai/sdk/resources';
 
-export class Claude {
+export class AnthropicService {
 
   private anthropic : Anthropic;
 
   constructor() {
     this.anthropic = new Anthropic({
-      apiKey: CONFIG.anthropic.apiKey,
+      apiKey: CONFIG.AIConfigs.CLAUDE.apiKey,
     });
   }
 
@@ -20,7 +20,7 @@ export class Claude {
 
     const response = await this.anthropic.messages.create({
       system: systemPrompt,
-      model: CONFIG.anthropic.chatModel,
+      model: CONFIG.AIConfigs.CLAUDE.chatModel,
       messages: messageList,
       max_tokens: 1024,
       top_p: 1
@@ -29,7 +29,9 @@ export class Claude {
     logger.debug('[Claude->sendCompletion] Completion Response:');
     logger.debug(response.content[0]);
 
-    return (response.content[0] as TextBlock).text || '';
+    const responseContent = response.content[0] as TextBlock;
+
+    return JSON.parse(responseContent.text);
   }
 
 }

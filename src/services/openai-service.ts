@@ -2,17 +2,31 @@ import logger from '../logger';
 import OpenAI, { toFile } from 'openai';
 import { ChatCompletionMessageParam } from 'openai/resources';
 import { CONFIG } from '../config';
+import { AiAnswer, AiLanguage } from '../interfaces/ai-message';
+import { OpenaiAiconfig } from '../interfaces/openai-aiconfig';
 
-export class ChatGTP {
+export class OpenaiService {
 
   private openai: OpenAI;
-  private readonly gptModel: string;
+  private openaiCustom: OpenAI;
+  private readonly AIConfig: OpenaiAiconfig;
 
   constructor() {
+    const openAIConfig: OpenaiAiconfig = CONFIG.AIConfigs[AiLanguage.OPENAI];
+    const customConfig: OpenaiAiconfig = CONFIG.AIConfigs[CONFIG.botConfig.aiLanguage];
+    this.AIConfig = openAIConfig;
+
+    if(CONFIG.botConfig.aiLanguage != AiLanguage.OPENAI) {
+      this.openaiCustom = new OpenAI({
+        baseURL: customConfig.baseURL,
+        apiKey: customConfig.apiKey,
+      });
+      this.AIConfig.chatModel = customConfig.chatModel;
+    }
+
     this.openai = new OpenAI({
-      apiKey: CONFIG.openAI.apiKey,
+      apiKey: openAIConfig.apiKey,
     });
-    this.gptModel = <string>process.env.GPT_MODEL;
   }
 
   /**
@@ -26,27 +40,39 @@ export class ChatGTP {
    * Returns:
    * - A promise that resolves to the generated completion string, which is the API's response based on the provided context.
    */
-  async sendCompletion(messageList: ChatCompletionMessageParam[], systemPrompt: string) {
+  async sendCompletion(messageList: ChatCompletionMessageParam[], systemPrompt: string): Promise<AiAnswer> {
 
-    logger.debug(`[ChatGTP->sendCompletion] Sending ${messageList.length} messages.`);
+    logger.debug(`[${CONFIG.botConfig.aiLanguage}->sendCompletion] Sending ${messageList.length} messages.`);
 
-    messageList.unshift({role: 'system', content:systemPrompt});
+    const isO1 = this.AIConfig.chatModel.startsWith('o1');
 
-    const completion = await this.openai.chat.completions.create({
-      model: CONFIG.openAI.chatCompletionModel,
-      messages: messageList,
-      max_tokens: 1024,
-      top_p: 1,
-      frequency_penalty: 0.5,
-      presence_penalty: 0
-    });
+    messageList.unshift({role: isO1?'user':'system', content:[{type: 'text', text: systemPrompt}]});
 
-    logger.debug('[ChatGTP->sendCompletion] Completion Response:');
+    const params: any = isO1?{
+        model: this.AIConfig.chatModel,
+        messages: messageList
+      }:{
+        model: this.AIConfig.chatModel,
+        messages: messageList,
+        response_format: {
+          type: "json_object"
+        },
+        max_tokens: 2048,
+        top_p: 1,
+        frequency_penalty: 0.5,
+        presence_penalty: 0
+      }
+
+    const completion = this.openaiCustom?
+      await this.openaiCustom.chat.completions.create(params):
+      await this.openai.chat.completions.create(params);
+
+    logger.debug(`[${CONFIG.botConfig.aiLanguage}->sendCompletion] Completion Response:`);
     logger.debug(completion.choices[0]);
 
     const messageResult = completion.choices[0].message;
 
-    return messageResult?.content || '';
+    return JSON.parse(messageResult?.content!) as AiAnswer;
   }
 
   /**
@@ -62,10 +88,10 @@ export class ChatGTP {
    */
   async createImage(message){
 
-    logger.debug(`[ChatGTP->createImage] Creating message for: "${message}"`);
+    logger.debug(`[OpenAI->createImage] Creating message for: "${message}"`);
 
     const response = await this.openai.images.generate({
-      model: CONFIG.openAI.imageCreationModel,
+      model: this.AIConfig.imageModel,
       prompt: message,
       quality: 'standard',
       n: 1,
@@ -87,16 +113,16 @@ export class ChatGTP {
    */
   async speech(message, responseFormat?){
 
-    logger.debug(`[ChatGTP->speech] Creating speech audio for: "${message}"`);
+    logger.debug(`[OpenAI->speech] Creating speech audio for: "${message}"`);
 
     const response: any = await this.openai.audio.speech.create({
-      model: CONFIG.openAI.speechModel,
-      voice: <any>CONFIG.openAI.speechVoice,
+      model: this.AIConfig.speechModel,
+      voice: this.AIConfig.speechVoice,
       input: message,
       response_format: responseFormat || 'mp3'
     });
 
-    logger.debug(`[ChatGTP->speech] Audio Creation OK`);
+    logger.debug(`[OpenAI->speech] Audio Creation OK`);
 
     return Buffer.from(await response.arrayBuffer());
   }
@@ -116,15 +142,15 @@ export class ChatGTP {
    * - Any errors encountered during the process of reading the audio file or interacting with OpenAI's API will be thrown and should be handled by the caller function.
    */
   async transcription(stream: any) {
-    logger.debug(`[ChatGTP->transcription] Creating transcription text for audio"`);
+    logger.debug(`[OpenAI->transcription] Creating transcription text for audio"`);
     try {
       // Convertir ReadStream a File o Blob
       const file = await toFile(stream, 'audio.ogg', { type: 'audio/ogg' });
       // Enviar el archivo convertido a la API de transcripción
       const response = await this.openai.audio.transcriptions.create({
         file: file,
-        model: "whisper-1",
-        language: CONFIG.openAI.transcriptionLanguage
+        model: this.AIConfig.transcriptionModel,
+        language: CONFIG.botConfig.transcriptionLanguage
       });
       return response.text;
     } catch (e: any) {

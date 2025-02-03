@@ -11,11 +11,20 @@ export enum AiRole {
 
 export interface AiContent {
   value?: string;
-  type: 'text' | 'image';
+  type: 'text' | 'image' | 'audio';
   media_type?: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' | string;
 }
 
 export enum AiLanguage {
   OPENAI='OPENAI',
-  ANTHROPIC='ANTHROPIC'
+  CLAUDE='CLAUDE',
+  QWEN='QWEN',
+  DEEPSEEK='DEEPSEEK',
+  CUSTOM='CUSTOM'
+}
+
+export interface AiAnswer {
+  message: string;
+  type: 'text' | 'audio';
+  author: string;
 }
