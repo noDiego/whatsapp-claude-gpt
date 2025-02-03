@@ -18,6 +18,7 @@ When using an AI language model other than OpenAI for chat (e.g., CLAUDE, QWEN, 
 - **Group Interaction**: When added to a group, the bot requires that its name be mentioned to activate and respond. Example: "Hi Roboto, how are you?"
 - **Context management**: The bot keeps track of a customizable number of recent messages for context, with optional reset functionality.
 - **Custom AI Integration**: Supports any AI service that implements OpenAI-compatible API endpoints. Simply provide the base URL and API key in the configuration to integrate your custom AI service.
+- **Customizable Bot Personality**: Personalize the bot's tone and behavior by using the `PROMPT_INFO` variable. Tailor the bot's interactions to suit specific group dynamics or personal preferences, whether informal and humorous, or professional and concise.
 
 ## Setting Up Your API Keys
 
@@ -61,6 +62,8 @@ MAX_MSGS_LIMIT=30                     # The maximum number of messages the bot w
 MAX_HOURS_LIMIT=24                    # The time frame in hours for the bot to consider recent messages
 NODE_CACHE_TIME=259200                # Cache time for stored data in seconds (3 days)
 
+PROMPT_INFO="You should use a casual tone with plenty of emojis."  # You can use this to customize the bot's personality and provide context about the group or individuals for tailored interactions.
+
 IMAGE_CREATION_ENABLED=false           # Enable image creation (OpenAI Only)
 VOICE_MESSAGES_ENABLED=false           # Enable voice responses (OpenAI Only)
 ```
@@ -101,6 +104,16 @@ To start the bot, run the following command in the terminal:
 npm run start
 ```
 Upon startup, the bot will display a QR code in the terminal. Scan this QR code using the WhatsApp application on your mobile phone to link the bot to your WhatsApp account.
+
+## Additional Bot Personalization (PROMPT_INFO)
+
+You can optionally use the environment variable PROMPT_INFO to supply extra instructions or context for the bot’s behavior. This might include personality traits (friendly, formal, or technical), reminders about special group details (e.g., birthdays, roles), or any other guidelines you'd like the bot to adopt. If PROMPT_INFO is not set, the bot simply runs without those extra custom instructions.
+
+Example addition in your .env file:
+
+PROMPT_INFO="You are an assistant in a group of college friends, adopting a very informal and friendly tone. You love making jokes of all kinds and always encourage the group to meet up for parties or drinks."
+
+This way, the bot will incorporate these details into its prompt and responses, adapting its style and content to the provided information.
 
 #### Note About WhatsApp Number:
 The phone number associated with the WhatsApp account that scans the QR code will be the one sending all automated responses. If you want to maintain a separate bot account, it is recommended to:
@@ -178,6 +191,12 @@ This enhancement improves the bot's interactivity and makes conversations more n
 - Added support for QWEN, DEEPSEEK, and CUSTOM AI services. Now you can specify AI_LANGUAGE=QWEN, DEEPSEEK, or CUSTOM, and provide the relevant environment variables (completion models, API keys, and base URL for CUSTOM).
 - Improved message-handling flow for faster response times.
 - Image creation and voice messages remain available only if an OpenAI API key is present, regardless of which model is used for text chat. If OPENAI_API_KEY is missing, those features are disabled and only text chat functionality is available.
+
+## Updates in Version 1.2.2
+
+- **Customizable Bot Personality with `PROMPT_INFO`**: Introduced the ability to customize the bot's personality and behavior using the `PROMPT_INFO` environment variable. This allows you to provide specific instructions and contextual information that the bot can use to tailor its interactions. Whether it's adopting a casual tone, reminding group members of events, or just adding a fun twist to conversations, this feature enhances the personalization of the bot’s responses.
+
+With this update, users can enhance the bot's interactivity by defining how it should behave in different contexts directly from the `.env` configuration file.
 
 ## Final Notes
 

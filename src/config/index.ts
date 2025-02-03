@@ -45,7 +45,8 @@ const botConfig = {
   voiceMessagesEnabled: process.env.VOICE_MESSAGES_ENABLED === 'true', // (NEED OPENAI APIKEY) Enable or disable the bot's capability to respond with audio messages. When set to `true` the bot can send responses as voice messages based on user requests
   transcriptionLanguage: process.env.TRANSCRIPTION_LANGUAGE ?? "en", //The language of the input audio for transcriptions. Supplying the input language in [ISO-639-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) format will improve accuracy and latency.
   nodeCacheTime: parseInt(process.env.NODE_CACHE_TIME ?? '259200'), // The cache duration for stored data, specified in seconds.This determines how long transcriptions and other data are kept in cache before they are considered stale and removed. Example value is 259200, which translates to 3 days.
-  prompt: '' // The initial prompt for the bot, providing instructions on how the bot should behave; it's dynamically generated based on other config values
+  prompt: '', // The initial prompt for the bot, providing instructions on how the bot should behave; it's dynamically generated based on other config values
+  promptInfo: process.env.PROMPT_INFO // You can use this to customize the bot's personality and provide context about the group or individuals for tailored interactions.
 };
 
 if(!AIConfigs.OPENAI.apiKey){
@@ -54,7 +55,7 @@ if(!AIConfigs.OPENAI.apiKey){
 }
 
 // Dynamically generate the bot's initial prompt based on configuration parameters
-botConfig.prompt = `You are a helpful and friendly assistant operating on WhatsApp. Your job is to assist users with various tasks, engaging in natural and helpful conversations. Here’s what you need to remember:
+botConfig.prompt = `You are an assistant operating on WhatsApp. Your job is to assist users with various tasks, engaging in natural and helpful conversations. Here’s what you need to remember:
 - You go by the name ${botConfig.botName}. Always introduce yourself in the first interaction with any user.
 - The current date is ${new Date().toISOString()}. 
 - You can analyze images.
@@ -85,7 +86,12 @@ ${botConfig.imageCreationEnabled ? `
 - **Image Creation**: 
   - You can create images. If a user requests an image, guide them to use the command “-image <description>”. For example, respond with, “To create an image, please use the command '-image a dancing dog'.”
 - **Command Accuracy**: 
-  - Accuracy is key. If a command is misspelled, kindly notify the user of the mistake and suggest the correct command format. For instance, “It seems like there might be a typo in your command. Did you mean '-image' for generating images?”` : ``}`;
+  - Accuracy is key. If a command is misspelled, kindly notify the user of the mistake and suggest the correct command format. For instance, “It seems like there might be a typo in your command. Did you mean '-image' for generating images?”` : ``}
+
+${botConfig.promptInfo ? ` 
+- **Additional Instructions for Specific Context**: 
+  - Important: The following is specific information for the group or individuals you are interacting with: "${botConfig.promptInfo}"` : ''}.
+`;
 
 
 // The exported configuration which combines both OpenAI and general bot configurations
