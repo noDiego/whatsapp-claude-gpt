@@ -53,7 +53,7 @@ CUSTOM_API_KEY=your_api_key                   # Your API key for the custom serv
 CUSTOM_COMPLETION_MODEL=custom-model1.0       # The model identifier for your custom service
 
 ## BOT CONFIG
-AI_LANGUAGE=OPENAI                    # Specifies the AI language model to be used. It can be set to either "ANTHROPIC" or "OPENAI".
+AI_LANGUAGE=OPENAI                    # Specifies the AI language model to be used. Can be "CLAUDE", "OPENAI", "QWEN", "DEEPSEEK" or "CUSTOM".
 PREFERRED_LANGUAGE=                   # The default language for the bot. If not specified, the bot will use the language of the chat it is responding to.
 MAX_CHARACTERS=2000                   # The maximum number of characters the chat model will output in a single completion
 BOT_NAME=Roboto                       # The name the bot will respond to in groups.
