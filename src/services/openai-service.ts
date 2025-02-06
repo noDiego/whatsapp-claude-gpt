@@ -41,38 +41,69 @@ export class OpenaiService {
    * - A promise that resolves to the generated completion string, which is the API's response based on the provided context.
    */
   async sendCompletion(messageList: ChatCompletionMessageParam[], systemPrompt: string): Promise<AiAnswer> {
-
-    logger.debug(`[${CONFIG.botConfig.aiLanguage}->sendCompletion] Sending ${messageList.length} messages.`);
+    const MAX_RETRIES = 2;
+    let currentTry = 0;
+    let lastError: any;
 
     const isO1 = this.AIConfig.chatModel.startsWith('o1');
 
-    messageList.unshift({role: isO1?'user':'system', content:[{type: 'text', text: systemPrompt}]});
+    messageList.unshift({role: isO1 ? 'user' : 'system', content: [{type: 'text', text: systemPrompt}]});
 
-    const params: any = isO1?{
-        model: this.AIConfig.chatModel,
-        messages: messageList
-      }:{
-        model: this.AIConfig.chatModel,
-        messages: messageList,
-        response_format: {
-          type: "json_object"
-        },
-        max_tokens: 2048,
-        top_p: 1,
-        frequency_penalty: 0.5,
-        presence_penalty: 0
+    const params: any = isO1 ? {
+      model: this.AIConfig.chatModel,
+      messages: messageList,
+      store: true,
+      stream: true,
+    } : {
+      model: this.AIConfig.chatModel,
+      messages: messageList,
+      response_format: {
+        type: "json_object"
+      },
+      max_tokens: 2048,
+      top_p: 1,
+      frequency_penalty: 0.5,
+      presence_penalty: 0,
+      store: true,
+      stream: true,
+    }
+
+    while (currentTry <= MAX_RETRIES) {
+      try {
+        logger.debug(`[${CONFIG.botConfig.aiLanguage}->sendCompletion] Attempt ${currentTry + 1}/${MAX_RETRIES + 1}: Sending ${messageList.length} messages.`);
+
+        const stream: any = this.openaiCustom ?
+          await this.openaiCustom.chat.completions.create(params) :
+          await this.openai.chat.completions.create(params);
+
+        let fullResponse = '';
+
+        for await (const chunk of stream) {
+          const content = chunk.choices[0]?.delta?.content || '';
+          fullResponse += content;
+        }
+
+        if (fullResponse == '') throw new Error(`An error occurred while communicating with ${CONFIG.botConfig.aiLanguage}. It returned an empty response.`);
+
+        logger.debug(`[${CONFIG.botConfig.aiLanguage}->sendCompletion] Completion Response:`);
+        logger.debug(fullResponse);
+
+        return JSON.parse(fullResponse) as AiAnswer;
+
+      } catch (e: any) {
+        lastError = e;
+        currentTry++;
+
+        if (currentTry <= MAX_RETRIES) {
+          logger.warn(`[${CONFIG.botConfig.aiLanguage}->sendCompletion] Attempt ${currentTry}/${MAX_RETRIES + 1} failed: ${e.message ?? e}`);
+          await new Promise(resolve => setTimeout(resolve, 1000 * currentTry));
+        } else {
+          logger.error(`[${CONFIG.botConfig.aiLanguage}->sendCompletion] All ${MAX_RETRIES + 1} attempts failed. Last error: ${e.message ?? e}`);
+          throw new Error(`Failed after ${MAX_RETRIES + 1} attempts. Last error: ${e.message ?? e}. Please try again later or consider using an alternative AI. If the issue persists, contact support for further assistance.`);
+        }
       }
-
-    const completion = this.openaiCustom?
-      await this.openaiCustom.chat.completions.create(params):
-      await this.openai.chat.completions.create(params);
-
-    logger.debug(`[${CONFIG.botConfig.aiLanguage}->sendCompletion] Completion Response:`);
-    logger.debug(completion.choices[0]);
-
-    const messageResult = completion.choices[0].message;
-
-    return JSON.parse(messageResult?.content!) as AiAnswer;
+    }
+    throw lastError;
   }
 
   /**

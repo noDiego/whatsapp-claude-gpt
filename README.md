@@ -198,6 +198,13 @@ This enhancement improves the bot's interactivity and makes conversations more n
 
 With this update, users can enhance the bot's interactivity by defining how it should behave in different contexts directly from the `.env` configuration file.
 
+## Fixes in Version 1.2.4
+
+- **Streaming Implementation**: Introduced streaming for API responses to mitigate frequent errors encountered with Deepseek and improve overall reliability.
+- **Enhanced Deepseek Message Handling**: Implemented a specialized message handling approach for Deepseek due to its specific limitations and requirements.
+- **Known Issues with Deepseek**: Please note that Deepseek services are currently experiencing intermittent availability issues. Users may encounter occasional errors or service interruptions when using Deepseek as the AI language model. We recommend using alternative AI services if you experience persistent issues with Deepseek.
+- **WhatsAppWeb.js Update**: Updated whatsapp-web.js dependency to resolve issues with group chat recognition where the bot was responding without being explicitly mentioned. This update ensures the bot only responds in group chats when its name is mentioned, as intended.
+
 ## Final Notes
 
 • Make sure your API quotas and keys are valid for the AI language you choose.  

@@ -351,9 +351,28 @@ export class Roboto {
 
         return claudeMessageList;
 
+      case AiLanguage.DEEPSEEK:
+
+        const deepSeekMsgList: any[] = [];
+        messageList.forEach(msg => {
+          if(msg.role == AiRole.ASSISTANT) {
+            const textContent = msg.content.find(c => c.type === 'text')!;
+            const content = JSON.stringify({ type: 'text', text: JSON.stringify({message: textContent.value, author: msg.name, type: textContent.type}) });
+            deepSeekMsgList.push({content: content, name: msg.name!, role: msg.role});
+          }
+          else {
+            const gptContent: Array<any> = [];
+            msg.content.forEach(c => {
+              if (['image'].includes(c.type)) gptContent.push({type: 'image_url', image_url: {url: `data:${c.media_type};base64,${c.value}`}});
+              if (['text', 'audio'].includes(c.type)) gptContent.push({type: 'text', text: JSON.stringify({message: c.value, author: msg.name, type: c.type})});
+            })
+            deepSeekMsgList.push({content: gptContent, name: msg.name!, role: msg.role});
+          }
+        })
+        return deepSeekMsgList;
+
       case AiLanguage.OPENAI:
       case AiLanguage.QWEN:
-      case AiLanguage.DEEPSEEK:
       case AiLanguage.CUSTOM:
 
         const chatgptMessageList: any[] = [];
