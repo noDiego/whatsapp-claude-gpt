@@ -191,7 +191,7 @@ export class Roboto {
         // Assemble the content as a mix of text and any included media
         const content: Array<AiContent> = [];
         if (isOther || (isAudio && !this.botConfig.voiceMessagesEnabled))
-          content.push({type: 'text', value: getUnsupportedMessage(msg)});
+          content.push({type: 'text', value: getUnsupportedMessage(msg.type, msg.body)});
         else if (isAudio && media && !cachedMessage) {
           transcriptionPromises.push({index: messageList.length, promise: this.transcribeVoice(media, msg)});
           content.push({type: 'audio', value: '<Transcribing voice message...>'});
@@ -363,7 +363,7 @@ export class Roboto {
           else {
             const gptContent: Array<any> = [];
             msg.content.forEach(c => {
-              if (['image'].includes(c.type)) gptContent.push({type: 'image_url', image_url: {url: `data:${c.media_type};base64,${c.value}`}});
+              if (['image'].includes(c.type)) gptContent.push({type: 'text', text: JSON.stringify({message: getUnsupportedMessage('image', ''), author: msg.name, type: c.type})});
               if (['text', 'audio'].includes(c.type)) gptContent.push({type: 'text', text: JSON.stringify({message: c.value, author: msg.name, type: c.type})});
             })
             deepSeekMsgList.push({content: gptContent, name: msg.name!, role: msg.role});

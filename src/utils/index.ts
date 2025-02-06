@@ -58,10 +58,10 @@ export function bufferToStream(buffer) {
   return stream;
 }
 
-export function getUnsupportedMessage(msg: Message) {
-  const body = msg.body ? `, body:"${msg.body}"` : ``;
-  const type = `type:"${msg.type}"`;
-  return `<Unsupported message: {${type}${body}}>`
+export function getUnsupportedMessage(type: string, body?: string) {
+  const bodyStr = body ? `, body:"${body}"` : ``;
+  const typeStr = `type:"${type}"`;
+  return `<Unsupported message: {${typeStr}${bodyStr}}>`
 }
 
 export function configValidation() {
