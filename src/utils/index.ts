@@ -3,6 +3,7 @@ import { Chat, Message } from 'whatsapp-web.js';
 import { Readable } from 'stream';
 import { CONFIG } from '../config';
 import { OpenaiAiconfig } from '../interfaces/openai-aiconfig';
+import { ChatCompletionMessageParam } from 'openai/resources';
 
 export function getFormattedDate() {
   const now = new Date();
@@ -115,10 +116,35 @@ export function logConfigInfo() {
     logger.info(`[OpenAI] Speech voice: ${CONFIG.AIConfigs.OPENAI.speechVoice}`);
   }
 
-  // General configuration information
-  logger.info(`Bot name: ${CONFIG.botConfig.botName}`);
-  logger.info(`Response character limit: ${CONFIG.botConfig.maxCharacters}`);
-  logger.info(`Maximum number of images processed: ${CONFIG.botConfig.maxImages}`);
-  logger.info(`Number of messages considered for context: ${CONFIG.botConfig.maxMsgsLimit}`);
-  logger.info(`Maximum age (in hours) for messages considered: ${CONFIG.botConfig.maxHoursLimit}`);
+}
+
+export function includePrefix(bodyMessage: string, prefix: string): boolean {
+  const regex = new RegExp(`(^|\\s)${prefix}($|[!?.]|\\s|,\\s)`, 'i');
+  return regex.test(bodyMessage);
+}
+
+export function capitalize(str: string): string {
+  if (str.length === 0) return str;
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+export function logGPTMessages(messages: ChatCompletionMessageParam[], quantity: number){
+  const msgs = getLastElementsArray(messages, quantity);
+  logger.debug(cleanImagesLog(msgs));
+}
+
+export function getLastElementsArray<T>(msgs: T[], qty): T[] {
+  const array = structuredClone(msgs);
+  if (array.length <= qty) return array.slice();
+  const inicio = array.length - qty;
+  return array.slice(inicio);
+}
+
+export function cleanImagesLog(array: ChatCompletionMessageParam[]){
+  array.forEach((e:any) => {
+    e.content!.forEach((c:any) =>{
+      if(c.type == 'image_url') c.image_url.url = '<base64img>';
+    })
+  });
+  return array;
 }

@@ -27,4 +27,5 @@ export interface AiAnswer {
   message: string;
   type: 'text' | 'audio';
   author: string;
+  image_description? : string;
 }

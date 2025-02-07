@@ -4,6 +4,7 @@ import { ChatCompletionMessageParam } from 'openai/resources';
 import { CONFIG } from '../config';
 import { AiAnswer, AiLanguage } from '../interfaces/ai-message';
 import { OpenaiAiconfig } from '../interfaces/openai-aiconfig';
+import { logGPTMessages } from '../utils';
 
 export class OpenaiService {
 
@@ -40,22 +41,30 @@ export class OpenaiService {
    * Returns:
    * - A promise that resolves to the generated completion string, which is the API's response based on the provided context.
    */
-  async sendCompletion(messageList: ChatCompletionMessageParam[], systemPrompt: string): Promise<AiAnswer> {
+  async sendCompletion(messageList: ChatCompletionMessageParam[], systemPrompt: string, model: string): Promise<AiAnswer> {
     const MAX_RETRIES = 2;
+    model = model || this.AIConfig.chatModel;
     let currentTry = 0;
     let lastError: any;
 
-    const isO1 = this.AIConfig.chatModel.startsWith('o1');
+
+    const isO1 = model.startsWith('o1');
 
     messageList.unshift({role: isO1 ? 'user' : 'system', content: [{type: 'text', text: systemPrompt}]});
 
+    logger.info(`[${CONFIG.botConfig.aiLanguage}->sendCompletion] Sending ${messageList.length} messages (Model:${model})`);
+
+    logger.debug(`[${CONFIG.botConfig.aiLanguage}->sendCompletion] Message List (Last 4 Elements):`);
+    logGPTMessages(messageList, 4);
+
     const params: any = isO1 ? {
-      model: this.AIConfig.chatModel,
+      model: model,
       messages: messageList,
       store: true,
       stream: true,
+      reasoning_effort: "medium"
     } : {
-      model: this.AIConfig.chatModel,
+      model: model,
       messages: messageList,
       response_format: {
         type: "json_object"

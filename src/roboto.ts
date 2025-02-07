@@ -1,5 +1,5 @@
 import { OpenaiService } from './services/openai-service';
-import { Chat, Client, Message, MessageMedia, MessageTypes } from 'whatsapp-web.js';
+import { Chat, Client, Contact, Message, MessageMedia, MessageTypes } from 'whatsapp-web.js';
 import { bufferToStream, getContactName, getUnsupportedMessage, includeName, logMessage, parseCommand } from './utils';
 import logger from './logger';
 import { CONFIG } from './config';
@@ -10,6 +10,9 @@ import { AnthropicService } from './services/anthropic-service';
 import { ImageBlockParam, TextBlock } from '@anthropic-ai/sdk/src/resources/messages';
 import NodeCache from 'node-cache';
 import MessageParam = Anthropic.MessageParam;
+import { ChatCfg } from './interfaces/chatconfig';
+import { ChatConfigService } from './services/chatconfig-service';
+import { CVoices, elevenTTS } from './services/eleven-service';
 
 export class Roboto {
 
@@ -18,11 +21,14 @@ export class Roboto {
   private botConfig = CONFIG.botConfig;
   private allowedTypes = [MessageTypes.STICKER, MessageTypes.TEXT, MessageTypes.IMAGE, MessageTypes.VOICE, MessageTypes.AUDIO];
   private cache: NodeCache;
+  private groupProcessingStatus: {[key: string]: boolean} = {};
+  private chatConfigService: ChatConfigService;
 
   public constructor() {
 
     this.openAIService = new OpenaiService();
     this.claudeService = new AnthropicService();
+    this.chatConfigService = new ChatConfigService();
     this.cache = new NodeCache();
   }
 
@@ -47,10 +53,12 @@ export class Roboto {
   public async readMessage(message: Message, client: Client) {
     try {
 
-      // Extract the data input (extracts command e.g., "-a", and the message)
+      const contactData: Contact = await message.getContact();
       const chatData: Chat = await message.getChat();
       const isAudioMsg = message.type == MessageTypes.VOICE || message.type == MessageTypes.AUDIO;
+      const isAdmin = contactData.number == CONFIG.botConfig.adminNumber;
       const { command, commandMessage } = parseCommand(message.body);
+      const chatCfg: ChatCfg = await this.chatConfigService.getChatConfig(message, chatData) as ChatCfg;
 
       // If it's a "Broadcast" message, it's not processed
       if(chatData.id.user == 'status' || chatData.id._serialized == 'status@broadcast') return false;
@@ -59,10 +67,7 @@ export class Roboto {
       if(!this.allowedTypes.includes(message.type) || (isAudioMsg && !this.botConfig.voiceMessagesEnabled)) return false;
 
       // Evaluates if it should respond
-      const isSelfMention = message.hasQuotedMsg ? (await message.getQuotedMessage()).fromMe : false;
-      const isMentioned = includeName(message.body, this.botConfig.botName);
-
-      if(!isSelfMention && !isMentioned && !command && chatData.isGroup) return false;
+      if(chatCfg == null && !command) return false;
 
       // Logs the message
       logMessage(message, chatData);
@@ -75,16 +80,25 @@ export class Roboto {
         return true;
       }
 
+      while (this.groupProcessingStatus[chatData.id._serialized]) {
+        await new Promise(resolve => setTimeout(resolve, 3000)); // Espera 3 segundos
+      }
+
       // Sends message to ChatGPT
       chatData.sendStateTyping();
-      let chatResponseString : AiAnswer = await this.processMessage(chatData);
+      let chatResponseString : AiAnswer = await this.processMessage(chatData, chatCfg);
       chatData.clearState();
 
       if(!chatResponseString) return;
 
       // Evaluate if response message must be Audio or Text
-      if (chatResponseString.type.toLowerCase() == 'audio' && CONFIG.botConfig.voiceMessagesEnabled) {
-        return this.speak(message, chatData, chatResponseString.message, 'mp3');
+      if (chatResponseString.image_description) {
+        if(!isAdmin) return message.reply(CONFIG.botConfig.restrictedImageMessage);
+        const img = await this.createImage(chatResponseString.image_description);
+        return await message.reply(img, undefined, { caption: chatResponseString.message  });
+      }
+      else if (chatResponseString.type.toLowerCase() == 'audio' && CONFIG.botConfig.voiceMessagesEnabled) {
+        return this.speakEleven(message, chatData, chatResponseString.message, chatCfg.voice_id as CVoices);
       } else {
         return this.returnResponse(message, chatResponseString.message, chatData.isGroup, client);
       }
@@ -121,9 +135,12 @@ export class Roboto {
   private async commandSelect(message: Message) {
     const { command, commandMessage } = parseCommand(message.body);
     switch (command) {
-      case "image":
-        if (!this.botConfig.imageCreationEnabled) return;
-        return await this.createImage(message, commandMessage);
+      // case "image":
+      //   if (!this.botConfig.imageCreationEnabled) return;
+      //   return await this.createImage(message, commandMessage);
+      case "reloadConfig":
+        await this.chatConfigService.loadChatConfigs();
+        return message.reply('Reload OK');
       case "reset":
         return await message.react('👍');
       default:
@@ -146,9 +163,12 @@ export class Roboto {
    * - Resetting the conversation context if the "-reset" command is encountered
    *
    * @param chatData - The Chat object representing the conversation context.
+   * @param chatCfg
    * @returns A promise that resolves with the generated response string, or null if no response is needed.
    */
-  private async processMessage(chatData: Chat) {
+  private async processMessage(chatData: Chat, chatCfg: ChatCfg) {
+
+    let promptText = chatCfg.buildprompt? CONFIG.buildPrompt(chatCfg) : chatCfg.prompt_text;
 
     const actualDate = new Date();
 
@@ -160,7 +180,7 @@ export class Roboto {
     let imageCount: number = 0;
 
     // Retrieve the last 'limit' number of messages to send them in order
-    const fetchedMessages = await chatData.fetchMessages({ limit: this.botConfig.maxMsgsLimit });
+    const fetchedMessages = await chatData.fetchMessages({ limit: chatCfg.limit });
     // Check for "-reset" command in chat history to potentially restart context
     const resetIndex = fetchedMessages.map(msg => msg.body).lastIndexOf("-reset");
     const messagesToProcess = resetIndex >= 0 ? fetchedMessages.slice(resetIndex + 1) : fetchedMessages;
@@ -169,7 +189,7 @@ export class Roboto {
       try {
         // Validate if the message was written less than 24 (or maxHoursLimit) hours ago; if older, it's not considered
         const msgDate = new Date(msg.timestamp * 1000);
-        if ((actualDate.getTime() - msgDate.getTime()) / (1000 * 60 * 60) > this.botConfig.maxHoursLimit) break;
+        if ((actualDate.getTime() - msgDate.getTime()) / (1000 * 60 * 60) > chatCfg.hourslimit) break;
 
         // Checks if a message already exists in the cache
         const cachedMessage = this.getCachedMessage(msg);
@@ -180,7 +200,7 @@ export class Roboto {
         const isOther = !isImage && !isAudio && msg.type != 'chat';
 
         // Limit the number of processed images to only the last few and ignore audio if cached
-        const media = (isImage && imageCount < this.botConfig.maxImages) || (isAudio && !cachedMessage) ?
+        const media = (isImage && imageCount < chatCfg.maximages) || (isAudio && !cachedMessage) ?
           await msg.downloadMedia() : null;
 
         if (media && isImage) imageCount++;
@@ -223,10 +243,10 @@ export class Roboto {
     // Send the message and return the text response
     if (CONFIG.botConfig.aiLanguage == AiLanguage.CLAUDE) {
       const convertedMessageList: MessageParam[] = this.convertIaMessagesLang(messageList.reverse(), AiLanguage.CLAUDE) as MessageParam[];
-      return await this.claudeService.sendChat(convertedMessageList, this.botConfig.prompt);
+      return await this.claudeService.sendChat(convertedMessageList, promptText);
     }else{
       const convertedMessageList: ChatCompletionMessageParam[] = this.convertIaMessagesLang(messageList.reverse(), CONFIG.botConfig.aiLanguage as AiLanguage) as ChatCompletionMessageParam[];
-      return await this.openAIService.sendCompletion(convertedMessageList, this.botConfig.prompt);
+      return await this.openAIService.sendCompletion(convertedMessageList, promptText, chatCfg.ia_model);
     }
   }
 
@@ -265,6 +285,38 @@ export class Roboto {
     }
   }
 
+  private async speakEleven(message: Message, chatData: Chat, content: string | undefined, voiceId: CVoices) {
+    // Set the content to be spoken. If no content is explicitly provided, fetch the last bot reply for use.
+    let messageToSay = content || await this.getLastBotMessage(chatData);
+    try {
+      // Generate speech audio from the given text content using the OpenAI API.
+      // const audioRaw: boolean | string = await elevenTTS(voiceId || CVoices.SARAH, messageToSay);
+      // const base64Audio = await convertStreamToMessageMedia(audioRaw);
+      //
+      // const buffer = await elevenTTS(voiceId || CVoices.SARAH, messageToSay);
+      //
+      // let audioMedia = new MessageMedia('audio/mp3; codecs=opus', buffer, 'voice.mp3');
+
+      // Obtiene directamente el Buffer del audio
+      const audioBuffer = await elevenTTS(voiceId || CVoices.SARAH, messageToSay);
+
+      // Crea el MessageMedia directamente desde el Buffer
+      const audioMedia = new MessageMedia(
+        'audio/mp3; codecs=opus',
+        audioBuffer.toString('base64'),
+        'voice.mp3'
+      );
+
+      // Reply to the message with the synthesized speech audio.
+      const repliedMsg = await message.reply(audioMedia, undefined, { sendAudioAsVoice: true });
+
+      this.cache.set(repliedMsg.id._serialized, messageToSay, CONFIG.botConfig.nodeCacheTime);
+    } catch (e: any) {
+      logger.error(`Error in speak function: ${e.message}`);
+      throw e;
+    }
+  }
+
   /**
    * Creates and sends an image in response to a message, based on provided textual content.
    * This function requires a valid OpenAI API key regardless of the AI model selected for chat.
@@ -277,21 +329,15 @@ export class Roboto {
    * Returns:
    * - A promise that resolves when the image has been successfully generated and sent.
    */
-  private async createImage(message: Message, content: string | undefined) {
-    // Verify that content is provided for image generation, return if not.
-    if (!content) return;
-
+  private async createImage(content: string): Promise<MessageMedia> {
     try {
       // Calls the ChatGPT service to generate an image based on the provided textual content.
       const imgUrl = await this.openAIService.createImage(content) as string;
-      const media = await MessageMedia.fromUrl(imgUrl);
-
-      // Reply to the message with the generated image.
-      return await message.reply(media);
+      return await MessageMedia.fromUrl(imgUrl);
     } catch (e: any) {
       logger.error(`Error in createImage function: ${e.message}`);
       // In case of an error during image generation or sending the image, inform the user.
-      return message.reply("I encountered a problem while trying to generate an image, please try again.");
+      throw new Error('Error creating image');
     }
   }
 
