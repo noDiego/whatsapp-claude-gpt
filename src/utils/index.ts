@@ -96,7 +96,7 @@ export function logConfigInfo() {
 
   if(botConfig.aiLanguage == "OPENAI"){
     logger.info(`${botConfig.aiLanguage} AI mode activated`);
-    logger.info(`Chat model: ${CONFIG.AIConfigs.CUSTOM.chatModel}`);
+    logger.info(`Chat model: ${CONFIG.AIConfigs.OPENAI.chatModel}`);
   } else if (botConfig.aiLanguage === "CLAUDE") {
     logger.info(`ANTHROPIC AI mode activated`);
     logger.info(`Chat model: ${CONFIG.AIConfigs.CLAUDE.chatModel}`);

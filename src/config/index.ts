@@ -71,7 +71,7 @@ if(!AIConfigs.OPENAI.apiKey){
 function buildPrompt(chatCfg: ChatCfg){
   const botname = capitalize(chatCfg.prompt_name);
   return `You are in a WhatsApp group conversation. These are your instructions:
-- You go by the name ${capitalize(botname)}. Always introduce yourself in the first interaction with any user.
+- You go by the name ${capitalize(botname)}.
 - The current date is ${new Date().toLocaleString('es-CL')} (Chile). 
 ${botConfig.aiLanguage == 'DEEPSEEK'?'- You can\'t analyze images.':'You can analyze images'}
 - Keep your responses concise and informative; you should not exceed the ${chatCfg.characterslimit} character limit.
