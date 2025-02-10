@@ -383,7 +383,7 @@ export class Roboto {
 
           // Add content to the current block
           msg.content.forEach(c => {
-            if (['text', 'audio'].includes(c.type))  gptContent.push({ type: 'text', text: JSON.stringify({message: c.value, author: msg.name, type: c.type})});
+            if (['text', 'audio'].includes(c.type))  gptContent.push({ type: 'text', text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format: "json_object"})});
             if (['image'].includes(c.type))          gptContent.push({ type: 'image', source: { data: c.value!, media_type: c.media_type as any, type: 'base64' } });
           });
         });
@@ -409,8 +409,8 @@ export class Roboto {
           else {
             const gptContent: Array<any> = [];
             msg.content.forEach(c => {
-              if (['image'].includes(c.type)) gptContent.push({type: 'text', text: JSON.stringify({message: getUnsupportedMessage('image', ''), author: msg.name, type: c.type})});
-              if (['text', 'audio'].includes(c.type)) gptContent.push({type: 'text', text: JSON.stringify({message: c.value, author: msg.name, type: c.type})});
+              if (['image'].includes(c.type)) gptContent.push({type: 'text', text: JSON.stringify({message: getUnsupportedMessage('image', ''), author: msg.name, type: c.type, response_format: "json_object"})});
+              if (['text', 'audio'].includes(c.type)) gptContent.push({type: 'text', text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format: "json_object"})});
             })
             deepSeekMsgList.push({content: gptContent, name: msg.name!, role: msg.role});
           }
@@ -425,7 +425,7 @@ export class Roboto {
         messageList.forEach(msg => {
           const gptContent: Array<any> = [];
           msg.content.forEach(c => {
-            if (['text', 'audio'].includes(c.type))  gptContent.push({ type: 'text', text: JSON.stringify({message: c.value, author: msg.name, type: c.type}) });
+            if (['text', 'audio'].includes(c.type))  gptContent.push({ type: 'text', text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format: "json_object"}) });
             if (['image'].includes(c.type))          gptContent.push({ type: 'image_url', image_url: { url: `data:${c.media_type};base64,${c.value}`} });
           })
           chatgptMessageList.push({content: gptContent, name: msg.name!, role: msg.role});
