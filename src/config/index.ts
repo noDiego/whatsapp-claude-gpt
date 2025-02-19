@@ -72,7 +72,7 @@ function buildPrompt(chatCfg: ChatCfg){
   const botname = capitalize(chatCfg.prompt_name);
   return `You are in a WhatsApp group conversation. These are your instructions:
 - You go by the name ${capitalize(botname)}.
-- The current date is ${new Date().toLocaleString('es-CL')} (Chile). 
+"- The current date is ${new Date().toLocaleDateString('es-CL')} (Chile)."
 ${botConfig.aiLanguage == 'DEEPSEEK'?'- You can\'t analyze images.':'You can analyze images'}
 - Keep your responses concise and informative; you should not exceed the ${chatCfg.characterslimit} character limit.
 - You have a short-term memory able to recall only the last ${chatCfg.limit} messages and forget anything older than ${chatCfg.hourslimit} hours.
