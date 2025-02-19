@@ -86,9 +86,11 @@ export class OpenaiService {
           await this.openai.chat.completions.create(params);
 
         let fullResponse = '';
+        let usage;
 
         for await (const chunk of stream) {
           const content = chunk.choices[0]?.delta?.content || '';
+          usage = chunk.usage || '';
           fullResponse += content;
         }
 
@@ -96,6 +98,8 @@ export class OpenaiService {
 
         logger.debug(`[${CONFIG.botConfig.aiLanguage}->sendCompletion] Completion Response:`);
         logger.debug(fullResponse);
+
+        this.logTokens(usage);
 
         return JSON.parse(fullResponse) as AiAnswer;
 
@@ -197,6 +201,13 @@ export class OpenaiService {
       logger.error(e.message);
       throw e;
     }
+  }
+
+  private logTokens(usage: any){
+      const promptTokens = usage.prompt_tokens;
+      const cachedTokens = usage.prompt_tokens_details.cached_tokens;
+      const completionTokens = usage.completion_tokens;
+      logger.info(`PromptTokens: ${promptTokens}. CachedTokens: ${cachedTokens}. CompletionTokens: ${completionTokens}. Totaltokens: ${usage.total_tokens}`)
   }
 
 }
