@@ -51,10 +51,11 @@ export class Roboto {
    * - A promise that resolves to a boolean value indicating whether a response was successfully sent back to the user or not.
    */
   public async readMessage(message: Message, client: Client) {
+    const chatData: Chat = await message.getChat();
+
     try {
 
       const contactData: Contact = await message.getContact();
-      const chatData: Chat = await message.getChat();
       const isAudioMsg = message.type == MessageTypes.VOICE || message.type == MessageTypes.AUDIO;
       const isAdmin = contactData.number == CONFIG.botConfig.adminNumber;
       const { command, commandMessage } = parseCommand(message.body);
@@ -83,6 +84,7 @@ export class Roboto {
       while (this.groupProcessingStatus[chatData.id._serialized]) {
         await new Promise(resolve => setTimeout(resolve, 3000)); // Espera 3 segundos
       }
+      this.groupProcessingStatus[chatData.id._serialized] = true;
 
       // Sends message to ChatGPT
       chatData.sendStateTyping();
@@ -106,6 +108,8 @@ export class Roboto {
     } catch (e: any) {
       logger.error(e.message);
       return message.reply('Error 😔');
+    } finally {
+      this.groupProcessingStatus[chatData.id._serialized] = false;
     }
   }
 
