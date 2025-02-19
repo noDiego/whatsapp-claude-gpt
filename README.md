@@ -22,9 +22,25 @@ When using an AI language model other than OpenAI for chat (e.g., CLAUDE, QWEN, 
 
 ## Setting Up Your API Keys
 
+### Configuring the Environment File (.env)
+Before starting the bot, you must properly configure your API keys and other environment variables. Follow these steps:
+
+1. In the root directory of the project, you'll find a file named .env.example. This file contains the complete structure and examples of every variable you can configure. It is strongly recommended that you use this file as your base.
+
+2. Copy the .env.example file and rename the copied file exactly as .env (with the leading dot and no additional extension). It is crucial that the file is named ".env" and not something like "a.env", since the application (and the dotenv library) specifically looks for the file named ".env".
+
+3. Open the newly created .env file and fill in your personal API keys and configuration details. For example:
+   • OPENAI_API_KEY=your_openai_api_key
+   • CLAUDE_API_KEY=your_claude_api_key
+   • And so on for the other variables based on the services and functionalities you plan to use.
+
+4. Save the .env file once you have updated it. Make sure to exclude this file from any public repositories to avoid exposing sensitive information.
+
+By following these steps, you'll have the .env file correctly configured, ensuring that the bot runs without any issues.
+
 ### Using the .env File
 
-You must provide the correct API keys in your .env file for whichever model(s) you intend to use. Below is an example with all possible variables:
+You must provide the correct API keys in the .env file for whichever model(s) you intend to use. Below is an example with all possible variables:
 
 ```
 ## OPENAI CONFIG
