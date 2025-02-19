@@ -204,6 +204,7 @@ export class OpenaiService {
   }
 
   private logTokens(usage: any){
+    if(!usage) return;
       const promptTokens = usage.prompt_tokens;
       const cachedTokens = usage.prompt_tokens_details.cached_tokens;
       const completionTokens = usage.completion_tokens;
