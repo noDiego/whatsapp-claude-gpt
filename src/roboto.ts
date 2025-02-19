@@ -18,6 +18,7 @@ export class Roboto {
   private botConfig = CONFIG.botConfig;
   private allowedTypes = [MessageTypes.STICKER, MessageTypes.TEXT, MessageTypes.IMAGE, MessageTypes.VOICE, MessageTypes.AUDIO];
   private cache: NodeCache;
+  private groupProcessingStatus: {[key: string]: boolean} = {};
 
   public constructor() {
 
@@ -45,10 +46,12 @@ export class Roboto {
    * - A promise that resolves to a boolean value indicating whether a response was successfully sent back to the user or not.
    */
   public async readMessage(message: Message, client: Client) {
+
+    const chatData: Chat = await message.getChat();
+
     try {
 
       // Extract the data input (extracts command e.g., "-a", and the message)
-      const chatData: Chat = await message.getChat();
       const isAudioMsg = message.type == MessageTypes.VOICE || message.type == MessageTypes.AUDIO;
       const { command, commandMessage } = parseCommand(message.body);
 
@@ -75,6 +78,11 @@ export class Roboto {
         return true;
       }
 
+      while (this.groupProcessingStatus[chatData.id._serialized]) {
+        await new Promise(resolve => setTimeout(resolve, 3000)); // Espera 3 segundos
+      }
+      this.groupProcessingStatus[chatData.id._serialized] = true;
+
       // Sends message to ChatGPT
       chatData.sendStateTyping();
       let chatResponseString : AiAnswer = await this.processMessage(chatData);
@@ -92,6 +100,8 @@ export class Roboto {
     } catch (e: any) {
       logger.error(e.message);
       return message.reply('Error 😔');
+    } finally {
+      this.groupProcessingStatus[chatData.id._serialized] = false;
     }
   }
 

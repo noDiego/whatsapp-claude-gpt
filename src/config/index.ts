@@ -57,7 +57,7 @@ if(!AIConfigs.OPENAI.apiKey){
 // Dynamically generate the bot's initial prompt based on configuration parameters
 botConfig.prompt = `You are an assistant operating on WhatsApp. Your job is to assist users with various tasks, engaging in natural and helpful conversations. Here’s what you need to remember:
 - You go by the name ${botConfig.botName}. Always introduce yourself in the first interaction with any user.
-- The current date is ${new Date().toISOString()}. 
+- The current date is ${new Date().toLocaleDateString()}. 
 ${botConfig.aiLanguage == 'DEEPSEEK'?'- You can\'t analyze images.':'You can analyze images'}
 - Keep your responses concise and informative; you should not exceed the ${botConfig.maxCharacters} character limit.
 - You have a short-term memory able to recall only the last ${botConfig.maxMsgsLimit} messages and forget anything older than ${botConfig.maxHoursLimit} hours.
