@@ -1,14 +1,16 @@
 import { OpenaiService } from './services/openai-service';
-import { Chat, Client, Message, MessageMedia, MessageTypes } from 'whatsapp-web.js';
+import { Chat, Client, GroupChat, Message, MessageMedia, MessageTypes } from 'whatsapp-web.js';
 import { bufferToStream, getContactName, getUnsupportedMessage, includeName, logMessage, parseCommand } from './utils';
 import logger from './logger';
-import { CONFIG } from './config';
-import { AiAnswer, AiContent, AiLanguage, AiMessage, AiRole } from './interfaces/ai-message';
+import { AIConfig, CONFIG } from './config';
+import { AIAnswer, AIContent, AiMessage, AIProvider, AIRole } from './interfaces/ai-interfaces';
 import Anthropic from '@anthropic-ai/sdk';
 import { ChatCompletionMessageParam } from 'openai/resources';
 import { AnthropicService } from './services/anthropic-service';
 import { ImageBlockParam, TextBlock } from '@anthropic-ai/sdk/src/resources/messages';
 import NodeCache from 'node-cache';
+import { elevenTTS } from './services/elevenlabs-service';
+import { chatConfigurationManager } from './config/chat-configurations';
 import MessageParam = Anthropic.MessageParam;
 
 export class Roboto {
@@ -18,7 +20,7 @@ export class Roboto {
   private botConfig = CONFIG.botConfig;
   private allowedTypes = [MessageTypes.STICKER, MessageTypes.TEXT, MessageTypes.IMAGE, MessageTypes.VOICE, MessageTypes.AUDIO];
   private cache: NodeCache;
-  private groupProcessingStatus: {[key: string]: boolean} = {};
+  private groupProcessingStatus: { [key: string]: boolean } = {};
 
   public constructor() {
 
@@ -29,21 +31,22 @@ export class Roboto {
 
   /**
    * Handles incoming WhatsApp messages and decides the appropriate action.
-   * This can include parsing commands, replying to direct mentions or messages, or sending responses through the ChatGPT AI.
    *
-   * The function first checks for the type of message and whether it qualifies for a response based on certain criteria,
-   * such as being a broadcast message, a direct mention, or containing a specific command.
+   * This function evaluates incoming messages to determine if a response is needed based on:
+   * - Message type (text, image, audio, sticker)
+   * - Group context (direct mentions, quoted replies)
+   * - Command presence (prefixed with "-")
    *
-   * If the message includes a recognized command, the function dispatches the message for command-specific handling.
-   * Otherwise, it constructs a prompt for the ChatGPT AI based on recent chat messages and sends a response back to the user.
+   * Key functionalities:
+   * - Processes commands with the commandSelect method
+   * - Manages group processing with a queue system to prevent conflicts
+   * - Handles AI response generation through processMessage
+   * - Determines response format (text or audio)
+   * - Logs messages and manages errors
    *
-   * The function supports special actions like generating images or synthesizing speech based on the content of the message.
-   *
-   * Parameters:
-   * - message: The incoming Message object from the WhatsApp Web.js library that encapsulates all data and operations relevant to the received WhatsApp message.
-   *
-   * Returns:
-   * - A promise that resolves to a boolean value indicating whether a response was successfully sent back to the user or not.
+   * @param message - The incoming Message object from WhatsApp Web.js
+   * @param client - The WhatsApp Web.js Client instance
+   * @returns A promise resolving to a boolean indicating if a response was sent
    */
   public async readMessage(message: Message, client: Client) {
 
@@ -53,45 +56,50 @@ export class Roboto {
 
       // Extract the data input (extracts command e.g., "-a", and the message)
       const isAudioMsg = message.type == MessageTypes.VOICE || message.type == MessageTypes.AUDIO;
-      const { command, commandMessage } = parseCommand(message.body);
+      const {command, commandMessage} = parseCommand(message.body);
 
       // If it's a "Broadcast" message, it's not processed
-      if(chatData.id.user == 'status' || chatData.id._serialized == 'status@broadcast') return false;
+      if (chatData.id.user == 'status' || chatData.id._serialized == 'status@broadcast') return false;
 
       // Evaluates whether the message type will be processed
-      if(!this.allowedTypes.includes(message.type) || (isAudioMsg && !this.botConfig.voiceMessagesEnabled)) return false;
+      if (!this.allowedTypes.includes(message.type) || (isAudioMsg && !AIConfig.SpeechConfig.enabled)) return false;
+
+      const botName = chatData.isGroup
+        ? chatConfigurationManager.getBotName(chatData.id._serialized) || this.botConfig.botName
+        : this.botConfig.botName;
 
       // Evaluates if it should respond
       const isSelfMention = message.hasQuotedMsg ? (await message.getQuotedMessage()).fromMe : false;
-      const isMentioned = includeName(message.body, this.botConfig.botName);
+      const isMentioned = includeName(message.body, botName);
 
-      if(!isSelfMention && !isMentioned && !command && chatData.isGroup) return false;
+      if (!isSelfMention && !isMentioned && !command && chatData.isGroup) return false;
+
+      while (this.groupProcessingStatus[chatData.id._serialized]) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+      this.groupProcessingStatus[chatData.id._serialized] = true;
 
       // Logs the message
       logMessage(message, chatData);
 
       // Evaluates if it should go to the command flow
-      if(!!command){
+      if (!!command) {
         await chatData.sendStateTyping();
         await this.commandSelect(message);
         await chatData.clearState();
         return true;
       }
 
-      while (this.groupProcessingStatus[chatData.id._serialized]) {
-        await new Promise(resolve => setTimeout(resolve, 3000)); // Espera 3 segundos
-      }
-      this.groupProcessingStatus[chatData.id._serialized] = true;
 
       // Sends message to ChatGPT
       chatData.sendStateTyping();
-      let chatResponseString : AiAnswer = await this.processMessage(chatData);
+      let chatResponseString: AIAnswer = await this.processMessage(chatData);
       chatData.clearState();
 
-      if(!chatResponseString) return;
+      if (!chatResponseString) return;
 
       // Evaluate if response message must be Audio or Text
-      if (chatResponseString.type.toLowerCase() == 'audio' && CONFIG.botConfig.voiceMessagesEnabled) {
+      if (chatResponseString.type.toLowerCase() == 'audio' && AIConfig.SpeechConfig.enabled) {
         return this.speak(message, chatData, chatResponseString.message, 'mp3');
       } else {
         return this.returnResponse(message, chatResponseString.message, chatData.isGroup, client);
@@ -106,34 +114,29 @@ export class Roboto {
   }
 
   /**
-   * Selects and executes an action based on the recognized command in a received message.
-   * This function is a command dispatcher that interprets the command (if any) present
-   * in the user's message and triggers the corresponding functionality, such as creating
-   * images or generating speech.
+   * Selects and executes an action based on the command in the message.
    *
-   * Supported commands include generating images (`image`) or text-to-speech synthesis (`speak`).
-   * The function relies on the presence of a command parsed from the message body to determine
-   * the appropriate action. If a supported command is found, the function executes the associated
-   * method and handles tasks like generating an image based on the provided textual content
-   * or creating an audio file from text.
+   * This function acts as a command dispatcher that interprets commands prefixed with "-"
+   * and routes them to the appropriate handler methods. Currently supports:
    *
-   * Parameters:
-   * - message: The Message object received from WhatsApp, which includes the command and any
-   *   additional message content intended for processing.
-   * - chatData: The Chat object associated with the received message, providing context such
-   *   as the chat's identity and state.
+   * - "-image [prompt]": Generates images using AI (if enabled in config)
+   * - "-chatconfig [subcommand]": Manages chat-specific configurations
+   * - "-reset": Resets the conversation context with the AI
    *
-   * Returns:
-   * - A promise that resolves to `true` if an action for a recognized command is successfully
-   *   initiated, or `void` if no recognized command is found or the command functionality is
-   *   disabled through the bot's configuration.
+   * The function parses the command and its arguments from the message body
+   * and executes the corresponding functionality.
+   *
+   * @param message - The Message object containing the command
+   * @returns A promise resolving when the command processing is complete
    */
   private async commandSelect(message: Message) {
-    const { command, commandMessage } = parseCommand(message.body);
+    const {command, commandMessage} = parseCommand(message.body);
     switch (command) {
       case "image":
-        if (!this.botConfig.imageCreationEnabled) return;
+        if (!AIConfig.ImageConfig.enabled) return;
         return await this.createImage(message, commandMessage);
+      case "chatconfig":
+        return await this.handleChatConfigCommand(message, commandMessage!);
       case "reset":
         return await message.react('👍');
       default:
@@ -142,25 +145,25 @@ export class Roboto {
   }
 
   /**
-   * Processes an incoming message and generates an appropriate response using the configured AI language model.
+   * Processes an incoming message and generates an AI response based on chat context.
    *
-   * This function is responsible for constructing the context for the selected AI model based on recent chat messages,
-   * subject to certain limits and filters. It then sends the context to the configured AI language model
-   * (OpenAI, Claude, QWEN, DEEPSEEK or CUSTOM) to generate a response.
+   * This function is responsible for:
+   * 1. Collecting recent chat messages to build conversation context
+   * 2. Processing multiple content types (text, images, audio)
+   * 3. Handling transcription of voice messages
+   * 4. Applying chat-specific configurations (custom prompts, bot names)
+   * 5. Selecting the appropriate AI provider and formatting messages accordingly
    *
-   * The function handles various aspects of the conversation, such as:
-   * - Filtering out messages older than a specified time limit
-   * - Limiting the number of messages and tokens sent to the AI model
-   * - Handling image and audio messages (requires OpenAI API key)
-   * - Including them in the context if applicable
-   * - Resetting the conversation context if the "-reset" command is encountered
+   * The function limits context by time (messages older than maxHoursLimit are ignored)
+   * and resets context if a "-reset" command is found in the chat history.
    *
-   * @param chatData - The Chat object representing the conversation context.
-   * @returns A promise that resolves with the generated response string, or null if no response is needed.
+   * @param chatData - The Chat object representing the conversation
+   * @returns A promise that resolves with the AI-generated response or null if no response needed
    */
   private async processMessage(chatData: Chat) {
 
     const actualDate = new Date();
+    const analyzeImages = !AIConfig.ChatConfig.analyzeImageDisabled;
 
     // Initialize an array of messages
     const messageList: AiMessage[] = [];
@@ -170,7 +173,7 @@ export class Roboto {
     let imageCount: number = 0;
 
     // Retrieve the last 'limit' number of messages to send them in order
-    const fetchedMessages = await chatData.fetchMessages({ limit: this.botConfig.maxMsgsLimit });
+    const fetchedMessages = await chatData.fetchMessages({limit: this.botConfig.maxMsgsLimit});
     // Check for "-reset" command in chat history to potentially restart context
     const resetIndex = fetchedMessages.map(msg => msg.body).lastIndexOf("-reset");
     const messagesToProcess = resetIndex >= 0 ? fetchedMessages.slice(resetIndex + 1) : fetchedMessages;
@@ -190,26 +193,26 @@ export class Roboto {
         const isOther = !isImage && !isAudio && msg.type != 'chat';
 
         // Limit the number of processed images to only the last few and ignore audio if cached
-        const media = (isImage && imageCount < this.botConfig.maxImages) || (isAudio && !cachedMessage) ?
+        const media = (isImage && imageCount < this.botConfig.maxImages && analyzeImages) || (isAudio && !cachedMessage) ?
           await msg.downloadMedia() : null;
 
         if (media && isImage) imageCount++;
 
-        const role = (!msg.fromMe || isImage) ? AiRole.USER : AiRole.ASSISTANT;
+        const role = (!msg.fromMe || isImage) ? AIRole.USER : AIRole.ASSISTANT;
         const name = msg.fromMe ? (CONFIG.botConfig.botName) : (await getContactName(msg));
 
         // Assemble the content as a mix of text and any included media
-        const content: Array<AiContent> = [];
-        if (isOther || (isAudio && !this.botConfig.voiceMessagesEnabled))
+        const content: Array<AIContent> = [];
+        if (isOther || (isAudio && !AIConfig.TranscriptionConfig.enabled))
           content.push({type: 'text', value: getUnsupportedMessage(msg.type, msg.body)});
         else if (isAudio && media && !cachedMessage) {
           transcriptionPromises.push({index: messageList.length, promise: this.transcribeVoice(media, msg)});
           content.push({type: 'audio', value: '<Transcribing voice message...>'});
         }
         if (isAudio && cachedMessage) content.push({type: 'audio', value: cachedMessage});
-        if (isImage && media)         content.push({type: 'image', value: media.data, media_type: media.mimetype});
-        if (isImage && !media)        content.push({type: 'text', value: '<Unprocessed image>'});
-        if (msg.body && !isOther)     content.push({type: 'text', value: msg.body});
+        if (isImage && media) content.push({type: 'image', value: media.data, media_type: media.mimetype});
+        if (isImage && !media) content.push({type: 'text', value: '<Unprocessed image>'});
+        if (msg.body && !isOther) content.push({type: 'text', value: msg.body});
 
         messageList.push({role: role, name: name, content: content});
       } catch (e: any) {
@@ -226,42 +229,59 @@ export class Roboto {
       const transcription = transcriptions[idx];
       const messageIdx = transcriptionPromise.index;
       messageList[messageIdx].content = messageList[messageIdx].content.map(c =>
-        c.type === 'audio' && c.value === '<Transcribing voice message...>' ? { type: 'audio', value: transcription }: c
+        c.type === 'audio' && c.value === '<Transcribing voice message...>' ? {type: 'audio', value: transcription} : c
       );
     });
 
+    let systemPrompt = CONFIG.getSystemPrompt();
+    let botName = this.botConfig.botName;
+
+    const chatConfiguration = chatConfigurationManager.getChatConfig(chatData.id._serialized);
+    if (chatConfiguration) {
+      botName = chatConfiguration.botName || this.botConfig.botName;
+      systemPrompt = CONFIG.getSystemPrompt(chatConfiguration.promptInfo, botName);
+      logger.debug(`Using custom configuration for ${chatConfiguration.isGroup ? 'group' : 'chat'} "${chatConfiguration.name}" with bot name "${botName}": ${systemPrompt}`);
+    }
+
     // Send the message and return the text response
-    if (CONFIG.botConfig.aiLanguage == AiLanguage.CLAUDE) {
-      const convertedMessageList: MessageParam[] = this.convertIaMessagesLang(messageList.reverse(), AiLanguage.CLAUDE) as MessageParam[];
-      return await this.claudeService.sendChat(convertedMessageList, this.botConfig.prompt);
-    }else{
-      const convertedMessageList: ChatCompletionMessageParam[] = this.convertIaMessagesLang(messageList.reverse(), CONFIG.botConfig.aiLanguage as AiLanguage) as ChatCompletionMessageParam[];
-      return await this.openAIService.sendCompletion(convertedMessageList, this.botConfig.prompt);
+    if (AIConfig.ChatConfig.provider == AIProvider.CLAUDE) {
+      const convertedMessageList: MessageParam[] = this.convertIaMessagesLang(messageList.reverse(), AIProvider.CLAUDE) as MessageParam[];
+      return await this.claudeService.sendChat(convertedMessageList, CONFIG.getSystemPrompt());
+    } else {
+      const convertedMessageList: ChatCompletionMessageParam[] = this.convertIaMessagesLang(messageList.reverse(), AIConfig.ChatConfig.provider as AIProvider, systemPrompt) as ChatCompletionMessageParam[];
+      return await this.openAIService.sendCompletion(convertedMessageList);
     }
   }
 
   /**
-   * Generates and sends an audio message by synthesizing speech from the provided text content.
-   * This function requires a valid OpenAI API key regardless of the AI model selected for chat.
-   * If no content is explicitly provided, the function attempts to use the last message sent by the bot
-   * as the text input for speech synthesis.
+   * Generates and sends an audio message by synthesizing speech from provided text.
    *
-   * Parameters:
-   * - message: The Message object received from WhatsApp for reply context.
-   * - chatData: The Chat object associated with the received message.
-   * - content: Optional text content to be converted into speech.
-   * - responseFormat: Optional format specification for the audio response.
+   * This function converts text to speech using either:
+   * - OpenAI's text-to-speech API
+   * - ElevenLabs' text-to-speech service
    *
-   * Returns:
-   * - A promise that resolves when the audio message has been successfully sent.
+   * If no explicit content is provided, it attempts to use the last message sent by the bot
+   * as input for speech synthesis. The resulting audio is sent as a voice message.
+   *
+   * @param message - The Message object for reply context
+   * @param chatData - The Chat object for the conversation
+   * @param content - Optional text content to convert to speech
+   * @param responseFormat - Optional format for the audio response
+   * @returns A promise that resolves when the audio message is sent
    */
   private async speak(message: Message, chatData: Chat, content: string | undefined, responseFormat?) {
     // Set the content to be spoken. If no content is explicitly provided, fetch the last bot reply for use.
     let messageToSay = content || await this.getLastBotMessage(chatData);
     try {
       // Generate speech audio from the given text content using the OpenAI API.
-      const audioBuffer = await this.openAIService.speech(messageToSay, responseFormat);
-      const base64Audio = audioBuffer.toString('base64');
+
+      let base64Audio;
+      if (AIConfig.SpeechConfig.provider == AIProvider.ELEVENLABS) {
+        base64Audio = await elevenTTS(messageToSay);
+      } else {
+        const audioBuffer = await this.openAIService.speech(messageToSay, responseFormat);
+        base64Audio = audioBuffer.toString('base64');
+      }
 
       let audioMedia = new MessageMedia('audio/mp3', base64Audio, 'voice.mp3');
 
@@ -276,16 +296,15 @@ export class Roboto {
   }
 
   /**
-   * Creates and sends an image in response to a message, based on provided textual content.
-   * This function requires a valid OpenAI API key regardless of the AI model selected for chat.
-   * The function calls OpenAI's DALL-E API to generate an image using the provided text as a prompt.
+   * Creates and sends an AI-generated image in response to a text prompt.
    *
-   * Parameters:
-   * - message: The Message object received from WhatsApp for reply context.
-   * - content: The text content that will serve as a prompt for image generation.
+   * This function uses OpenAI's DALL-E model to generate an image based on
+   * the provided text prompt. The resulting image is sent as a reply to the
+   * original message.
    *
-   * Returns:
-   * - A promise that resolves when the image has been successfully generated and sent.
+   * @param message - The Message object for reply context
+   * @param content - The text prompt for image generation
+   * @returns A promise that resolves when the image is sent
    */
   private async createImage(message: Message, content: string | undefined) {
     // Verify that content is provided for image generation, return if not.
@@ -293,8 +312,13 @@ export class Roboto {
 
     try {
       // Calls the ChatGPT service to generate an image based on the provided textual content.
-      const imgUrl = await this.openAIService.createImage(content) as string;
-      const media = await MessageMedia.fromUrl(imgUrl);
+      const imgResponse = await this.openAIService.createImage(content);
+      let media;
+      if (imgResponse[0].url) {
+        media = await MessageMedia.fromUrl(imgResponse[0].url);
+      } else if (imgResponse[0].b64_json) {
+        media = new MessageMedia('image/png', imgResponse[0].b64_json);
+      }
 
       // Reply to the message with the generated image.
       return await message.reply(media);
@@ -305,41 +329,54 @@ export class Roboto {
     }
   }
 
+  /**
+   * Retrieves the last message sent by the bot in a chat.
+   *
+   * This function fetches recent messages from the chat history and
+   * finds the most recent message sent by the bot (fromMe = true)
+   * that contains substantive content.
+   *
+   * @param chatData - The Chat object to search for messages
+   * @returns A promise resolving to the text of the last bot message
+   */
   private async getLastBotMessage(chatData: Chat) {
     const lastMessages = await chatData.fetchMessages({limit: 12});
     let lastMessageBot: string = '';
     for (const msg of lastMessages) {
-      if(msg.fromMe && msg.body.length>1) lastMessageBot = msg.body;
+      if (msg.fromMe && msg.body.length > 1) lastMessageBot = msg.body;
     }
     return lastMessageBot;
   }
 
   /**
-   * Converts AI message structures between different language models (OPENAI, CLAUDE, QWEN, DEEPSEEK and CUSTOM).
-   * This function takes a list of AI messages, which may include text and image content,
-   * and converts this list into a format compatible with the specified AI language model.
-   * It supports conversion to both OpenAI-compatible formats and Claude's specific format.
+   * Converts AI message structures between different language model formats.
    *
-   * Parameters:
-   * - messageList: An array of AiMessage, representing the messages to be converted.
-   * - lang: An AiLanguage enum value indicating the target language model (OPENAI, CLAUDE, QWEN, DEEPSEEK or CUSTOM).
+   * This function transforms message arrays into formats compatible with various AI providers:
+   * - OpenAI: Structured with system, user and assistant roles
+   * - Claude: Requires alternating user/assistant roles with specific content formats
+   * - Qwen: Similar to OpenAI but with provider-specific adaptations
+   * - DeepSeek: Uses JSON formatting with text blocks
+   * - DeepInfra/Custom: Uses simplified message formatting
    *
-   * Returns:
-   * - An array of MessageParam (for CLAUDE) or ChatCompletionMessageParam (for OpenAI-compatible services),
-   *   formatted according to the specified language model's requirements.
+   * The function handles text, audio transcriptions, and images appropriately for each provider.
+   *
+   * @param messageList - Array of AI messages to convert
+   * @param lang - The target AI provider format
+   * @param systemPrompt - Optional system prompt to include
+   * @returns Formatted message array compatible with the specified AI provider
    */
-  private convertIaMessagesLang(messageList: AiMessage[], lang: AiLanguage ): MessageParam[] | ChatCompletionMessageParam[]{
-    switch (lang){
-      case AiLanguage.CLAUDE:
+  private convertIaMessagesLang(messageList: AiMessage[], lang: AIProvider, systemPrompt?: string): MessageParam[] | ChatCompletionMessageParam[] {
+    switch (lang) {
+      case AIProvider.CLAUDE:
 
         const claudeMessageList: MessageParam[] = [];
-        let currentRole: AiRole = AiRole.USER;
+        let currentRole: AIRole = AIRole.USER;
         let gptContent: Array<TextBlock | ImageBlockParam> = [];
         messageList.forEach((msg, index) => {
-          const role = msg.role === AiRole.ASSISTANT && msg.content.find(c => c.type === 'image') ? AiRole.USER : msg.role;
+          const role = msg.role === AIRole.ASSISTANT && msg.content.find(c => c.type === 'image') ? AIRole.USER : msg.role;
           if (role !== currentRole) { // Change role or if it's the last message
             if (gptContent.length > 0) {
-              claudeMessageList.push({ role: currentRole, content: gptContent });
+              claudeMessageList.push({role: currentRole as any, content: gptContent});
               gptContent = []; // Reset for the next block of messages
             }
             currentRole = role; // Ensure role alternation 
@@ -347,54 +384,98 @@ export class Roboto {
 
           // Add content to the current block
           msg.content.forEach(c => {
-            if (['text', 'audio'].includes(c.type))  gptContent.push({ type: 'text', text: JSON.stringify({message: c.value, author: msg.name, type: c.type})});
-            if (['image'].includes(c.type))          gptContent.push({ type: 'image', source: { data: c.value!, media_type: c.media_type as any, type: 'base64' } });
+            if (['text', 'audio'].includes(c.type)) gptContent.push({
+              type: 'text',
+              text: JSON.stringify({message: c.value, author: msg.name, type: c.type})
+            });
+            if (['image'].includes(c.type)) gptContent.push({
+              type: 'image',
+              source: {data: c.value!, media_type: c.media_type as any, type: 'base64'}
+            });
           });
         });
         // Ensure the last block is not left out
-        if (gptContent.length > 0) claudeMessageList.push({ role: currentRole, content: gptContent });
+        if (gptContent.length > 0) claudeMessageList.push({role: currentRole, content: gptContent});
 
         // Ensure the first message is always AiRole.USER (by API requirement)
-        if (claudeMessageList.length > 0 && claudeMessageList[0].role !== AiRole.USER) {
+        if (claudeMessageList.length > 0 && claudeMessageList[0].role !== AIRole.USER) {
           claudeMessageList.shift(); // Remove the first element if it's not USER
         }
 
         return claudeMessageList;
 
-      case AiLanguage.DEEPSEEK:
+      case AIProvider.DEEPSEEK:
 
         const deepSeekMsgList: any[] = [];
         messageList.forEach(msg => {
-          if(msg.role == AiRole.ASSISTANT) {
-            const textContent = msg.content.find(c => c.type === 'text')!;
-            const content = JSON.stringify({ type: 'text', text: JSON.stringify({message: textContent.value, author: msg.name, type: textContent.type, response_format: "json_object"}) });
+          if (msg.role == AIRole.ASSISTANT) {
+            const textContent = msg.content.find(c => ['text', 'audio'].includes(c.type))!;
+            const content = JSON.stringify({
+              type: 'text',
+              text: JSON.stringify({message: textContent.value, author: msg.name, type: textContent.type, response_format: "json_object"})
+            });
             deepSeekMsgList.push({content: content, name: msg.name!, role: msg.role});
-          }
-          else {
+          } else {
             const gptContent: Array<any> = [];
             msg.content.forEach(c => {
-              if (['image'].includes(c.type)) gptContent.push({type: 'text', text: JSON.stringify({message: getUnsupportedMessage('image', ''), author: msg.name, type: c.type, response_format: "json_object"})});
-              if (['text', 'audio'].includes(c.type)) gptContent.push({type: 'text', text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format: "json_object"})});
+              if (['image'].includes(c.type)) gptContent.push({
+                type: 'text',
+                text: JSON.stringify({message: getUnsupportedMessage('image', ''), author: msg.name, type: c.type, response_format: "json_object"})
+              });
+              if (['text', 'audio'].includes(c.type)) gptContent.push({
+                type: 'text',
+                text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format: "json_object"})
+              });
             })
             deepSeekMsgList.push({content: gptContent, name: msg.name!, role: msg.role});
           }
         })
+
+        deepSeekMsgList.unshift({role: AIRole.SYSTEM, content: [{type: 'text', text: systemPrompt}]});
+
         return deepSeekMsgList;
 
-      case AiLanguage.OPENAI:
-      case AiLanguage.QWEN:
-      case AiLanguage.CUSTOM:
-
+      case AIProvider.OPENAI:
+      case AIProvider.QWEN:
         const chatgptMessageList: any[] = [];
         messageList.forEach(msg => {
           const gptContent: Array<any> = [];
           msg.content.forEach(c => {
-            if (['text', 'audio'].includes(c.type))  gptContent.push({ type: 'text', text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format:'json_object'}) });
-            if (['image'].includes(c.type))          gptContent.push({ type: 'image_url', image_url: { url: `data:${c.media_type};base64,${c.value}`} });
+            if (['text', 'audio'].includes(c.type)) gptContent.push({
+              type: 'text',
+              text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format: 'json_object'})
+            });
+            if (['image'].includes(c.type)) gptContent.push({type: 'image_url', image_url: {url: `data:${c.media_type};base64,${c.value}`}});
           })
           chatgptMessageList.push({content: gptContent, name: msg.name!, role: msg.role});
         })
+
+        chatgptMessageList.unshift({role: AIRole.SYSTEM, content: [{type: 'text', text: systemPrompt}]});
+
         return chatgptMessageList;
+
+      case AIProvider.CUSTOM:
+      case AIProvider.DEEPINFRA:
+
+        const otherMsgList: any[] = [];
+        messageList.forEach(msg => {
+          if (msg.role == AIRole.ASSISTANT) {
+            const textContent = msg.content.find(c => ['text', 'audio'].includes(c.type))!;
+            const content = JSON.stringify({message: textContent.value, author: msg.name, type: textContent.type, response_format: "json_object"});
+            otherMsgList.push({content: content, name: msg.name!, role: msg.role});
+          } else {
+            const gptContent: Array<any> = [];
+            msg.content.forEach(c => {
+              if (['image'].includes(c.type)) gptContent.push(JSON.stringify({message: getUnsupportedMessage('image', ''), author: msg.name, type: c.type, response_format: "json_object"}));
+              if (['text', 'audio'].includes(c.type)) gptContent.push(JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format: "json_object"}));
+            })
+            otherMsgList.push({content: gptContent[0], role: msg.role});
+          }
+        })
+
+        otherMsgList.unshift({role: AIRole.SYSTEM, content: systemPrompt});
+
+        return otherMsgList;
 
       default:
         return [];
@@ -402,19 +483,110 @@ export class Roboto {
   }
 
   /**
-   * Transcribes a voice message by converting it to audio and then using the configured AI service.
-   * If the transcription for the message exists in the cache, it will return the cached value.
+   * Handles chat configuration commands for customizing bot behavior per chat.
    *
+   * This function manages the following subcommands:
+   * - prompt: Sets a custom personality/behavior for the bot in the current chat
+   * - botname: Changes the bot's name for the current chat
+   * - remove: Removes custom configurations and reverts to defaults
+   * - show: Displays current custom configuration
+   *
+   * In group chats, only administrators can modify configurations.
+   *
+   * @param message - The Message object containing the command
+   * @param commandText - The text of the command without the prefix
+   * @returns A promise resolving to the sent reply message
+   */
+  private async handleChatConfigCommand(message: Message, commandText: string) {
+    const chat = await message.getChat();
+    const isGroup = chat.isGroup;
 
-   * This function performs the following steps:
-   * - Checks the cache for existing transcription.
-   * - Converts the base64 media data into an audio buffer.
-   * - Converts the buffer to a stream and sends it for transcription.
-   * - Stores the transcription result in the cache.     *
+    // Solo verificar permisos de administrador en grupos
+    if (isGroup) {
+      const groupChat = chat as GroupChat;
+      const participant = await groupChat.participants.find(p => p.id._serialized === message.author);
+      const isAdmin = participant?.isAdmin || participant?.isSuperAdmin;
+      if (!isAdmin) {
+        return message.reply("Only group administrators can change the bot's configuration in groups.");
+      }
+    }
 
-   * @param media - The media object containing the voice message data.
-   * @param message - The Message object received from WhatsApp.
-   * @returns A promise that resolves to the transcribed text of the voice message.
+    const parts = commandText.split(' ');
+    const subCommand = parts[0].toLowerCase();
+
+    switch (subCommand) {
+      case 'prompt':
+      case 'botname':
+        const value = parts.slice(1).join(' ');
+        if (!value) return message.reply(`Please provide a ${subCommand === 'prompt' ? 'prompt description' : 'name for the bot'}.`);
+
+        const existingConfig = chatConfigurationManager.getChatConfig(chat.id._serialized);
+
+        const updateOptions: any = {
+          promptInfo: existingConfig?.promptInfo || CONFIG.botConfig.promptInfo,
+          botName: existingConfig?.botName
+        };
+
+        if (subCommand === 'prompt') updateOptions.promptInfo = value;
+        else updateOptions.botName = value;
+
+        const updatedConfig = chatConfigurationManager.updateChatConfig(
+          chat.id._serialized,
+          chat.name,
+          isGroup,
+          updateOptions
+        );
+
+        return message.reply(
+          subCommand === 'prompt'
+            ? `✅ Updated prompt for this ${isGroup ? 'group' : 'chat'}. The bot now: ${updatedConfig.promptInfo}`
+            : `✅ Bot name for this ${isGroup ? 'group' : 'chat'} has been set to: ${updatedConfig.botName}`
+        );
+
+      case 'remove':
+        const removed = chatConfigurationManager.removeChatConfig(chat.id._serialized);
+        return message.reply(
+          removed
+            ? `✅ The custom prompt and bot name have been removed. The bot will use the default configuration.`
+            : `This ${isGroup ? 'group' : 'chat'} did not have a custom configuration.`
+        );
+
+      case 'show':
+        const currentConfig = chatConfigurationManager.getChatConfig(chat.id._serialized);
+        if (!currentConfig) return message.reply(`This ${isGroup ? 'group' : 'chat'} does not have a custom configuration.`);
+
+        let response = currentConfig.promptInfo? `Current personality: ${currentConfig.promptInfo}`:``;
+        if (currentConfig.botName) response += `\nBot name: ${currentConfig.botName ?? CONFIG.botConfig.botName}`;
+
+        return message.reply(response);
+
+      default:
+        return message.reply(
+          "Available commands:\n" +
+          `- *-chatconfig prompt [description]*: Sets the bot's personality for this ${isGroup ? 'group' : 'chat'}\n` +
+          `- *-chatconfig botname [name]*: Sets the bot's name for this ${isGroup ? 'group' : 'chat'}\n` +
+          "- *-chatconfig remove*: Removes the custom configuration\n" +
+          "- *-chatconfig show*: Displays the current configuration"
+        );
+    }
+  }
+
+
+  /**
+   * Transcribes a voice message to text using AI services.
+   *
+   * This function:
+   * 1. Checks if the transcription already exists in cache
+   * 2. Converts the media to an audio buffer and stream
+   * 3. Sends the audio to the configured transcription service
+   * 4. Caches the result for future use
+   *
+   * The function uses the OpenAI service which may route to different
+   * providers based on configuration.
+   *
+   * @param media - The MessageMedia object containing the voice data
+   * @param message - The Message object for cache identification
+   * @returns A promise resolving to the transcribed text
    */
   private async transcribeVoice(media: MessageMedia, message: Message): Promise<string> {
     try {
@@ -429,12 +601,12 @@ export class Roboto {
       // Convert the buffer to a stream
       const audioStream = bufferToStream(audioBuffer);
 
-      logger.debug(`[ChatGTP->transcribeVoice] Starting audio transcription`);
+      logger.debug(`[${AIConfig.TranscriptionConfig.provider}->transcribeVoice] Starting audio transcription`);
 
       const transcribedText = await this.openAIService.transcription(audioStream);
 
       // Log the transcribed text
-      logger.debug(`[ChatGTP->transcribeVoice] Transcribed text: ${transcribedText}`);
+      logger.debug(`[${AIConfig.TranscriptionConfig.provider}->transcribeVoice] Transcribed text: ${transcribedText}`);
 
       // Store in cache
       this.cache.set(message.id._serialized, transcribedText, CONFIG.botConfig.nodeCacheTime);
@@ -448,12 +620,34 @@ export class Roboto {
     }
   }
 
-  private returnResponse(message, responseMsg, isGroup, client){
-    if(isGroup) return message.reply(responseMsg);
+  /**
+   * Sends a response message appropriately based on chat context.
+   *
+   * This function handles the difference between group chats and direct messages:
+   * - In groups: Replies to the original message, creating a thread
+   * - In direct chats: Sends a new message to the chat
+   *
+   * @param message - The original Message object to reply to
+   * @param responseMsg - The text content to send
+   * @param isGroup - Boolean indicating if this is a group chat
+   * @param client - The WhatsApp client instance
+   * @returns A promise resolving to the sent message
+   */
+  private returnResponse(message, responseMsg, isGroup, client) {
+    if (isGroup) return message.reply(responseMsg);
     else return client.sendMessage(message.from, responseMsg);
   }
 
-  private getCachedMessage(msg: Message){
+  /**
+   * Retrieves a cached message by its unique identifier.
+   *
+   * This function checks the NodeCache instance for previously stored
+   * message content, such as transcriptions or generated responses.
+   *
+   * @param msg - The Message object whose content might be cached
+   * @returns The cached string content or undefined if not found
+   */
+  private getCachedMessage(msg: Message) {
     return this.cache.get<string>(msg.id._serialized);
   }
 

@@ -1,32 +1,14 @@
 import logger from '../logger';
-import OpenAI, { toFile } from 'openai';
+import { OpenAI, toFile } from 'openai';
 import { ChatCompletionMessageParam } from 'openai/resources';
-import { CONFIG } from '../config';
-import { AiAnswer, AiLanguage } from '../interfaces/ai-message';
-import { OpenaiAiconfig } from '../interfaces/openai-aiconfig';
+import { AIConfig } from '../config';
+import { AIAnswer } from '../interfaces/ai-interfaces';
+import { ChatCompletion } from 'openai/src/resources/chat/completions';
+import { cleanAndParseJSON } from '../utils';
 
 export class OpenaiService {
 
-  private openai: OpenAI;
-  private openaiCustom: OpenAI;
-  private readonly AIConfig: OpenaiAiconfig;
-
   constructor() {
-    const openAIConfig: OpenaiAiconfig = CONFIG.AIConfigs[AiLanguage.OPENAI];
-    const customConfig: OpenaiAiconfig = CONFIG.AIConfigs[CONFIG.botConfig.aiLanguage];
-    this.AIConfig = openAIConfig;
-
-    if(CONFIG.botConfig.aiLanguage != AiLanguage.OPENAI) {
-      this.openaiCustom = new OpenAI({
-        baseURL: customConfig.baseURL,
-        apiKey: customConfig.apiKey,
-      });
-      this.AIConfig.chatModel = customConfig.chatModel;
-    }
-
-    this.openai = new OpenAI({
-      apiKey: openAIConfig.apiKey,
-    });
   }
 
   /**
@@ -40,65 +22,52 @@ export class OpenaiService {
    * Returns:
    * - A promise that resolves to the generated completion string, which is the API's response based on the provided context.
    */
-  async sendCompletion(messageList: ChatCompletionMessageParam[], systemPrompt: string): Promise<AiAnswer> {
+  async sendCompletion(messageList: ChatCompletionMessageParam[]): Promise<AIAnswer> {
+
+    const openAICLient = new OpenAI({
+      baseURL: AIConfig.ChatConfig.baseURL,
+      apiKey: AIConfig.ChatConfig.apiKey,
+    });
+    const model = AIConfig.ChatConfig.model;
+
+
     const MAX_RETRIES = 2;
     let currentTry = 0;
     let lastError: any;
 
-    const isO1 = this.AIConfig.chatModel.startsWith('o1');
-
-    messageList.unshift({role: isO1 ? 'user' : 'system', content: [{type: 'text', text: systemPrompt}]});
-
-    const params: any = isO1 ? {
-      model: this.AIConfig.chatModel,
-      messages: messageList,
-      store: true,
-      stream: true,
-    } : {
-      model: this.AIConfig.chatModel,
+    const params: any = {
+      model: model,
       messages: messageList,
       response_format: {
         type: "json_object"
       },
-      max_tokens: 2048,
-      top_p: 1,
-      frequency_penalty: 0.5,
-      presence_penalty: 0,
-      store: true,
-      stream: true,
+      store: true
     }
 
     while (currentTry <= MAX_RETRIES) {
       try {
-        logger.debug(`[${CONFIG.botConfig.aiLanguage}->sendCompletion] Attempt ${currentTry + 1}/${MAX_RETRIES + 1}: Sending ${messageList.length} messages.`);
+        logger.debug(`[${AIConfig.ChatConfig.provider}->sendCompletion] Attempt ${currentTry + 1}/${MAX_RETRIES + 1}: Sending ${messageList.length} messages.`);
 
-        const stream: any = this.openaiCustom ?
-          await this.openaiCustom.chat.completions.create(params) :
-          await this.openai.chat.completions.create(params);
+        const reponse: ChatCompletion = await openAICLient.chat.completions.create(params);
 
-        let fullResponse = '';
+        let fullResponse = reponse.choices[0]?.message?.content;
 
-        for await (const chunk of stream) {
-          const content = chunk.choices[0]?.delta?.content || '';
-          fullResponse += content;
-        }
+        if (!fullResponse || fullResponse == '') throw new Error(`An error occurred while communicating with ${AIConfig.ChatConfig.provider}. It returned an empty response.`);
 
-        if (fullResponse == '') throw new Error(`An error occurred while communicating with ${CONFIG.botConfig.aiLanguage}. It returned an empty response.`);
-
-        logger.debug(`[${CONFIG.botConfig.aiLanguage}->sendCompletion] Completion Response:`);
+        logger.debug(`[${AIConfig.ChatConfig.provider}->sendCompletion] Completion Response:`);
         logger.debug(fullResponse);
 
-        return JSON.parse(fullResponse) as AiAnswer;
+        return cleanAndParseJSON(fullResponse!) as AIAnswer;
 
       } catch (e: any) {
         lastError = e;
         currentTry++;
 
         if (currentTry <= MAX_RETRIES) {
-          logger.warn(`[${CONFIG.botConfig.aiLanguage}->sendCompletion] Attempt ${currentTry}/${MAX_RETRIES + 1} failed: ${e.message ?? e}`);
+          logger.warn(`[${AIConfig.ChatConfig.provider}->sendCompletion] Attempt ${currentTry}/${MAX_RETRIES + 1} failed: ${e.message ?? e}`);
           await new Promise(resolve => setTimeout(resolve, 1000 * currentTry));
         } else {
-          logger.error(`[${CONFIG.botConfig.aiLanguage}->sendCompletion] All ${MAX_RETRIES + 1} attempts failed. Last error: ${e.message ?? e}`);
+          logger.error(`[${AIConfig.ChatConfig.provider}->sendCompletion] All ${MAX_RETRIES + 1} attempts failed. Last error: ${e.message ?? e}`);
           throw new Error(`Failed after ${MAX_RETRIES + 1} attempts. Last error: ${e.message ?? e}. Please try again later or consider using an alternative AI. If the issue persists, contact support for further assistance.`);
         }
       }
@@ -117,18 +86,26 @@ export class OpenaiService {
    * Returns:
    * - A promise that resolves to the URL of the generated image. This URL points to the image created by OpenAI's API based on the input prompt.
    */
-  async createImage(message){
+  async createImage(message) {
 
-    logger.debug(`[OpenAI->createImage] Creating message for: "${message}"`);
+    logger.debug(`[${AIConfig.ImageConfig.provider}->createImage] Creating message for: "${message}"`);
 
-    const response = await this.openai.images.generate({
-      model: this.AIConfig.imageModel,
+    const params: any = {
+      model: AIConfig.ImageConfig.model,
       prompt: message,
       quality: 'standard',
       n: 1,
       size: "1024x1024",
+    }
+
+    const openAICLient = new OpenAI({
+      baseURL: AIConfig.ImageConfig.baseURL,
+      apiKey: AIConfig.ImageConfig.apiKey,
     });
-    return response.data[0].url;
+
+    const response = await openAICLient.images.generate(params);
+
+    return response.data;
   }
 
   /**
@@ -142,18 +119,23 @@ export class OpenaiService {
    * Returns:
    * - A promise that resolves to a buffer containing the audio data in MP3 format. This buffer can be played back or sent as an audio message.
    */
-  async speech(message, responseFormat?){
+  async speech(message, responseFormat?) {
 
-    logger.debug(`[OpenAI->speech] Creating speech audio for: "${message}"`);
+    logger.debug(`[${AIConfig.SpeechConfig.provider}->speech] Creating speech audio for: "${message}"`);
 
-    const response: any = await this.openai.audio.speech.create({
-      model: this.AIConfig.speechModel,
-      voice: this.AIConfig.speechVoice,
+    const openAICLient = new OpenAI({
+      baseURL: AIConfig.SpeechConfig.baseURL,
+      apiKey: AIConfig.SpeechConfig.apiKey,
+    });
+
+    const response: any = await openAICLient.audio.speech.create({
+      model: AIConfig.SpeechConfig.model,
+      voice: AIConfig.SpeechConfig.voice,
       input: message,
       response_format: responseFormat || 'mp3'
     });
 
-    logger.debug(`[OpenAI->speech] Audio Creation OK`);
+    logger.debug(`[${AIConfig.SpeechConfig.provider}->speech] Audio Creation OK`);
 
     return Buffer.from(await response.arrayBuffer());
   }
@@ -173,15 +155,21 @@ export class OpenaiService {
    * - Any errors encountered during the process of reading the audio file or interacting with OpenAI's API will be thrown and should be handled by the caller function.
    */
   async transcription(stream: any) {
-    logger.debug(`[OpenAI->transcription] Creating transcription text for audio"`);
+    logger.debug(`[${AIConfig.TranscriptionConfig.provider}->transcription] Creating transcription text for audio"`);
+
+    const openAIClient = new OpenAI({
+      baseURL: AIConfig.TranscriptionConfig.baseURL,
+      apiKey: AIConfig.TranscriptionConfig.apiKey,
+    });
+
     try {
       // Convertir ReadStream a File o Blob
-      const file = await toFile(stream, 'audio.ogg', { type: 'audio/ogg' });
+      const file = await toFile(stream, 'audio.ogg', {type: 'audio/ogg'});
       // Enviar el archivo convertido a la API de transcripción
-      const response = await this.openai.audio.transcriptions.create({
+      const response = await openAIClient.audio.transcriptions.create({
         file: file,
-        model: this.AIConfig.transcriptionModel,
-        language: CONFIG.botConfig.transcriptionLanguage
+        model: AIConfig.TranscriptionConfig.model,
+        language: AIConfig.TranscriptionConfig.language
       });
       return response.text;
     } catch (e: any) {

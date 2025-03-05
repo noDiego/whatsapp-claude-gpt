@@ -1,9 +1,9 @@
 {
   "name": "whatsapp-claude-gpt",
-  "version": "1.2.7",
+  "version": "1.3.0",
   "license": "MIT",
   "author": "Diego Beltran <diego.beltran88@gmail.com>",
-  "description": "WhatsApp-Claude-GPT is a versatile AI chatbot that integrates multiple leading AI models including OpenAI's GPT, Anthropic's CLAUDE, Alibaba's QWEN, DeepSeek, and support for custom AI services. This flexible bot enables rich conversations through WhatsApp, with support for multiple AI backends while maintaining OpenAI's powerful DALL-E 3 for image generation and advanced TTS capabilities for voice interactions. Users can choose their preferred AI model for text conversations while optionally leveraging OpenAI's capabilities for image creation and voice messaging. Built with TypeScript, the bot offers seamless group chat integration, context management, and easy configuration through environment variables. Whether you're looking for intelligent conversations, image generation, or voice interactions, WhatsApp-Claude-GPT provides a powerful, configurable, and user-friendly AI assistant directly in your WhatsApp chats. Perfect for both personal use and group interactions, it combines the best of multiple AI technologies in one accessible package.",
+  "description": "WhatsApp-Claude-GPT is an advanced chatbot for WhatsApp, integrating AI language models for text conversations, image generation, and voice messages.",
   "repository": "noDiego/whatsapp-claude-gpt",
   "keywords": [
     "openai",
@@ -23,7 +23,9 @@
     "haiku",
     "deepseek",
     "qwen",
-    "alibaba"
+    "alibaba",
+    "deepinfra",
+    "elevenlabs"
   ],
   "main": "index.js",
   "files": [
@@ -37,9 +39,10 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.25.2",
+    "axios": "^1.8.1",
     "dotenv": "^16.0.3",
     "node-cache": "^5.1.2",
-    "openai": "^4.82.0",
+    "openai": "4.60.1",
     "qrcode-terminal": "^0.12.0",
     "whatsapp-web.js": "^1.26.1-alpha.3",
     "winston": "^3.11.0"

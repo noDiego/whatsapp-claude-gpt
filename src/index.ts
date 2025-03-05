@@ -2,10 +2,12 @@ import logger from './logger';
 import { Message } from 'whatsapp-web.js';
 import { Roboto } from './roboto';
 import { configValidation, logConfigInfo } from './utils';
+import qrcode from 'qrcode-terminal';
+import { Client, LocalAuth } from 'whatsapp-web.js';
 
-const qrcode = require('qrcode-terminal');
-const { Client } = require('whatsapp-web.js');
-const client = new Client();
+const client = new Client({
+  authStrategy: new LocalAuth()
+});
 
 require('dotenv').config();
 

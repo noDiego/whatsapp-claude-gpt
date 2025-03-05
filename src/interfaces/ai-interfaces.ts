@@ -1,29 +1,32 @@
 export interface AiMessage {
-  role: AiRole;
-  content: Array<AiContent>;
+  role: AIRole;
+  content: Array<AIContent>;
   name?: string;
 }
 
-export enum AiRole {
+export enum AIRole {
   USER='user',
   ASSISTANT='assistant',
+  SYSTEM='system',
 }
 
-export interface AiContent {
+export interface AIContent {
   value?: string;
   type: 'text' | 'image' | 'audio';
   media_type?: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' | string;
 }
 
-export enum AiLanguage {
+export enum AIProvider {
   OPENAI='OPENAI',
   CLAUDE='CLAUDE',
   QWEN='QWEN',
   DEEPSEEK='DEEPSEEK',
+  DEEPINFRA='DEEPINFRA',
+  ELEVENLABS='ELEVENLABS',
   CUSTOM='CUSTOM'
 }
 
-export interface AiAnswer {
+export interface AIAnswer {
   message: string;
   type: 'text' | 'audio';
   author: string;

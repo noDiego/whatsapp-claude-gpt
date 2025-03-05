@@ -2,145 +2,113 @@
 
 WhatsApp-Claude-GPT is a chatbot application designed for seamless interaction on WhatsApp. It integrates flexible AI language models for text chat and, optionally, OpenAI’s image-creation and voice features. Currently, it fully supports:
 
-- OpenAI (ChatGPT and related image/audio models)
-- Anthropic (Claude)
-- DeepSeek
-- QWEN
-- Any custom AI service ("CUSTOM" mode)
+## Supported AI Providers
 
-When using an AI language model other than OpenAI for chat (e.g., CLAUDE, QWEN, DEEPSEEK, CUSTOM), you can still enable image creation and voice interaction if—and only if—you’ve set your OpenAI API Key. Without an OpenAI key, you will only be able to use text chat capabilities.
+- **OpenAI**: Chat, Image Generation, Voice (TTS/STT)
+- **Anthropic Claude**: Chat
+- **DeepSeek**: Chat
+- **Deepinfra**: Chat, Image Generation, Transcription
+- **QWEN**: Chat
+- **ElevenLabs**: Text-to-Speech
 
 ## Key Features
 
-- **Automatic Responses**: Generates coherent and contextual responses to received messages.
-- **Image Creation** (OpenAI only): Can create images from text descriptions using the `-image` command.
-- **Voice Interaction** (OpenAI only): Capable of both understanding voice messages and responding with its own voice messages upon request.
-- **Group Interaction**: When added to a group, the bot requires that its name be mentioned to activate and respond. Example: "Hi Roboto, how are you?"
-- **Context management**: The bot keeps track of a customizable number of recent messages for context, with optional reset functionality.
-- **Custom AI Integration**: Supports any AI service that implements OpenAI-compatible API endpoints. Simply provide the base URL and API key in the configuration to integrate your custom AI service.
-- **Customizable Bot Personality**: Personalize the bot's tone and behavior by using the `PROMPT_INFO` variable. Tailor the bot's interactions to suit specific group dynamics or personal preferences, whether informal and humorous, or professional and concise.
-
-## Setting Up Your API Keys
-
-### Configuring the Environment File (.env)
-Before starting the bot, you must properly configure your API keys and other environment variables. Follow these steps:
-
-1. In the root directory of the project, you'll find a file named .env.example. This file contains the complete structure and examples of every variable you can configure. It is strongly recommended that you use this file as your base.
-
-2. Copy the .env.example file and rename the copied file exactly as .env (with the leading dot and no additional extension). It is crucial that the file is named ".env" and not something like "a.env", since the application (and the dotenv library) specifically looks for the file named ".env".
-
-3. Open the newly created .env file and fill in your personal API keys and configuration details. For example:
-   • OPENAI_API_KEY=your_openai_api_key
-   • CLAUDE_API_KEY=your_claude_api_key
-   • And so on for the other variables based on the services and functionalities you plan to use.
-
-4. Save the .env file once you have updated it. Make sure to exclude this file from any public repositories to avoid exposing sensitive information.
-
-By following these steps, you'll have the .env file correctly configured, ensuring that the bot runs without any issues.
-
-### Using the .env File
-
-You must provide the correct API keys in the .env file for whichever model(s) you intend to use. Below is an example with all possible variables:
-
-```
-## OPENAI CONFIG
-OPENAI_API_KEY=your_openai_api_key
-CHAT_COMPLETION_MODEL=gpt-4o-mini   # Model for chat completions
-IMAGE_CREATION_MODEL=dall-e-3       # Model for image generation
-SPEECH_MODEL=tts-1                  # Model for speech synthesis
-SPEECH_VOICE=nova                   # Voice model for speech synthesis
-TRANSCRIPTION_LANGUAGE=en           # The language used for transcribing audio, in ISO-639-1 format (e.g., "en" for English).
-
-## CLAUDE CONFIG
-CLAUDE_API_KEY=your_claude_api_key
-CLAUDE_CHAT_MODEL=claude-3-sonnet-20240229  # Model for Claude chat interactions
-
-## DEEPSEEK CONFIG
-DEEPSEEK_API_KEY=your_api_key
-DEEPSEEK_COMPLETION_MODEL=deepseek-chat
-
-## QWEN CONFIG
-QWEN_API_KEY=your_api_key
-QWEN_COMPLETION_MODEL=qwen2.5-vl-72b-instruct
-
-## CUSTOM AI CONFIG (Must be OpenAI API-compatible)
-CUSTOM_BASEURL=https://ai.aiprovider.com/v1   # The base URL for your OpenAI API-compatible service
-CUSTOM_API_KEY=your_api_key                   # Your API key for the custom service
-CUSTOM_COMPLETION_MODEL=custom-model1.0       # The model identifier for your custom service
-
-## BOT CONFIG
-AI_LANGUAGE=OPENAI                    # Specifies the AI language model to be used. Can be "CLAUDE", "OPENAI", "QWEN", "DEEPSEEK" or "CUSTOM".
-PREFERRED_LANGUAGE=                   # The default language for the bot. If not specified, the bot will use the language of the chat it is responding to.
-MAX_CHARACTERS=2000                   # The maximum number of characters the chat model will output in a single completion
-BOT_NAME=Roboto                       # The name the bot will respond to in groups.
-MAX_IMAGES=3                          # The maximum number of images the bot can process from the recent messages
-MAX_MSGS_LIMIT=30                     # The maximum number of messages the bot will remember and use for generating responses
-MAX_HOURS_LIMIT=24                    # The time frame in hours for the bot to consider recent messages
-NODE_CACHE_TIME=259200                # Cache time for stored data in seconds (3 days)
-
-PROMPT_INFO="You should use a casual tone with plenty of emojis."  # You can use this to customize the bot's personality and provide context about the group or individuals for tailored interactions.
-
-IMAGE_CREATION_ENABLED=false           # Enable image creation (OpenAI Only)
-VOICE_MESSAGES_ENABLED=false           # Enable voice responses (OpenAI Only)
-```
-
-If you choose OpenAI for text chat (AI_LANGUAGE=OPENAI), you must define OPENAI_API_KEY.  
-If you choose CLAUDE, QWEN, DEEPSEEK, or CUSTOM, you must define the API key and any necessary base URL or model IDs for that service.  
-Image creation and audio handling only become active if OPENAI_API_KEY is present and you enable them in your .env.
-
-- **You can find your OpenAI API key in your [OpenAI Account Settings](https://platform.openai.com/account/api-keys).**
-- **You can find your Anthropic API key in your [Anthropic Account Settings](https://www.anthropic.com/account/api-keys).**
-- **You can find your Deepseek API key in your [Deepseek Account Settings](https://platform.deepseek.com/).**
-- **You can find your QWEN API key in your [Alibabacloud Account Settings](https://bailian.console.alibabacloud.com/?apiKey=1#/api-key-center).**
+- **Automatic Responses**: Generates coherent and contextual responses to messages
+- **Image Creation**: Creates images from text descriptions using the `-image` command
+- **Voice Interaction**: Understands voice messages and can respond with voice messages
+- **Group Interaction**: Responds in groups when its name is mentioned (e.g., "Hi Roboto, how are you?")
+- **Context Management**: Tracks recent messages for context with customizable limits
+- **Per-Chat Configuration**: Customize the bot's personality and name per chat or group
+- **Multi-Provider Support**: Use different AI providers for different features
 
 ## Requirements
 
 Before initializing the bot, make sure you have [Node.js](https://nodejs.org/en/download/) installed.
 (It was tested with Node v18.15.0)
 
-## Installation
+## Quick Setup
 
 1. Clone the repository and navigate to the project directory:
    ```
    git clone https://github.com/noDiego/whatsapp-claude-gpt.git
    cd whatsapp-claude-gpt
    ```
+
 2. Install the project dependencies:
    ```
    npm install
    ```
-3. Set up your API keys in the `.env` file as described above.
 
-Once the installation and configuration are complete, you are all set to start and enjoy the functionalities of WhatsApp-Claude-GPT.
+3. Copy `.env.example` to `.env` and configure your API keys:
+   ```
+   cp .env.example .env
+   ```
 
-## How to Start
+4. Edit the `.env` file with your API keys and preferences. (See [API Key Resources](#api-key-resources) or [Configuration with .env File](#configuration-with-env-file) )
 
-To start the bot, run the following command in the terminal:
-```
-npm run start
-```
-Upon startup, the bot will display a QR code in the terminal. Scan this QR code using the WhatsApp application on your mobile phone to link the bot to your WhatsApp account.
 
-## Additional Bot Personalization (PROMPT_INFO)
+5. Start the bot:
+   ```
+   npm run start
+   ```
 
-You can optionally use the environment variable PROMPT_INFO to supply extra instructions or context for the bot’s behavior. This might include personality traits (friendly, formal, or technical), reminders about special group details (e.g., birthdays, roles), or any other guidelines you'd like the bot to adopt. If PROMPT_INFO is not set, the bot simply runs without those extra custom instructions.
+6. Upon startup, the bot will display a QR code in the terminal. Scan this QR code using the WhatsApp application on your mobile phone to link the bot to your WhatsApp account.
 
-Example addition in your .env file:
-
-PROMPT_INFO="You are an assistant in a group of college friends, adopting a very informal and friendly tone. You love making jokes of all kinds and always encourage the group to meet up for parties or drinks."
-
-This way, the bot will incorporate these details into its prompt and responses, adapting its style and content to the provided information.
-
-#### Note About WhatsApp Number:
-The phone number associated with the WhatsApp account that scans the QR code will be the one sending all automated responses. If you want to maintain a separate bot account, it is recommended to:
-
-- Use a different phone number than your personal one
-- Install WhatsApp using that different number
-- Use that WhatsApp instance to scan the QR code
-
+> **Note**: The WhatsApp account that scans the QR code will be sending all bot responses. Consider using a separate phone number for the bot.
 This way, your personal WhatsApp account remains separate from the bot's activities, and you can interact with the bot just like any other contact.
+>
 
-## Using Commands
+## Basic Configuration
+
+At minimum, you need an API key for one of the supported AI providers. For basic usage with OpenAI:
+
+```
+OPENAI_API_KEY=your_api_key
+BOT_NAME=Roboto
+IMAGE_CREATION_ENABLED=true
+VOICE_MESSAGES_ENABLED=true
+```
+
+## Using the Bot
+
+### Chatting
+
+- **Direct chat**: Simply send a message to the bot
+- **Group chat**: Mention the bot's name (e.g., "Hey Roboto, what's the weather today?")
+
+### Using `-chatconfig` Command
+
+The `-chatconfig` command lets you customize the bot's behavior for a specific chat or group:
+
+```
+-chatconfig [subcommand] [value]
+```
+
+Available subcommands:
+
+- **prompt**: Sets a custom personality/prompt for the current chat
+  ```
+  -chatconfig prompt You are a helpful assistant who specializes in science topics
+  ```
+
+- **botname**: Changes the bot's name in the current chat
+  ```
+  -chatconfig botname ScienceBot
+  ```
+
+- **remove**: Removes custom configurations for the current chat
+  ```
+  -chatconfig remove
+  ```
+
+- **show**: Displays the current custom configuration
+  ```
+  -chatconfig show
+  ```
+
+In groups, only administrators can use the `-chatconfig` command.
+
+Example use case: You can have the bot respond to "Roboto" in your personal chat, but respond to "Teacher" in an educational group with a more formal personality.
 
 ### Creating Images with `-image`
 
@@ -180,13 +148,118 @@ To use the `-reset` command, simply type and send:
 This command has no additional parameters. Once sent, any subsequent messages will be treated as the beginning of a new conversation, without consideration for what was discussed previously. This can enhance the relevancy and accuracy of the chatbot's responses moving forward.
 
 
-## Using Custom AI Services
-When using the CUSTOM AI_LANGUAGE option, your custom AI service must be compatible with OpenAI's API format and endpoints. This means the service should accept requests and provide responses in the same format as OpenAI's API. You'll need to provide:
-- A base URL (CUSTOM_BASEURL) pointing to your service's API endpoint
-- A valid API key (CUSTOM_API_KEY) for authentication
-- The model identifier (CUSTOM_COMPLETION_MODEL) supported by your service
+## Configuration with .env File
 
-The custom service should implement the chat completions endpoint in a way that's compatible with OpenAI's API structure.
+#### Simple Example Using OpenAI for all features:
+
+By default, the bot uses OpenAI for all features. A basic configuration looks like this:
+
+``` 
+## OPENAI CONFIG
+OPENAI_API_KEY=your_api_key
+OPENAI_COMPLETION_MODEL=gpt-4o-mini   # Model for chat completions
+OPENAI_IMAGE_MODEL=dall-e-3           # Model for image generation
+OPENAI_TRANSCRIPTION_MODEL=whisper-1  # Model for transcriptions (speech-to-text
+OPENAI_SPEECH_MODEL=tts-1             # Model for speech synthesis
+OPENAI_SPEECH_VOICE=nova              # Voice model for speech synthesis
+
+# BOT CONFIGURATION
+PREFERRED_LANGUAGE=                   # Default language for bot responses 
+MAX_CHARACTERS=2000                   # Maximum characters per response
+BOT_NAME=Roboto                       # Name of the bot to be used in responses
+MAX_IMAGES=3                          # Maximum number of images to generate at once
+MAX_MSGS_LIMIT=30                     # Maximum number of messages to keep in context
+MAX_HOURS_LIMIT=24                    # Maximum time window for message context
+NODE_CACHE_TIME=259200                # Caching time in seconds for transcribed message data
+TRANSCRIPTION_LANGUAGE=en             # Default language for voice transcription
+
+## FEATURES
+IMAGE_CREATION_ENABLED=true           # Enable image creation
+VOICE_MESSAGES_ENABLED=true           # Enable voice responses
+
+# You can use this to customize the default bot's personality and information (Or it can be customized using -chatconfig)
+PROMPT_INFO="You should use a casual tone with plenty of emojis."
+```
+
+This basic configuration is all you need to get started. The bot will use OpenAI for all services.
+
+## Advanced Configuration Options
+
+For advanced users, you can customize which provider handles each type of service. Set these variables in your `.env` file:
+
+#### Full example:
+```
+CHAT_PROVIDER=OPENAI                          # Which provider to use for chat/text completion (OPENAI, CLAUDE, DEEPSEEK, DEEPINFRA, QWEN, CUSTOM)
+IMAGE_PROVIDER=OPENAI                         # Which provider to use for image generation (OPENAI, DEEPINFRA)
+SPEECH_PROVIDER=OPENAI                        # Which provider to use for text-to-speech conversion (OPENAI, ELEVENLABS)
+TRANSCRIPTION_PROVIDER=OPENAI                 # Which provider to use for speech-to-text transcription (OPENAI, DEEPINFRA)
+
+### PROVIDERS CONFIG (APIKEY, BASEURL)
+
+# OPENAI CONFIGURATION
+OPENAI_API_KEY=your_openai_api_key           # Your API key for OpenAI services
+OPENAI_COMPLETION_MODEL=gpt-4o-mini          # Model to use for text completion/chat
+OPENAI_IMAGE_MODEL=dall-e-3                  # Model to use for image generation
+OPENAI_SPEECH_MODEL=tts-1                    # Model to use for text-to-speech
+OPENAI_SPEECH_VOICE=nova                     # Voice to use for text-to-speech
+OPENAI_TRANSCRIPTION_MODEL=whisper-1         # Model to use for speech-to-text
+
+# CLAUDE CONFIGURATION
+CLAUDE_API_KEY=your_claude_api_key           # Your API key for Anthropic's Claude
+CLAUDE_CHAT_MODEL=claude-3-sonnet-20240229   # Model to use for Claude text completion
+
+# DEEPSEEK CONFIGURATION
+DEEPSEEK_API_KEY=your_api_key                # Your API key for DeepSeek services
+DEEPSEEK_COMPLETION_MODEL=deepseek-chat      # Model to use for DeepSeek text completion
+
+# QWEN CONFIGURATION
+QWEN_API_KEY=your_api_key                       # Your API key for Qwen services
+QWEN_COMPLETION_MODEL=qwen2.5-vl-72b-instruct   # Model to use for Qwen text completion
+
+# DEEPINFRA CONFIGURATION
+DEEPINFRA_API_KEY=your_api_key                                  # Your API key for DeepInfra services
+DEEPINFRA_BASEURL=https://deepinfra.example.com/v1              # Base URL for DeepInfra API
+DEEPINFRA_COMPLETION_MODEL=meta-llama/Llama-3.3-70B-Instruct    # Model for text completion
+DEEPINFRA_IMAGE_CREATION_MODEL=stabilityai/sd3.5                # Model for image generation
+DEEPINFRA_TRANSCRIPTION_MODEL=deepinfra-chat                    # Model for speech transcription
+
+## ELEVENLABS CONFIG
+ELEVENLABS_API_KEY=your_api_key                     # Your API key for Elevenlabs services
+ELEVENLABS_VOICEID=EXAVITQu4vr4xnSDxMaL             # The VoiceID you want to use (leave empty to use the default)
+ELEVENLABS_SPEECH_MODEL='eleven_multilingual_v2'    # The Speech Model to use
+
+# CUSTOM AI CONFIGURATION (This might not always work. It is just for testing purposes.)
+CUSTOM_API_KEY=your_api_key                  # Your API key for custom AI provider
+CUSTOM_BASEURL=https://ai.aiprovider.com/v1  # Base URL for custom AI provider API
+CUSTOM_COMPLETION_MODEL=custom-model1.0      # Model to use for custom AI text completion
+
+# BOT CONFIGURATION
+PREFERRED_LANGUAGE=english                   # Default language for bot responses
+MAX_CHARACTERS=2000                          # Maximum characters per response
+BOT_NAME=Roboto                              # Name of the bot to be used in responses
+MAX_IMAGES=3                                 # Maximum number of images to generate at once
+MAX_MSGS_LIMIT=30                            # Maximum number of messages to keep in context
+MAX_HOURS_LIMIT=24                           # Maximum time window for message context
+NODE_CACHE_TIME=259200                       # Cache time in seconds for message data
+TRANSCRIPTION_LANGUAGE=en                    # Default language for voice transcription
+
+# Additional prompt info to tailor the bot's personality (optional)
+PROMPT_INFO="You should adopt a friendly and informal tone, often using emojis in responses"  # Custom instructions for bot personality
+
+# FEATURE TOGGLES
+IMAGE_CREATION_ENABLED=false                 # Whether image creation feature is enabled
+VOICE_MESSAGES_ENABLED=false                 # Whether voice message processing is enabled
+
+```
+
+## API Key Resources
+
+- [OpenAI API Keys](https://platform.openai.com/account/api-keys)
+- [Anthropic API Keys](https://www.anthropic.com/account/api-keys)
+- [Deepseek API Keys](https://platform.deepseek.com/)
+- [Deepinfra API Keys](https://deepinfra.com/dash/api_keys)
+- [QWEN API Keys](https://bailian.console.alibabacloud.com/?apiKey=1#/api-key-center)
+- [ElevenLabs API Keys](https://elevenlabs.io/app/account)
 
 ## Updates in Version 1.1.0
 
@@ -221,10 +294,14 @@ With this update, users can enhance the bot's interactivity by defining how it s
 - **Known Issues with Deepseek**: Please note that Deepseek services are currently experiencing intermittent availability issues. Users may encounter occasional errors or service interruptions when using Deepseek as the AI language model. We recommend using alternative AI services if you experience persistent issues with Deepseek.
 - **WhatsAppWeb.js Update**: Updated whatsapp-web.js dependency to resolve issues with group chat recognition where the bot was responding without being explicitly mentioned. This update ensures the bot only responds in group chats when its name is mentioned, as intended.
 
-## Final Notes
+## Updates in Version 1.3.0
 
-• Make sure your API quotas and keys are valid for the AI language you choose.  
-• Image and audio features use OpenAI services. Include OPENAI_API_KEY and enable these features in your .env if desired, even when employing QWEN, DEEPSEEK, or CUSTOM for text.  
+- **Introduction of `-chatconfig` Command**: The `-chatconfig` command has been introduced to allow users to customize and manage the bot's behavior in specific chats or groups. This command provides flexibility in setting the bot's personality, name, and other configurations dynamically, enhancing user interaction and control.
+
+- **Multiple Provider Selection**: Users can now choose different providers for various tasks. With this update, you have the flexibility to select different AI models for chat, image generation, and audio processing. This feature allows you to leverage the strengths of various providers, tailoring the bot's capabilities to better meet your specific needs. You can configure these preferences directly in the `.env` file, ensuring a seamless and personalized experience across different functionalities.
+
+
+----------
 • Enjoy experimenting with your WhatsApp-Claude-GPT Bot!
 
 ## License

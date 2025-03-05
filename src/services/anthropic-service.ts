@@ -1,8 +1,8 @@
 import logger from '../logger';
 import Anthropic from '@anthropic-ai/sdk';
-import { CONFIG } from '../config';
-import MessageParam = Anthropic.MessageParam;
+import { AIConfig } from '../config';
 import { TextBlock } from '@anthropic-ai/sdk/resources';
+import MessageParam = Anthropic.MessageParam;
 
 export class AnthropicService {
 
@@ -10,7 +10,7 @@ export class AnthropicService {
 
   constructor() {
     this.anthropic = new Anthropic({
-      apiKey: CONFIG.AIConfigs.CLAUDE.apiKey,
+      apiKey: AIConfig.ChatConfig.apiKey,
     });
   }
 
@@ -20,7 +20,7 @@ export class AnthropicService {
 
     const response = await this.anthropic.messages.create({
       system: systemPrompt,
-      model: CONFIG.AIConfigs.CLAUDE.chatModel,
+      model: AIConfig.ChatConfig.model,
       messages: messageList,
       max_tokens: 1024,
       top_p: 1
