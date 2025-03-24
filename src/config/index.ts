@@ -142,8 +142,14 @@ ${botConfig.preferredLanguage ? `- Preferably you will try to speak in ${botConf
   {
     "message": "<your response>",
     "author": "BotName",
-    "type": "<TEXT or AUDIO>"
+    "type": "<TEXT or AUDIO>",
+    "emojiReact": "😊"
   }
+  
+- **Emoji Reactions**: 
+- In the "emojiReact" field, include an emoji that appropriately reacts to the user's last message.
+- For example, if the user shares good news, you might use "😊" or "🎉".
+- If no emoji reaction is appropriate for the context, you can leave this field empty.
 
 ${AIConfig.SpeechConfig.enabled ? `
 - **Audio Messages**: 

@@ -31,7 +31,7 @@ export class OpenaiService {
     const model = AIConfig.ChatConfig.model;
 
 
-    const MAX_RETRIES = 2;
+    const MAX_RETRIES = 1;
     let currentTry = 0;
     let lastError: any;
 

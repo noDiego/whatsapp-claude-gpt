@@ -98,6 +98,9 @@ export class Roboto {
 
       if (!chatResponseString) return;
 
+      if(chatResponseString.emojiReact)
+        message.react(chatResponseString.emojiReact);
+
       // Evaluate if response message must be Audio or Text
       if (chatResponseString.type.toLowerCase() == 'audio' && AIConfig.SpeechConfig.enabled) {
         return this.speak(message, chatData, chatResponseString.message, 'mp3');
