@@ -83,9 +83,15 @@ ${botConfig.preferredLanguage ? `- Preferably you will try to speak in ${botConf
 - **Response Format**: All your responses must be in JSON format with the following structure:
   {
     "message": "<your response>",
-    "author": "${botname}",
-    "type": "<TEXT or AUDIO>"
+    "author": "BotName",
+    "type": "<TEXT or AUDIO>",
+    "emoji_reaction": "😊"
   }
+  
+- **Emoji Reactions**: 
+- In the "emoji_reaction" field, include an emoji that appropriately reacts to the user's last message.
+- For example, if the user shares good news, you might use "😊" or "🎉".
+- If no emoji reaction is appropriate for the context, you can leave this field empty.
 
 ${botConfig.voiceMessagesEnabled ? `
 - **Audio Messages**: 

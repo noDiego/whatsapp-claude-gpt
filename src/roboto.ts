@@ -82,7 +82,7 @@ export class Roboto {
       }
 
       while (this.groupProcessingStatus[chatData.id._serialized]) {
-        await new Promise(resolve => setTimeout(resolve, 3000)); // Espera 3 segundos
+        await new Promise(resolve => setTimeout(resolve, 2000)); // Espera 2 segundos
       }
       this.groupProcessingStatus[chatData.id._serialized] = true;
 
@@ -92,6 +92,9 @@ export class Roboto {
       chatData.clearState();
 
       if(!chatResponseString) return;
+      if(!!chatResponseString.emoji_reaction){
+        await message.react(chatResponseString.emoji_reaction);
+      }
 
       // Evaluate if response message must be Audio or Text
       if (chatResponseString.image_description) {

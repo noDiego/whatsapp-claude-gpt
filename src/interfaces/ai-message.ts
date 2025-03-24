@@ -28,4 +28,5 @@ export interface AiAnswer {
   type: 'text' | 'audio';
   author: string;
   image_description? : string;
+  emoji_reaction? : string;
 }

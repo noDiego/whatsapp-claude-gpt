@@ -42,7 +42,7 @@ export class OpenaiService {
    * - A promise that resolves to the generated completion string, which is the API's response based on the provided context.
    */
   async sendCompletion(messageList: ChatCompletionMessageParam[], systemPrompt: string, model: string): Promise<AiAnswer> {
-    const MAX_RETRIES = 2;
+    const MAX_RETRIES = 1;
     model = model || this.AIConfig.chatModel;
     let currentTry = 0;
     let lastError: any;
@@ -109,7 +109,7 @@ export class OpenaiService {
 
         if (currentTry <= MAX_RETRIES) {
           logger.warn(`[${CONFIG.botConfig.aiLanguage}->sendCompletion] Attempt ${currentTry}/${MAX_RETRIES + 1} failed: ${e.message ?? e}`);
-          await new Promise(resolve => setTimeout(resolve, 1000 * currentTry));
+          await new Promise(resolve => setTimeout(resolve, 500 * currentTry));
         } else {
           logger.error(`[${CONFIG.botConfig.aiLanguage}->sendCompletion] All ${MAX_RETRIES + 1} attempts failed. Last error: ${e.message ?? e}`);
           throw new Error(`Failed after ${MAX_RETRIES + 1} attempts. Last error: ${e.message ?? e}. Please try again later or consider using an alternative AI. If the issue persists, contact support for further assistance.`);
