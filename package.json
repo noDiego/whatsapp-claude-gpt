@@ -43,6 +43,7 @@
     "openai": "^4.82.0",
     "pg": "^8.13.1",
     "qrcode-terminal": "^0.12.0",
+    "sharp": "^0.34.0",
     "whatsapp-web.js": "^1.26.1-alpha.3",
     "winston": "^3.11.0"
   },

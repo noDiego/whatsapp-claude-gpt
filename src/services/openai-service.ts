@@ -145,6 +145,82 @@ export class OpenaiService {
   }
 
   /**
+   * Edits an existing image based on a text prompt and a mask image (optional).
+   * This function takes an original image, an optional mask image, and a prompt to generate
+   * an edited version of the image according to the text description.
+   *
+   * @param originalImage - A buffer containing the original image data
+   * @param maskImage - Optional buffer containing the mask image data, indicating areas to edit
+   * @param prompt - A string describing the edits to make to the image
+   * @returns A promise that resolves to the URL of the edited image
+   */
+  async editImage(originalImage: Buffer, maskImage: Buffer | null, prompt: string) {
+    logger.debug(`[OpenAI->editImage] Editing image with prompt: "${prompt}"`);
+
+    try {
+      // Instalar sharp si no lo has hecho: npm install sharp
+      const sharp = require('sharp');
+
+      // Procesar la imagen: redimensionar, añadir canal alfa y convertir a PNG
+      const processedImage = await sharp(originalImage)
+          .resize({
+            width: 1024,
+            height: 1024,
+            fit: 'inside',
+            withoutEnlargement: true
+          })
+          .ensureAlpha() // Agregar canal alfa (transparencia)
+          .png({ compressionLevel: 9 }) // Alta compresión
+          .toBuffer();
+
+      // Verificar el tamaño
+      if (processedImage.length > 4 * 1024 * 1024) {
+        throw new Error('Image is too large even after processing. Must be less than 4 MB.');
+      }
+
+      // Log para verificar el tamaño de la imagen procesada
+      logger.debug(`[OpenAI->editImage] Processed image size: ${(processedImage.length / 1024 / 1024).toFixed(2)} MB`);
+
+      // Convert buffer to File required by OpenAI API
+      const imageFile = await toFile(processedImage, 'image.png', { type: 'image/png' });
+
+      const requestParams: any = {
+        model: 'dall-e-2',
+        image: imageFile,
+        prompt: prompt,
+        n: 1,
+        size: "1024x1024",
+      };
+
+      // Add mask if provided
+      if (maskImage) {
+        // Procesar también la máscara si existe
+        const processedMask = await sharp(maskImage)
+            .resize({
+              width: 1024,
+              height: 1024,
+              fit: 'inside',
+              withoutEnlargement: true
+            })
+            .ensureAlpha() // Asegurar que la máscara también tenga canal alfa
+            .png({ compressionLevel: 9 })
+            .toBuffer();
+
+        const maskFile = await toFile(processedMask, 'mask.png', { type: 'image/png' });
+        requestParams.mask = maskFile;
+      }
+
+      const response = await this.openai.images.edit(requestParams);
+
+      logger.debug(`[OpenAI->editImage] Image editing completed successfully`);
+      return response.data[0].url;
+    } catch (e: any) {
+      logger.error(`[OpenAI->editImage] Error editing image: ${e.message}`);
+      throw new Error(`Failed to edit image: ${e.message}`);
+    }
+  }
+
+  /**
    * Generates speech audio from provided text by utilizing OpenAI's Text-to-Speech (TTS) API.
    * This function translates text into spoken words in an audio format. It offers a way to convert written messages into audio, providing an audible version of the text content.
    * If a specific voice model is specified in the configuration, the generated speech will use that voice.
@@ -155,16 +231,19 @@ export class OpenaiService {
    * Returns:
    * - A promise that resolves to a buffer containing the audio data in MP3 format. This buffer can be played back or sent as an audio message.
    */
-  async speech(message, responseFormat?){
+  async speech(message, responseFormat?, instructions?: string){
 
     logger.debug(`[OpenAI->speech] Creating speech audio for: "${message}"`);
 
-    const response: any = await this.openai.audio.speech.create({
+    const requestParams = {
       model: this.AIConfig.speechModel,
       voice: this.AIConfig.speechVoice,
+      instructions: instructions,
       input: message,
       response_format: responseFormat || 'mp3'
-    });
+    };
+
+    const response: any = await this.openai.audio.speech.create(requestParams);
 
     logger.debug(`[OpenAI->speech] Audio Creation OK`);
 

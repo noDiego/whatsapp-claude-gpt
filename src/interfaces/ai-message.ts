@@ -29,4 +29,5 @@ export interface AiAnswer {
   author: string;
   image_description? : string;
   emoji_reaction? : string;
+  voice_instructions? : string;
 }

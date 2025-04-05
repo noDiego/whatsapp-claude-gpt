@@ -103,7 +103,8 @@ export class Roboto {
         return await message.reply(img, undefined, { caption: chatResponseString.message  });
       }
       else if (chatResponseString.type.toLowerCase() == 'audio' && CONFIG.botConfig.voiceMessagesEnabled) {
-        return this.speakEleven(message, chatData, chatResponseString.message, chatCfg.voice_id as CVoices);
+        //return this.speakEleven(message, chatData, chatResponseString.message, chatCfg.voice_id as CVoices);
+        return this.speak(message, chatData, chatResponseString.message, undefined, chatResponseString.voice_instructions);
       } else {
         return this.returnResponse(message, chatResponseString.message, chatData.isGroup, client);
       }
@@ -150,6 +151,9 @@ export class Roboto {
         return message.reply('Reload OK');
       case "reset":
         return await message.react('👍');
+      case "edit":
+        //if (!this.botConfig.imageCreationEnabled) return message.reply('Image editing is disabled');
+        //return await this.editImage(message, commandMessage!);
       default:
         return true;
     }
@@ -258,6 +262,60 @@ export class Roboto {
   }
 
   /**
+   * Edits an image based on a quoted message containing the original image
+   * and provides a text prompt for the edits.
+   *
+   * @param message - The Message object containing the edit command
+   * @param promptText - The text describing how to edit the image
+   * @returns A promise that resolves when the edited image has been sent
+   */
+  private async editImage(message: Message, promptText: string) {
+    try {
+      if (!message.hasQuotedMsg) {
+        return message.reply('Please quote a message with an image to edit it.');
+      }
+
+      const quotedMsg = await message.getQuotedMessage();
+      if (quotedMsg.type !== MessageTypes.IMAGE) {
+        return message.reply('The quoted message must contain an image to edit.');
+      }
+
+      // Check if admin (if image editing is restricted)
+      const contactData: Contact = await message.getContact();
+      const isAdmin = contactData.number == CONFIG.botConfig.adminNumber;
+      if (!isAdmin && CONFIG.botConfig.restrictedNumbers.includes(contactData.number)) {
+        return message.reply(CONFIG.botConfig.restrictedImageMessage);
+      }
+
+      // Download the image from the quoted message
+      await message.reply('Processing your image edit request...');
+      const media = await quotedMsg.downloadMedia();
+
+      // Convert base64 to buffer
+      const imageBuffer = Buffer.from(media.data, 'base64');
+
+      // Optional: User can quote a second message with a mask image
+      let maskBuffer = null;
+      if (promptText.includes('--mask') && message.mentionedIds.length > 0) {
+        // This is just a concept, would need to be implemented with proper mask handling
+        const maskMsgId = message.mentionedIds[0];
+        // Implementation would need to fetch that message and get its image
+        // For now, we'll skip the mask implementation
+      }
+
+      const editedImageUrl = await this.openAIService.editImage(imageBuffer, maskBuffer, promptText);
+      const editedImage = await MessageMedia.fromUrl(editedImageUrl!);
+
+      return message.reply(editedImage, undefined, {
+        caption: `Here's your edited image based on: "${promptText}"`
+      });
+    } catch (e: any) {
+      logger.error(`Error in editImage function: ${e.message}`);
+      return message.reply('Sorry, there was an error editing the image. Please try again later.');
+    }
+  }
+
+  /**
    * Generates and sends an audio message by synthesizing speech from the provided text content.
    * This function requires a valid OpenAI API key regardless of the AI model selected for chat.
    * If no content is explicitly provided, the function attempts to use the last message sent by the bot
@@ -272,12 +330,12 @@ export class Roboto {
    * Returns:
    * - A promise that resolves when the audio message has been successfully sent.
    */
-  private async speak(message: Message, chatData: Chat, content: string | undefined, responseFormat?) {
+  private async speak(message: Message, chatData: Chat, content: string | undefined, responseFormat?, instructions?: string) {
     // Set the content to be spoken. If no content is explicitly provided, fetch the last bot reply for use.
     let messageToSay = content || await this.getLastBotMessage(chatData);
     try {
       // Generate speech audio from the given text content using the OpenAI API.
-      const audioBuffer = await this.openAIService.speech(messageToSay, responseFormat);
+      const audioBuffer = await this.openAIService.speech(messageToSay, responseFormat, instructions);
       const base64Audio = audioBuffer.toString('base64');
 
       let audioMedia = new MessageMedia('audio/mp3', base64Audio, 'voice.mp3');
@@ -432,7 +490,8 @@ export class Roboto {
         messageList.forEach(msg => {
           const gptContent: Array<any> = [];
           msg.content.forEach(c => {
-            if (['text', 'audio'].includes(c.type))  gptContent.push({ type: 'text', text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format: "json_object"}) });
+            if (['audio'].includes(c.type))  gptContent.push({ type: 'text', text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format: "json_object", voice_instructions: ''}) });
+            if (['text'].includes(c.type))   gptContent.push({ type: 'text', text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format: "json_object"}) });
             if (['image'].includes(c.type))          gptContent.push({ type: 'image_url', image_url: { url: `data:${c.media_type};base64,${c.value}`} });
           })
           chatgptMessageList.push({content: gptContent, name: msg.name!, role: msg.role});
