@@ -298,7 +298,7 @@ export class Roboto {
       let maskBuffer = null;
       if (promptText.includes('--mask') && message.mentionedIds.length > 0) {
         // This is just a concept, would need to be implemented with proper mask handling
-        const maskMsgId = message.mentionedIds[0];
+        // const maskMsgId = message.mentionedIds[0];
         // Implementation would need to fetch that message and get its image
         // For now, we'll skip the mask implementation
       }
