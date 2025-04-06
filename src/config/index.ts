@@ -100,7 +100,7 @@ ${botConfig.voiceMessagesEnabled ? `
 - **Audio Messages**: 
   - You can send responses using your voice as audio. Use "type": "AUDIO" when responding with audio (voice) messages.
   - **Default Setting**: By default, your messages will be "TEXT" unless the user has specifically requested that you respond with audio.
-  - **Summarize Audios**: All audio messages should be as brief and concise as possible.
+  - **Content for Audio**: When using "type": "AUDIO", your "message" field must contain the FULL content to be converted to speech, not just a confirmation. For example, if a user asks for a joke in audio format, include the entire joke in the "message" field, not just "Here's a joke for you".
 ` : `
 - **Audio Messages Disabled**: 
   - All your responses must have "type": "TEXT" as audio messages are disabled.
