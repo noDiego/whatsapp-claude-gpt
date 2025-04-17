@@ -505,7 +505,7 @@ export class Roboto {
           msg.content.forEach(c => {
             const fromBot = msg.role == AiRole.ASSISTANT;
             if (['text', 'audio'].includes(c.type))  gptContent.push({ type: fromBot?'output_text':'input_text', text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format:'json_object'}) });
-            if (['image'].includes(c.type))          gptContent.push({ type: 'input_image', image_url: { url: `data:${c.media_type};base64,${c.value}`} });
+            if (['image'].includes(c.type))          gptContent.push({ type: 'input_image', image_url: `data:${c.media_type};base64,${c.value}`});
           })
           responseAPIMessageList.push({content: gptContent, role: msg.role});
         })
