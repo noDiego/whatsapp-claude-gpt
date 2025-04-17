@@ -30,5 +30,5 @@ export interface AIAnswer {
   message: string;
   type: 'text' | 'audio';
   author: string;
-  emojiReact: string;
+  emojiReact?: string;
 }

@@ -59,7 +59,7 @@ const ImageConfig = {
 const TranscriptionConfig = {
   provider: process.env.TRANSCRIPTION_PROVIDER?.toUpperCase() || "OPENAI",
   models: {
-    OPENAI: process.env.TRANSCRIPTION_MODEL ?? process.env.OPENAI_TRANSCRIPTION_MODEL ?? 'whisper-1',
+    OPENAI: process.env.TRANSCRIPTION_MODEL ?? process.env.OPENAI_TRANSCRIPTION_MODEL ?? 'gpt-4o-transcribe',
     DEEPINFRA: process.env.DEEPINFRA_TRANSCRIPTION_MODEL ?? 'openai/whisper-large-v3-turbo',
   },
   language: process.env.TRANSCRIPTION_LANGUAGE ?? "en",
@@ -154,6 +154,7 @@ ${botConfig.preferredLanguage ? `- Preferably you will try to speak in ${botConf
 ${AIConfig.SpeechConfig.enabled ? `
 - **Audio Messages**: 
   - You can send responses in audio format. Use "type": "AUDIO" when responding with audio messages. Respond in the "message" field with what you are responding to, this will later be converted into audio for the user.
+  - **Content for AUDIO**: When using "type": "AUDIO", your "message" field must contain the FULL content to be converted to speech, not just a confirmation. For example, if a user asks for a joke in audio or voice format, include the entire joke in the "message" field, not just "Here's a joke for you".
   - **Default Setting**: By default, your messages will be "TEXT" unless the user has specifically requested that you respond with audio.
   - **Summarize Audios**: All audio messages should be as brief and concise as possible.
 ` : `

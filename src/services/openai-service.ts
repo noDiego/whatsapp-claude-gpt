@@ -2,13 +2,86 @@ import logger from '../logger';
 import { OpenAI, toFile } from 'openai';
 import { ChatCompletionMessageParam } from 'openai/resources';
 import { AIConfig } from '../config';
-import { AIAnswer } from '../interfaces/ai-interfaces';
 import { ChatCompletion } from 'openai/src/resources/chat/completions';
-import { cleanAndParseJSON } from '../utils';
+import { ResponseInput, Tool } from "openai/resources/responses/responses";
 
 export class OpenaiService {
 
   constructor() {
+  }
+
+  async sendChatWithTools(
+      messageList: ResponseInput,
+      responseType: any = 'text',
+      tools?: Array<Tool>
+  ): Promise<string> {
+
+    const openAICLient = new OpenAI({
+      baseURL: AIConfig.ChatConfig.baseURL,
+      apiKey: AIConfig.ChatConfig.apiKey,
+    });
+    const model = AIConfig.ChatConfig.model;
+
+    logger.info(`[OpenAI] Sending ${messageList.length} messages`);
+    logger.debug(`[OpenAI] Sending Msg: ${JSON.stringify(messageList[messageList.length - 1])}`);
+
+    const responseResult = await openAICLient.responses.create({
+      model: model,
+      input: messageList,
+      text: {
+        format: {
+          type: responseType
+        }
+      },
+      reasoning: {},
+      tools: tools,
+      temperature: 1,
+      max_output_tokens: 2048,
+      top_p: 1,
+      store: true
+    });
+
+    logger.debug('[OpenAI] Completion Response:' + JSON.stringify(responseResult.output_text));
+
+    const messageResult = responseResult.output_text;
+
+    const functionCalls = responseResult.output.filter(toolCall => toolCall.type === "function_call");
+    if (functionCalls.length === 0)
+      return messageResult;
+
+    let updatedMessages: ResponseInput = [...messageList as any];
+
+    for (const toolCall of responseResult.output) {
+      if (toolCall.type !== "function_call") {
+        continue;
+      }
+
+      updatedMessages.push(toolCall);
+
+      // TODO: I have not implemented functions yet, so they will not be processed.
+      //const name = toolCall.name;
+      //const args = JSON.parse(toolCall.arguments);
+      //
+      // try {
+      //
+      //   // const result = await executeFunctions(name, args, inputData);
+      //   updatedMessages.push({
+      //     type: "function_call_output",
+      //     call_id: toolCall.call_id,
+      //     output: result.toString()
+      //   });
+      // }catch (error) {
+      //   logger.error(`Error executing function ${name}:`, error);
+      //   updatedMessages.push({
+      //     type: "function_call_output",
+      //     call_id: toolCall.call_id,
+      //     output: `Error executing function ${name}.`
+      //   });
+      // }
+    }
+
+    // Recursive call with updated messages
+    return this.sendChatWithTools(updatedMessages, responseType, tools);
   }
 
   /**
@@ -22,7 +95,7 @@ export class OpenaiService {
    * Returns:
    * - A promise that resolves to the generated completion string, which is the API's response based on the provided context.
    */
-  async sendCompletion(messageList: ChatCompletionMessageParam[]): Promise<AIAnswer> {
+  async sendCompletion(messageList: ChatCompletionMessageParam[]): Promise<string> {
 
     const openAICLient = new OpenAI({
       baseURL: AIConfig.ChatConfig.baseURL,
@@ -57,7 +130,7 @@ export class OpenaiService {
         logger.debug(`[${AIConfig.ChatConfig.provider}->sendCompletion] Completion Response:`);
         logger.debug(fullResponse);
 
-        return cleanAndParseJSON(fullResponse!) as AIAnswer;
+        return fullResponse;
 
       } catch (e: any) {
         lastError = e;

@@ -1,8 +1,7 @@
 import logger from '../logger';
 import Anthropic from '@anthropic-ai/sdk';
 import { AIConfig } from '../config';
-import { TextBlock } from '@anthropic-ai/sdk/resources';
-import MessageParam = Anthropic.MessageParam;
+import { MessageParam, TextBlock } from '@anthropic-ai/sdk/resources';
 
 export class AnthropicService {
 
@@ -31,7 +30,7 @@ export class AnthropicService {
 
     const responseContent = response.content[0] as TextBlock;
 
-    return JSON.parse(responseContent.text);
+    return responseContent.text;
   }
 
 }

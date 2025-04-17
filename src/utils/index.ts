@@ -2,6 +2,7 @@ import logger from '../logger';
 import { Chat, Message } from 'whatsapp-web.js';
 import { Readable } from 'stream';
 import { AIConfig, CONFIG } from '../config';
+import { AIAnswer } from "../interfaces/ai-interfaces";
 
 export function getFormattedDate() {
   const now = new Date();
@@ -200,15 +201,77 @@ export function configValidation() {
   logger.info('Configuration validation successful.');
 }
 
-export function cleanAndParseJSON(input) {
+export function extractAnswer(input: string, botName: string): AIAnswer {
+
   const regex = /<think>[\s\S]*?<\/think>/g;
-  const cleanedString = input.replace(regex, '').trim();
+  const inputString = input.replace(regex, '').trim();
+
+  if (!inputString || typeof inputString !== 'string') {
+    return null;
+  }
 
   try {
-    return JSON.parse(cleanedString);
-  } catch (error) {
-    logger.error("[cleanAndParseJSON] Error Parsing Response JSON:", error);
-    return null;
+    return JSON.parse(inputString.trim());
+  } catch (e) {
+  }
+
+  const startMatch = inputString.match(/[{\[]/);
+  if (!startMatch) {
+    logger.debug("[cleanFileName] Valid JSON start character not found");
+    return {message: inputString, author: botName, type: 'text'};
+  }
+
+  try {
+
+    const startIndex = startMatch.index;
+    let endIndex = inputString.length;
+    let openBraces = 0;
+    let openBrackets = 0;
+    let inString = false;
+    let escapeNext = false;
+
+    for (let i = startIndex; i < inputString.length; i++) {
+      const char = inputString[i];
+
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+
+      if (char === '\\') {
+        escapeNext = true;
+        continue;
+      }
+
+      if (char === '"' && !escapeNext) {
+        inString = !inString;
+        continue;
+      }
+
+      if (inString) continue;
+
+      if (char === '{') openBraces++;
+      if (char === '}') openBraces--;
+      if (char === '[') openBrackets++;
+      if (char === ']') openBrackets--;
+
+      if (i >= startIndex && openBraces === 0 && openBrackets === 0) {
+        if (startMatch[0] === '{' && char === '}') {
+          endIndex = i + 1;
+          break;
+        }
+        if (startMatch[0] === '[' && char === ']') {
+          endIndex = i + 1;
+          break;
+        }
+      }
+    }
+
+    const jsonString = inputString.substring(startIndex, endIndex);
+
+    return JSON.parse(jsonString);
+  } catch (e) {
+    return {message: inputString, author: botName, type: 'text' };
   }
 }
 

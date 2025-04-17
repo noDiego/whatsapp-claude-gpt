@@ -1,17 +1,25 @@
 import { OpenaiService } from './services/openai-service';
 import { Chat, Client, GroupChat, Message, MessageMedia, MessageTypes } from 'whatsapp-web.js';
-import { bufferToStream, getContactName, getUnsupportedMessage, includeName, logMessage, parseCommand } from './utils';
+import {
+  bufferToStream,
+  extractAnswer,
+  getContactName,
+  getUnsupportedMessage,
+  includeName,
+  logMessage,
+  parseCommand
+} from './utils';
 import logger from './logger';
 import { AIConfig, CONFIG } from './config';
 import { AIAnswer, AIContent, AiMessage, AIProvider, AIRole } from './interfaces/ai-interfaces';
-import Anthropic from '@anthropic-ai/sdk';
 import { ChatCompletionMessageParam } from 'openai/resources';
 import { AnthropicService } from './services/anthropic-service';
-import { ImageBlockParam, TextBlock } from '@anthropic-ai/sdk/src/resources/messages';
+import { ImageBlockParam, MessageParam, TextBlock } from '@anthropic-ai/sdk/src/resources/messages';
 import NodeCache from 'node-cache';
 import { elevenTTS } from './services/elevenlabs-service';
 import { chatConfigurationManager } from './config/chat-configurations';
-import MessageParam = Anthropic.MessageParam;
+import { ResponseInput } from "openai/resources/responses/responses";
+import { AITools } from "./config/openai-functions";
 
 export class Roboto {
 
@@ -93,25 +101,26 @@ export class Roboto {
 
       // Sends message to ChatGPT
       chatData.sendStateTyping();
-      let chatResponseString: AIAnswer = await this.processMessage(chatData);
-      chatData.clearState();
+      let chatResponseString: string = await this.processMessage(chatData);
+      let chatResponse: AIAnswer = extractAnswer(chatResponseString, botName);
 
-      if (!chatResponseString) return;
+      if (!chatResponse) return;
 
-      if(chatResponseString.emojiReact)
-        message.react(chatResponseString.emojiReact);
+      if(chatResponse.emojiReact)
+        message.react(chatResponse.emojiReact);
 
       // Evaluate if response message must be Audio or Text
-      if (chatResponseString.type.toLowerCase() == 'audio' && AIConfig.SpeechConfig.enabled) {
-        return this.speak(message, chatData, chatResponseString.message, 'mp3');
+      if (chatResponse.type.toLowerCase() == 'audio' && AIConfig.SpeechConfig.enabled) {
+        return this.speak(message, chatData, chatResponse.message, 'mp3');
       } else {
-        return this.returnResponse(message, chatResponseString.message, chatData.isGroup, client);
+        return this.returnResponse(message, chatResponse.message, chatData.isGroup, client);
       }
 
     } catch (e: any) {
       logger.error(e.message);
       return message.reply('Error 😔');
     } finally {
+      chatData.clearState();
       this.groupProcessingStatus[chatData.id._serialized] = false;
     }
   }
@@ -163,10 +172,21 @@ export class Roboto {
    * @param chatData - The Chat object representing the conversation
    * @returns A promise that resolves with the AI-generated response or null if no response needed
    */
-  private async processMessage(chatData: Chat) {
+  private async processMessage(chatData: Chat): Promise<string> {
 
     const actualDate = new Date();
     const analyzeImages = !AIConfig.ChatConfig.analyzeImageDisabled;
+
+    // Bot System prompt and name
+    let systemPrompt = CONFIG.getSystemPrompt();
+    let botName = this.botConfig.botName;
+
+    const chatConfiguration = chatConfigurationManager.getChatConfig(chatData.id._serialized);
+    if (chatConfiguration) {
+      botName = chatConfiguration.botName || this.botConfig.botName;
+      systemPrompt = CONFIG.getSystemPrompt(chatConfiguration.promptInfo, botName);
+      logger.debug(`Using custom configuration for ${chatConfiguration.isGroup ? 'group' : 'chat'} "${chatConfiguration.name}" with bot name "${botName}": ${systemPrompt}`);
+    }
 
     // Initialize an array of messages
     const messageList: AiMessage[] = [];
@@ -202,7 +222,7 @@ export class Roboto {
         if (media && isImage) imageCount++;
 
         const role = (!msg.fromMe || isImage) ? AIRole.USER : AIRole.ASSISTANT;
-        const name = msg.fromMe ? (CONFIG.botConfig.botName) : (await getContactName(msg));
+        const name = msg.fromMe ? botName : (await getContactName(msg));
 
         // Assemble the content as a mix of text and any included media
         const content: Array<AIContent> = [];
@@ -236,20 +256,13 @@ export class Roboto {
       );
     });
 
-    let systemPrompt = CONFIG.getSystemPrompt();
-    let botName = this.botConfig.botName;
-
-    const chatConfiguration = chatConfigurationManager.getChatConfig(chatData.id._serialized);
-    if (chatConfiguration) {
-      botName = chatConfiguration.botName || this.botConfig.botName;
-      systemPrompt = CONFIG.getSystemPrompt(chatConfiguration.promptInfo, botName);
-      logger.debug(`Using custom configuration for ${chatConfiguration.isGroup ? 'group' : 'chat'} "${chatConfiguration.name}" with bot name "${botName}": ${systemPrompt}`);
-    }
-
     // Send the message and return the text response
     if (AIConfig.ChatConfig.provider == AIProvider.CLAUDE) {
       const convertedMessageList: MessageParam[] = this.convertIaMessagesLang(messageList.reverse(), AIProvider.CLAUDE) as MessageParam[];
       return await this.claudeService.sendChat(convertedMessageList, CONFIG.getSystemPrompt());
+    } else if (AIConfig.ChatConfig.provider == AIProvider.OPENAI) {
+      const convertedMessageList: ResponseInput = this.convertIaMessagesLang(messageList.reverse(), AIConfig.ChatConfig.provider as AIProvider, systemPrompt) as ResponseInput;
+      return await this.openAIService.sendChatWithTools(convertedMessageList, 'text', AITools);
     } else {
       const convertedMessageList: ChatCompletionMessageParam[] = this.convertIaMessagesLang(messageList.reverse(), AIConfig.ChatConfig.provider as AIProvider, systemPrompt) as ChatCompletionMessageParam[];
       return await this.openAIService.sendCompletion(convertedMessageList);
@@ -368,7 +381,7 @@ export class Roboto {
    * @param systemPrompt - Optional system prompt to include
    * @returns Formatted message array compatible with the specified AI provider
    */
-  private convertIaMessagesLang(messageList: AiMessage[], lang: AIProvider, systemPrompt?: string): MessageParam[] | ChatCompletionMessageParam[] {
+  private convertIaMessagesLang(messageList: AiMessage[], lang: AIProvider, systemPrompt?: string): MessageParam[] | ChatCompletionMessageParam[] | ResponseInput {
     switch (lang) {
       case AIProvider.CLAUDE:
 
@@ -439,6 +452,21 @@ export class Roboto {
         return deepSeekMsgList;
 
       case AIProvider.OPENAI:
+
+        const responseAPIMessageList: ResponseInput = [];
+        messageList.forEach(msg => {
+          const gptContent: Array<any> = [];
+          msg.content.forEach(c => {
+            const fromBot = msg.role == AIRole.ASSISTANT;
+            if (['text', 'audio'].includes(c.type))  gptContent.push({ type: fromBot?'output_text':'input_text', text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format:'json_object'}) });
+            if (['image'].includes(c.type))          gptContent.push({ type: 'input_image', image_url: c.value });
+          })
+          responseAPIMessageList.push({content: gptContent, role: msg.role});
+        })
+
+        responseAPIMessageList.unshift({role: AIRole.SYSTEM, content: systemPrompt});
+        return responseAPIMessageList;
+
       case AIProvider.QWEN:
         const chatgptMessageList: any[] = [];
         messageList.forEach(msg => {

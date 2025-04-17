@@ -20,11 +20,12 @@ WhatsApp-Claude-GPT is a chatbot application designed for seamless interaction o
 - **Context Management**: Tracks recent messages for context with customizable limits
 - **Per-Chat Configuration**: Customize the bot's personality and name per chat or group
 - **Multi-Provider Support**: Use different AI providers for different features
+- **Web Searches (OpenAI Only)**: Can search information on the internet to generate its responses
 
 ## Requirements
 
 Before initializing the bot, make sure you have [Node.js](https://nodejs.org/en/download/) installed.
-(It was tested with Node v18.15.0)
+(It was tested with Node v22.14.0)
 
 ## Quick Setup
 
