@@ -1,6 +1,14 @@
 import { OpenaiService } from './services/openai-service';
 import { Chat, Client, Contact, Message, MessageMedia, MessageTypes } from 'whatsapp-web.js';
-import { bufferToStream, getContactName, getUnsupportedMessage, includeName, logMessage, parseCommand } from './utils';
+import {
+  bufferToStream,
+  extractAnswer,
+  getContactName,
+  getUnsupportedMessage,
+  includeName,
+  logMessage,
+  parseCommand
+} from './utils';
 import logger from './logger';
 import { CONFIG } from './config';
 import { AiAnswer, AiContent, AiLanguage, AiMessage, AiRole } from './interfaces/ai-message';
@@ -13,6 +21,8 @@ import MessageParam = Anthropic.MessageParam;
 import { ChatCfg } from './interfaces/chatconfig';
 import { ChatConfigService } from './services/chatconfig-service';
 import { CVoices, elevenTTS } from './services/eleven-service';
+import { AITools } from "./config/openai-functions";
+import { ResponseInput } from "openai/resources/responses/responses";
 
 export class Roboto {
 
@@ -217,7 +227,7 @@ export class Roboto {
         if (media && isImage) imageCount++;
 
         const role = (!msg.fromMe || isImage) ? AiRole.USER : AiRole.ASSISTANT;
-        const name = msg.fromMe ? (CONFIG.botConfig.botName) : (await getContactName(msg));
+        const name = msg.fromMe ? (chatCfg.prompt_name) : (await getContactName(msg));
 
         // Assemble the content as a mix of text and any included media
         const content: Array<AiContent> = [];
@@ -255,6 +265,11 @@ export class Roboto {
     if (CONFIG.botConfig.aiLanguage == AiLanguage.CLAUDE) {
       const convertedMessageList: MessageParam[] = this.convertIaMessagesLang(messageList.reverse(), AiLanguage.CLAUDE) as MessageParam[];
       return await this.claudeService.sendChat(convertedMessageList, promptText);
+    }else if (CONFIG.botConfig.aiLanguage == AiLanguage.OPENAI){
+      const convertedMessageList: ResponseInput = this.convertIaMessagesLang(messageList.reverse(), CONFIG.botConfig.aiLanguage as AiLanguage) as ResponseInput;
+      convertedMessageList.unshift({role: 'system', content: promptText});
+      const r = await this.openAIService.sendChatWithTools(convertedMessageList, chatCfg.ia_model, AITools);
+      return extractAnswer(r, chatCfg.prompt_name)
     }else{
       const convertedMessageList: ChatCompletionMessageParam[] = this.convertIaMessagesLang(messageList.reverse(), CONFIG.botConfig.aiLanguage as AiLanguage) as ChatCompletionMessageParam[];
       return await this.openAIService.sendCompletion(convertedMessageList, promptText, chatCfg.ia_model);
@@ -429,7 +444,7 @@ export class Roboto {
    * - An array of MessageParam (for CLAUDE) or ChatCompletionMessageParam (for OpenAI-compatible services),
    *   formatted according to the specified language model's requirements.
    */
-  private convertIaMessagesLang(messageList: AiMessage[], lang: AiLanguage ): MessageParam[] | ChatCompletionMessageParam[]{
+  private convertIaMessagesLang(messageList: AiMessage[], lang: AiLanguage ): MessageParam[] | ChatCompletionMessageParam[] | ResponseInput{
     switch (lang){
       case AiLanguage.CLAUDE:
 
@@ -483,6 +498,20 @@ export class Roboto {
         return deepSeekMsgList;
 
       case AiLanguage.OPENAI:
+
+        const responseAPIMessageList: ResponseInput = [];
+        messageList.forEach(msg => {
+          const gptContent: Array<any> = [];
+          msg.content.forEach(c => {
+            const fromBot = msg.role == AiRole.ASSISTANT;
+            if (['text', 'audio'].includes(c.type))  gptContent.push({ type: fromBot?'output_text':'input_text', text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format:'json_object'}) });
+            if (['image'].includes(c.type))          gptContent.push({ type: 'input_image', image_url: c.value });
+          })
+          responseAPIMessageList.push({content: gptContent, role: msg.role});
+        })
+
+        return responseAPIMessageList;
+
       case AiLanguage.QWEN:
       case AiLanguage.CUSTOM:
 

@@ -148,3 +148,78 @@ export function cleanImagesLog(array: ChatCompletionMessageParam[]){
   });
   return array;
 }
+
+
+export function extractAnswer(input: string, botName: string): any {
+
+  const regex = /<think>[\s\S]*?<\/think>/g;
+  const inputString = input.replace(regex, '').trim();
+
+  if (!inputString || typeof inputString !== 'string') {
+    return null;
+  }
+
+  try {
+    return JSON.parse(inputString.trim());
+  } catch (e) {
+  }
+
+  const startMatch = inputString.match(/[{\[]/);
+  if (!startMatch) {
+    logger.debug("[cleanFileName] Valid JSON start character not found");
+    return {message: inputString, author: botName, type: 'text'};
+  }
+
+  try {
+
+    const startIndex = startMatch.index;
+    let endIndex = inputString.length;
+    let openBraces = 0;
+    let openBrackets = 0;
+    let inString = false;
+    let escapeNext = false;
+
+    for (let i = startIndex; i < inputString.length; i++) {
+      const char = inputString[i];
+
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+
+      if (char === '\\') {
+        escapeNext = true;
+        continue;
+      }
+
+      if (char === '"' && !escapeNext) {
+        inString = !inString;
+        continue;
+      }
+
+      if (inString) continue;
+
+      if (char === '{') openBraces++;
+      if (char === '}') openBraces--;
+      if (char === '[') openBrackets++;
+      if (char === ']') openBrackets--;
+
+      if (i >= startIndex && openBraces === 0 && openBrackets === 0) {
+        if (startMatch[0] === '{' && char === '}') {
+          endIndex = i + 1;
+          break;
+        }
+        if (startMatch[0] === '[' && char === ']') {
+          endIndex = i + 1;
+          break;
+        }
+      }
+    }
+
+    const jsonString = inputString.substring(startIndex, endIndex);
+
+    return JSON.parse(jsonString);
+  } catch (e) {
+    return {message: inputString, author: botName, type: 'text' };
+  }
+}

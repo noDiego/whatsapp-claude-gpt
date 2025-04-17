@@ -5,6 +5,8 @@ import { CONFIG } from '../config';
 import { AiAnswer, AiLanguage } from '../interfaces/ai-message';
 import { OpenaiAiconfig } from '../interfaces/openai-aiconfig';
 import { logGPTMessages } from '../utils';
+import { ResponseInput } from "openai/resources/responses/responses";
+import { Tool } from "openai/src/resources/responses/responses";
 
 export class OpenaiService {
 
@@ -28,6 +30,74 @@ export class OpenaiService {
     this.openai = new OpenAI({
       apiKey: openAIConfig.apiKey,
     });
+  }
+
+  async sendChatWithTools(
+      messageList: ResponseInput,
+      model: string,
+      tools?: Array<Tool>
+  ): Promise<string> {
+
+    logger.info(`[OpenAI] Sending ${messageList.length} messages`);
+    logger.debug(`[OpenAI] Sending Msg: ${JSON.stringify(messageList[messageList.length - 1])}`);
+
+    const responseResult = await this.openai.responses.create({
+      model: model || this.AIConfig.chatModel,
+      input: messageList,
+      text: {
+        format: {
+          type: 'text'
+        }
+      },
+      reasoning: {},
+      tools: tools,
+      temperature: 1,
+      max_output_tokens: 2048,
+      top_p: 1,
+      store: true
+    });
+
+    logger.debug('[OpenAI] Completion Response:' + JSON.stringify(responseResult.output_text));
+
+    const messageResult = responseResult.output_text;
+
+    const functionCalls = responseResult.output.filter(toolCall => toolCall.type === "function_call");
+    if (functionCalls.length === 0)
+      return messageResult;
+
+    let updatedMessages: ResponseInput = [...messageList as any];
+
+    for (const toolCall of responseResult.output) {
+      if (toolCall.type !== "function_call") {
+        continue;
+      }
+
+      updatedMessages.push(toolCall);
+
+      // TODO: I have not implemented functions yet, so they will not be processed.
+      //const name = toolCall.name;
+      //const args = JSON.parse(toolCall.arguments);
+      //
+      // try {
+      //
+      //   // const result = await executeFunctions(name, args, inputData);
+      //   updatedMessages.push({
+      //     type: "function_call_output",
+      //     call_id: toolCall.call_id,
+      //     output: result.toString()
+      //   });
+      // }catch (error) {
+      //   logger.error(`Error executing function ${name}:`, error);
+      //   updatedMessages.push({
+      //     type: "function_call_output",
+      //     call_id: toolCall.call_id,
+      //     output: `Error executing function ${name}.`
+      //   });
+      // }
+    }
+
+    // Recursive call with updated messages
+    return this.sendChatWithTools(updatedMessages, model, tools);
   }
 
   /**

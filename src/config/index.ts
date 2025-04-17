@@ -16,9 +16,9 @@ const dbConfig = {
 const AIConfigs = {
   OPENAI: {
     apiKey:      process.env.OPENAI_API_KEY, // Your OpenAI API key for authentication against the OpenAI services
-    chatModel:   process.env.CHAT_COMPLETION_MODEL ?? 'chatgpt-4o-latest', // The model used by OpenAI for chat completions, can be changed to use different models. It is important to use a "vision" version to be able to identify images
+    chatModel:   process.env.CHAT_COMPLETION_MODEL ?? 'gpt-4.1', // The model used by OpenAI for chat completions, can be changed to use different models. It is important to use a "vision" version to be able to identify images
     imageModel:  process.env.IMAGE_CREATION_MODEL ?? 'dall-e-3', // The model used by OpenAI for generating images based on text description
-    transcriptionModel:  process.env.TRANSCRIPTION_MODEL ?? 'whisper-1',
+    transcriptionModel:  process.env.TRANSCRIPTION_MODEL ?? 'gpt-4o-transcribe',
     speechModel: process.env.SPEECH_MODEL ?? 'gpt-4o-mini-tts', // The model used by OpenAI for generating speech from text
     speechVoice: process.env.SPEECH_VOICE ?? "nova" // Specifies the voice model to be used in speech synthesis
   },
@@ -90,6 +90,7 @@ ${botConfig.preferredLanguage ? `- Preferably you will try to speak in ${botConf
   }
   
   - Note: Only include the "voice_instructions" field when your "type" is "AUDIO". For "TEXT" responses, you may omit it.
+  - Whenever you need to reference, cite, or display a website or link, never use Markdown format (e.g., [text](url)). Instead, always show the full URL as plain text, or use another appropriate format that does not involve Markdown.
   
 - **Emoji Reactions**: 
 - In the "emoji_reaction" field, include an emoji that appropriately reacts to the user's last message.

@@ -2,8 +2,7 @@
   "compilerOptions": {
 
     /* Language and Environment */
-    "target": "es2022",                                  /* Set the JavaScript language version for emitted JavaScript and include compatible library declarations. */
-    "lib": ["es2022","dom"],                                      /* Specify a set of bundled library declaration files that describe the target runtime environment. */
+    "target": "ESNext",                                  /* Set the JavaScript language version for emitted JavaScript and include compatible library declarations. */
     "experimentalDecorators": true,                   /* Enable experimental support for TC39 stage 2 draft decorators. */
 
     /* Modules */
@@ -15,9 +14,11 @@
     "outDir": "build",                                   /* Specify an output folder for all emitted files. */
     "esModuleInterop": true,                             /* Emit additional JavaScript to ease support for importing CommonJS modules. This enables 'allowSyntheticDefaultImports' for type compatibility. */
     /* Type Checking */
-    "strict": true,                                      /* Enable all strict type-checking options. */
+    "strict": false,                                      /* Enable all strict type-checking options. */
     "noImplicitAny": false,                               /* Enable error reporting for expressions and declarations with an implied 'any' type. */
     "strictPropertyInitialization": false,             /* Check for class properties that are declared but not set in the constructor. */
-    "skipLibCheck": true                                 /* Skip type checking all .d.ts files. */
-  }
+    "skipLibCheck": true,                                 /* Skip type checking all .d.ts files. */
+    "typeRoots": ["./node_modules/@types"]
+  },
+  "exclude": ["node_modules"]
 }
