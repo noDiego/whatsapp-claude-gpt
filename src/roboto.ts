@@ -112,7 +112,7 @@ export class Roboto {
         const img = await this.createImage(chatResponseString.image_description);
         return await message.reply(img, undefined, { caption: chatResponseString.message  });
       }
-      else if (chatResponseString.type.toLowerCase() == 'audio' && CONFIG.botConfig.voiceMessagesEnabled) {
+      else if (chatResponseString.type && chatResponseString.type.toLowerCase() == 'audio' && CONFIG.botConfig.voiceMessagesEnabled) {
         //return this.speakEleven(message, chatData, chatResponseString.message, chatCfg.voice_id as CVoices);
         return this.speak(message, chatData, chatResponseString.message, undefined, chatResponseString.voice_instructions);
       } else {

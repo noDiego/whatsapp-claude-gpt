@@ -4,6 +4,7 @@ import { Readable } from 'stream';
 import { CONFIG } from '../config';
 import { OpenaiAiconfig } from '../interfaces/openai-aiconfig';
 import { ChatCompletionMessageParam } from 'openai/resources';
+import { AiAnswer } from "../interfaces/ai-message";
 
 export function getFormattedDate() {
   const now = new Date();
@@ -150,9 +151,9 @@ export function cleanImagesLog(array: ChatCompletionMessageParam[]){
 }
 
 
-export function extractAnswer(input: string, botName: string): any {
+export function extractAnswer(input: string, botName: string): AiAnswer {
 
-  const regex = /<think>[\s\S]*?<\/think>/g;
+  const regex = /^<think>[\s\S]*?<\/think>\s*/;
   const inputString = input.replace(regex, '').trim();
 
   if (!inputString || typeof inputString !== 'string') {
