@@ -110,7 +110,7 @@ export class Roboto {
         message.react(chatResponse.emojiReact);
 
       // Evaluate if response message must be Audio or Text
-      if (chatResponse.type.toLowerCase() == 'audio' && AIConfig.SpeechConfig.enabled) {
+      if (chatResponse.type && chatResponse.type.toLowerCase() == 'audio' && AIConfig.SpeechConfig.enabled) {
         return this.speak(message, chatData, chatResponse.message, 'mp3');
       } else {
         return this.returnResponse(message, chatResponse.message, chatData.isGroup, client);

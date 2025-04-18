@@ -203,7 +203,7 @@ export function configValidation() {
 
 export function extractAnswer(input: string, botName: string): AIAnswer {
 
-  const regex = /<think>[\s\S]*?<\/think>/g;
+  const regex = /^<think>[\s\S]*?<\/think>\s*/;
   const inputString = input.replace(regex, '').trim();
 
   if (!inputString || typeof inputString !== 'string') {
