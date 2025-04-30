@@ -42,7 +42,8 @@
     "axios": "^1.8.4",
     "dotenv": "^16.5.0",
     "node-cache": "^5.1.2",
-    "openai": "4.95.0",
+    "openai": "^4.96.2",
+    "pg": "^8.15.6",
     "qrcode-terminal": "^0.12.0",
     "whatsapp-web.js": "^1.27.0",
     "winston": "^3.17.0"

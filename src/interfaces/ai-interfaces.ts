@@ -11,6 +11,7 @@ export enum AIRole {
 }
 
 export interface AIContent {
+  imageId?: string;
   value?: string;
   type: 'text' | 'image' | 'audio';
   media_type?: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' | string;
@@ -18,12 +19,7 @@ export interface AIContent {
 
 export enum AIProvider {
   OPENAI='OPENAI',
-  CLAUDE='CLAUDE',
-  QWEN='QWEN',
-  DEEPSEEK='DEEPSEEK',
-  DEEPINFRA='DEEPINFRA',
-  ELEVENLABS='ELEVENLABS',
-  CUSTOM='CUSTOM'
+  ELEVENLABS='ELEVENLABS'
 }
 
 export interface AIAnswer {

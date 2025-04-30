@@ -64,143 +64,6 @@ export function getUnsupportedMessage(type: string, body?: string) {
   return `<Unsupported message: {${typeStr}${bodyStr}}>`
 }
 
-export function configValidation() {
-  function validateProvider(type: string, provider: string, config: any, configObject: any) {
-    if (!config.apiKey) {
-      const apiKeyEnvVar = getApiKeyEnvVarName(provider);
-      logger.warn(`WARNING: ${provider} API key is missing when using ${provider} as ${type} provider.`);
-      logger.warn(`The ${type} functionality will be automatically disabled.`);
-
-      // Disable the functionality when API key is missing
-      if (type === 'Image') {
-        AIConfig.ImageConfig.enabled = false;
-      } else if (type === 'Speech') {
-        AIConfig.SpeechConfig.enabled = false;
-      } else if (type === 'Transcription') {
-        AIConfig.TranscriptionConfig.enabled = false;
-      } else if (type === 'Chat') {
-        // For chat, we don't disable but exit since it's essential
-        logger.error(`ERROR: ${provider} API key is required when using ${provider} as ${type} provider.`);
-        logger.error(`Please set the ${apiKeyEnvVar} environment variable in your .env file.`);
-        process.exit(1);
-      }
-
-      return false;
-    }
-
-    if (provider === 'CUSTOM') {
-      if (!config.baseURL) {
-        logger.error(`ERROR: CUSTOM_BASEURL is required when using CUSTOM as ${type} provider.`);
-        logger.error(`Please set the CUSTOM_BASEURL environment variable in your .env file.`);
-        process.exit(1);
-      }
-
-      if (!config.model) {
-        const modelEnvVar = getModelEnvVarName('CUSTOM', type);
-        logger.error(`ERROR: CUSTOM model configuration is required when using CUSTOM as ${type} provider.`);
-        logger.error(`Please set the ${modelEnvVar} environment variable in your .env file.`);
-        process.exit(1);
-      }
-    }
-
-    return true;
-  }
-
-  function getApiKeyEnvVarName(provider: string): string {
-    const envVarMapping = {
-      'OPENAI': 'OPENAI_API_KEY',
-      'CLAUDE': 'CLAUDE_API_KEY',
-      'QWEN': 'QWEN_API_KEY',
-      'DEEPSEEK': 'DEEPSEEK_API_KEY',
-      'ELEVENLABS': 'ELEVENLABS_API_KEY',
-      'DEEPINFRA': 'DEEPINFRA_API_KEY',
-      'CUSTOM': 'CUSTOM_API_KEY'
-    };
-
-    return envVarMapping[provider] || `${provider}_API_KEY`;
-  }
-
-  function getModelEnvVarName(provider: string, type: string): string {
-    const typeMapping = {
-      'Chat': 'COMPLETION_MODEL',
-      'Image': 'IMAGE_MODEL',
-      'Transcription': 'TRANSCRIPTION_MODEL',
-      'Speech': 'SPEECH_MODEL'
-    };
-
-    if (provider === 'CUSTOM') {
-      return 'CUSTOM_' + typeMapping[type];
-    } else {
-      return `${provider}_${typeMapping[type]}`;
-    }
-  }
-
-  // Validate chat provider (required)
-  validateProvider('Chat', AIConfig.ChatConfig.provider, AIConfig.ChatConfig, AIConfig.ChatConfig);
-
-  // Validate optional providers
-  if (AIConfig.ImageConfig.enabled) {
-    validateProvider('Image', AIConfig.ImageConfig.provider, AIConfig.ImageConfig, AIConfig);
-  }
-
-  // If transcription is enabled, validate it (or disable if API key is missing)
-  if (AIConfig.TranscriptionConfig.enabled) {
-    validateProvider('Transcription', AIConfig.TranscriptionConfig.provider, AIConfig.TranscriptionConfig, AIConfig);
-  }
-
-  // If speech is enabled, validate it (or disable if API key is missing)
-  if (AIConfig.SpeechConfig.enabled) {
-    validateProvider('Speech', AIConfig.SpeechConfig.provider, AIConfig.SpeechConfig, AIConfig);
-  }
-
-  // If both transcription or speech are disabled, disable voice messages entirely
-  if (!AIConfig.TranscriptionConfig.enabled || !AIConfig.SpeechConfig.enabled) {
-    AIConfig.TranscriptionConfig.enabled = false;
-    AIConfig.SpeechConfig.enabled = false;
-    logger.warn('WARNING: Voice message handling has been disabled because either transcription or speech service is missing an API key.');
-  }
-
-  const { provider: chatProvider } = AIConfig.ChatConfig;
-  if (!['OPENAI', 'CLAUDE', 'QWEN', 'DEEPSEEK', 'DEEPINFRA', 'CUSTOM'].includes(chatProvider)) {
-    logger.error(`ERROR: Invalid CHAT_PROVIDER: ${chatProvider}`);
-    logger.error(`Valid options are: OPENAI, CLAUDE, QWEN, DEEPSEEK, DEEPINFRA, CUSTOM`);
-    logger.error(`Please set a valid CHAT_PROVIDER in your .env file.`);
-    process.exit(1);
-  }
-
-  if (AIConfig.ImageConfig.enabled) {
-    const { provider: imageProvider } = AIConfig.ImageConfig;
-    if (!['OPENAI', 'DEEPINFRA'].includes(imageProvider)) {
-      logger.error(`ERROR: Invalid IMAGE_PROVIDER: ${imageProvider}`);
-      logger.error(`Valid options are: OPENAI, DEEPINFRA`);
-      logger.error(`Please set a valid IMAGE_PROVIDER in your .env file.`);
-      process.exit(1);
-    }
-  }
-
-  if (AIConfig.TranscriptionConfig.enabled) {
-    const { provider: transcriptionProvider } = AIConfig.TranscriptionConfig;
-    if (!['OPENAI', 'DEEPINFRA'].includes(transcriptionProvider)) {
-      logger.error(`ERROR: Invalid TRANSCRIPTION_PROVIDER: ${transcriptionProvider}`);
-      logger.error(`Valid options are: OPENAI, DEEPINFRA`);
-      logger.error(`Please set a valid TRANSCRIPTION_PROVIDER in your .env file.`);
-      process.exit(1);
-    }
-  }
-
-  if (AIConfig.SpeechConfig.enabled) {
-    const { provider: speechProvider } = AIConfig.SpeechConfig;
-    if (!['OPENAI', 'ELEVENLABS'].includes(speechProvider)) {
-      logger.error(`ERROR: Invalid SPEECH_PROVIDER: ${speechProvider}`);
-      logger.error(`Valid options are: OPENAI, ELEVENLABS`);
-      logger.error(`Please set a valid SPEECH_PROVIDER in your .env file.`);
-      process.exit(1);
-    }
-  }
-
-  logger.info('Configuration validation successful.');
-}
-
 export function extractAnswer(input: string, botName: string): AIAnswer {
 
   const regex = /^<think>[\s\S]*?<\/think>\s*/;
@@ -281,58 +144,35 @@ export function logConfigInfo() {
   // Bot general information
   logger.info(`📝 BOT CONFIGURATION:`);
   logger.info(`• Bot name: ${CONFIG.botConfig.botName}`);
-  logger.info(`• Response character limit: ${CONFIG.botConfig.maxCharacters}`);
   logger.info(`• Maximum messages considered: ${CONFIG.botConfig.maxMsgsLimit}`);
   logger.info(`• Maximum message age: ${CONFIG.botConfig.maxHoursLimit} hours`);
   logger.info(`• Maximum images processed: ${CONFIG.botConfig.maxImages}`);
 
   // Chat provider and model
-  logger.info(`🤖 CHAT PROVIDER:`);
-  logger.info(`• Provider: ${AIConfig.ChatConfig.provider}`);
-  logger.info(`• Model: ${AIConfig.ChatConfig.model}`);
-  if (AIConfig.ChatConfig.baseURL && AIConfig.ChatConfig.provider !== 'OPENAI' && AIConfig.ChatConfig.provider !== 'CLAUDE') {
-    logger.info(`• Base URL: ${AIConfig.ChatConfig.baseURL}`);
-  }
-  logger.info(`• Image analysis: ${AIConfig.ChatConfig.analyzeImageDisabled ? 'Disabled' : 'Enabled'}`);
+  logger.info(`🤖 CHAT:`);
+  logger.info(`• Model: ${AIConfig.chatModel}`);
 
   // Image configuration
   logger.info(`🖼️ IMAGE GENERATION:`);
-  if (AIConfig.ImageConfig.enabled) {
+  if (AIConfig.imageCreationEnabled) {
     logger.info(`• Status: Enabled`);
-    logger.info(`• Provider: ${AIConfig.ImageConfig.provider}`);
-    logger.info(`• Model: ${AIConfig.ImageConfig.model}`);
-    if (AIConfig.ImageConfig.baseURL && AIConfig.ImageConfig.provider !== 'OPENAI') {
-      logger.info(`• Base URL: ${AIConfig.ImageConfig.baseURL}`);
-    }
+    logger.info(`• Model: ${AIConfig.imageModel}`);
   } else {
     logger.info(`• Status: Disabled`);
   }
 
   // Voice message handling
-  logger.info(`🎤 VOICE MESSAGE HANDLING:`);
-  if (AIConfig.TranscriptionConfig.enabled && AIConfig.SpeechConfig.enabled) {
-    logger.info(`• Status: Enabled`);
 
-    // Transcription (Speech-to-Text)
-    logger.info(`TRANSCRIPTION (Speech-to-Text):`);
-    logger.info(`  • Provider: ${AIConfig.TranscriptionConfig.provider}`);
-    logger.info(`  • Model: ${AIConfig.TranscriptionConfig.model}`);
-    logger.info(`  • Language: ${CONFIG.botConfig.transcriptionLanguage}`);
-    if (AIConfig.TranscriptionConfig.baseURL && AIConfig.TranscriptionConfig.provider !== 'OPENAI') {
-      logger.info(`  • Base URL: ${AIConfig.TranscriptionConfig.baseURL}`);
-    }
+  // Transcription (Speech-to-Text)
+  logger.info(`TRANSCRIPTION (Speech-to-Text):`);
+  logger.info(`  • Model: ${AIConfig.sttModel}`);
+  logger.info(`  • Language: ${AIConfig.sttLanguage}`);
 
-    // Speech (Text-to-Speech)
-    logger.info(` SPEECH (Text-to-Speech):`);
-    logger.info(`  • Provider: ${AIConfig.SpeechConfig.provider}`);
-    logger.info(`  • Model: ${AIConfig.SpeechConfig.model}`);
-    logger.info(`  • Voice: ${AIConfig.SpeechConfig.voice}`);
-    if (AIConfig.SpeechConfig.baseURL && AIConfig.SpeechConfig.provider !== 'OPENAI' && AIConfig.SpeechConfig.provider !== 'ELEVENLABS') {
-      logger.info(`  • Base URL: ${AIConfig.SpeechConfig.baseURL}`);
-    }
-  } else {
-    logger.info(`• Status: Disabled`);
-  }
+  // Speech (Text-to-Speech)
+  logger.info(` SPEECH (Text-to-Speech):`);
+  logger.info(`  • Provider: ${AIConfig.ttsProvider}`);
+  logger.info(`  • Model: ${AIConfig.ttsModel}`);
+  logger.info(`  • Voice: ${AIConfig.ttsVoice}`);
 
   // Additional information if preferred language is set
   if (CONFIG.botConfig.preferredLanguage) {

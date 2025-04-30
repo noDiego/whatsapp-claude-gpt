@@ -12,12 +12,12 @@ export enum CVoices {
 
 export async function elevenTTS(msg: string): Promise<string | undefined> {
 
-  logger.debug(`[${AIConfig.SpeechConfig.provider}->speech] Creating speech audio for: "${msg}"`);
+  logger.debug(`[ElevenLabs->speech] Creating speech audio for: "${msg}"`);
 
-  const url = `https://api.elevenlabs.io/v1/text-to-speech/${AIConfig.SpeechConfig.voice}?output_format=mp3_44100_128`;
+  const url = `https://api.elevenlabs.io/v1/text-to-speech/${AIConfig.ttsModel}?output_format=mp3_44100_128`;
   const body = {
     text: msg,
-    model_id: AIConfig.SpeechConfig.model,
+    model_id: AIConfig.ttsModel,
     voice_settings: {
       stability: 0.7,
       similarity_boost: 0.7,
@@ -27,7 +27,7 @@ export async function elevenTTS(msg: string): Promise<string | undefined> {
   };
 
   const headers = {
-    'xi-api-key': AIConfig.SpeechConfig.apiKey,
+    'xi-api-key': AIConfig.ElevenLabsApiKey,
     'Content-Type': 'application/json',
   };
 

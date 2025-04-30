@@ -1,71 +1,166 @@
+// src/config/chat-configurations.ts
 import * as fs from 'fs';
 import * as path from 'path';
 import logger from '../logger';
 import { CONFIG } from './index';
+import { ChatConfiguration } from "../interfaces/chat-configuration";
+import { PostgresClient } from "../db/postgresql";
 
 const CHATCONFIG_FILE = path.join(process.cwd(), 'chat-configurations.json');
 
-interface ChatConfiguration {
-  id: string;
-  name: string;
-  promptInfo: string;
-  botName?: string;
-  isGroup: boolean;
+interface ChatConfigStorage {
+  loadConfigurations(): Promise<ChatConfiguration[]>;
+  saveConfigurations(configs: ChatConfiguration[]): Promise<void>;
 }
 
-class ChatConfig {
-  private chatConfigurations: ChatConfiguration[];
-
-  constructor() {
-    this.chatConfigurations = [];
-    this.loadChatConfigs();
-  }
-
-  private loadChatConfigs() {
+class JsonChatConfigStorage implements ChatConfigStorage {
+  async loadConfigurations(): Promise<ChatConfiguration[]> {
     try {
       if (fs.existsSync(CHATCONFIG_FILE)) {
         const data = fs.readFileSync(CHATCONFIG_FILE, 'utf8');
-        this.chatConfigurations = JSON.parse(data);
-
-        logger.info(`Loaded ${this.chatConfigurations.length} chat configurations`);
+        const configs = JSON.parse(data);
+        logger.info(`Loaded ${configs.length} chat configurations from JSON file`);
+        return configs;
       } else {
         logger.info('No chat config file found, creating a new one');
-        this.chatConfigurations = [];
-        this.saveChatConfig();
+        fs.writeFileSync(CHATCONFIG_FILE, JSON.stringify([]), 'utf8');
+        return [];
       }
     } catch (error: any) {
-      logger.error(`Error loading chat configuration: ${error.message}`);
-      this.chatConfigurations = [];
-      this.saveChatConfig();
+      logger.error(`Error loading chat configuration from file: ${error.message}`);
+      return [];
     }
   }
 
-  private saveChatConfig() {
+  async saveConfigurations(configs: ChatConfiguration[]): Promise<void> {
     try {
-      const data = JSON.stringify(Array.from(this.chatConfigurations), null, 2);
+      const data = JSON.stringify(configs, null, 2);
       fs.writeFileSync(CHATCONFIG_FILE, data, 'utf8');
-      logger.info('Chat configs saved successfully');
+      logger.info('Chat configs saved successfully to JSON file');
     } catch (error: any) {
-      logger.error(`Error saving chat configs: ${error.message}`);
+      logger.error(`Error saving chat configs to file: ${error.message}`);
+    }
+  }
+}
+
+class PostgresChatConfigStorage implements ChatConfigStorage {
+  private db: PostgresClient;
+
+  constructor() {
+    this.db = PostgresClient.getInstance();
+  }
+
+  async loadConfigurations(): Promise<ChatConfiguration[]> {
+    try {
+      const configs = await this.db.getChatConfigs();
+      logger.info(`Loaded ${configs.length} chat configurations from database`);
+      return configs;
+    } catch (error: any) {
+      logger.error(`Error loading chat configurations from database: ${error.message}`);
+      return [];
     }
   }
 
-  public getChatConfig(chatId: string, chatName?: string): ChatConfiguration | undefined {
-    return this.chatConfigurations.find(c => c.id === chatId || c.name === chatName);
+  async saveConfigurations(configs: ChatConfiguration[]): Promise<void> {
+    try {
+      for (const config of configs) {
+        const existingConfig = await this.db.getChatConfigById(config.id);
+        if (existingConfig) {
+          await this.db.updateChatConfig(config.id, config);
+        } else {
+          await this.db.createChatConfig(config);
+        }
+      }
+      logger.info('Chat configs saved successfully to database');
+    } catch (error: any) {
+      logger.error(`Error saving chat configs to database: ${error.message}`);
+    }
+  }
+}
+
+export class ChatConfig {
+  private chatConfigurations: ChatConfiguration[];
+  private storage: ChatConfigStorage;
+  private useDatabase: boolean;
+
+  constructor() {
+    this.chatConfigurations = [];
+    this.useDatabase = process.env.CHAT_CONFIG_STORAGE?.toLowerCase() === 'database';
+    this.storage = this.useDatabase
+        ? new PostgresChatConfigStorage()
+        : new JsonChatConfigStorage();
+
+    this.initializeConfigs();
   }
 
-  public updateChatConfig(chatId: string, chatName: string, isGroup: boolean, options: {
+  private async initializeConfigs() {
+    try {
+      this.chatConfigurations = await this.storage.loadConfigurations();
+    } catch (error: any) {
+      logger.error(`Error initializing chat configurations: ${error.message}`);
+      this.chatConfigurations = [];
+      await this.saveChatConfig();
+    }
+  }
+
+  public async reloadConfigurations(): Promise<boolean> {
+    try {
+      logger.info(`Reloading chat configurations from ${this.useDatabase ? 'database' : 'file'}...`);
+      this.chatConfigurations = await this.storage.loadConfigurations();
+      logger.info(`Successfully reloaded ${this.chatConfigurations.length} chat configurations`);
+      return true;
+    } catch (error: any) {
+      logger.error(`Failed to reload chat configurations: ${error.message}`);
+      return false;
+    }
+  }
+
+  private async saveChatConfig() {
+    await this.storage.saveConfigurations(this.chatConfigurations);
+  }
+
+  private readConfig(chatId: string, chatName?: string): ChatConfiguration | undefined {
+    const customConfig = this.chatConfigurations.find(c => c.id === chatId) ||
+        this.chatConfigurations.find(c => c.name === chatName)
+    return customConfig || this.chatConfigurations.find(c => c.id === '*');
+  }
+
+  public getChatConfig(chatId: string, chatName?: string): ChatConfiguration {
+    const defaults: ChatConfiguration = {
+      id: chatId,
+      name: chatName ?? chatId,
+      botName:     CONFIG.botConfig.botName,
+      promptInfo: CONFIG.botConfig.promptInfo,
+      maxImages:     CONFIG.botConfig.maxImages,
+      maxMsgsLimit:  CONFIG.botConfig.maxMsgsLimit,
+      maxHoursLimit: CONFIG.botConfig.maxHoursLimit,
+      chatModel: CONFIG.AIConfig.chatModel,
+      imageModel: CONFIG.AIConfig.imageModel,
+      ttsProvider: CONFIG.AIConfig.ttsProvider,
+      ttsModel: CONFIG.AIConfig.ttsModel,
+      ttsVoice: CONFIG.AIConfig.ttsVoice,
+      sttModel: CONFIG.AIConfig.sttModel,
+      sttLanguage: CONFIG.AIConfig.sttLanguage,
+      imageCreationEnabled: CONFIG.AIConfig.imageCreationEnabled,
+      voiceCreationEnabled: CONFIG.AIConfig.voiceCreationEnabled
+    }
+
+    const override = this.readConfig(chatId, chatName);
+
+    return { ...defaults, ...override }
+  }
+
+  public async updateChatConfig(chatId: string, chatName: string, isGroup: boolean, options: {
     promptInfo?: string;
     botName?: string;
-  }): ChatConfiguration {
-    const existingConfig = this.getChatConfig(chatId);
+  }): Promise<ChatConfiguration> {
+    const existingConfig = this.readConfig(chatId);
 
     const updatedConfig: ChatConfiguration = {
       id: chatId,
       name: chatName,
-      isGroup: isGroup,
       promptInfo: options.promptInfo !== undefined ? options.promptInfo :
-        (existingConfig?.promptInfo || CONFIG.botConfig.promptInfo!),
+          (existingConfig?.promptInfo || CONFIG.botConfig.promptInfo!),
       ...(existingConfig?.botName && !options.botName && { botName: existingConfig.botName }),
       ...(options.botName && { botName: options.botName })
     };
@@ -78,33 +173,27 @@ class ChatConfig {
       this.chatConfigurations.push(updatedConfig);
     }
 
-    this.saveChatConfig();
+    await this.saveChatConfig();
     logger.info(`Updated configuration for ${isGroup ? 'group' : 'chat'} ${chatName} (${chatId})`);
 
     return updatedConfig;
   }
 
   public getBotName(chatId: string): string | undefined {
-    const configuration = this.getChatConfig(chatId);
+    const configuration = this.readConfig(chatId);
     return configuration?.botName;
   }
 
-  public removeChatConfig(chatId: string, chatName?: string): boolean {
+  public async removeChatConfig(chatId: string, chatName?: string): Promise<boolean> {
     const initialLength = this.chatConfigurations.length;
     this.chatConfigurations = this.chatConfigurations.filter(c => c.id !== chatId && c.name !== chatName);
     const removed = initialLength > this.chatConfigurations.length;
 
     if (removed) {
-      this.saveChatConfig();
+      await this.saveChatConfig();
       logger.info(`Removed configuration for chat ${chatId}`);
     }
 
     return removed;
   }
-
-  public listChatConfigurations(): ChatConfiguration[] {
-    return this.chatConfigurations;
-  }
 }
-
-export const chatConfigurationManager = new ChatConfig();

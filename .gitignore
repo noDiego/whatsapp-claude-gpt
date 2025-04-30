@@ -1,6 +1,9 @@
 .idea
 .wwebjs_cache
-.env
+.env.backup
 build
 node_modules
 whatsapp-gpt.iml
+assets
+.wwebjs_auth
+.*backup
