@@ -182,3 +182,8 @@ export function logConfigInfo() {
 
   logger.info('===========================================');
 }
+
+export async function isSuperUser(message: Message){
+  const contactData = await message.getContact();
+  return CONFIG.botConfig.superUserNumbers.includes(contactData.number);
+}

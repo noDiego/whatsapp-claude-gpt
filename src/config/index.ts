@@ -35,7 +35,8 @@ const botConfig = {
   maxMsgsLimit: parseInt(process.env.MAX_MSGS_LIMIT ?? '30'), // The maximum number of recent messages the bot will consider for generating a coherent response
   maxHoursLimit: parseInt(process.env.MAX_HOURS_LIMIT ?? '24'), // The maximum hours a message's age can be for the bot to consider it in generating responses
   nodeCacheTime: parseInt(process.env.NODE_CACHE_TIME ?? '259200'), // The cache duration for stored data, specified in seconds.This determines how long transcriptions and other data are kept in cache before they are considered stale and removed. Example value is 259200, which translates to 3 days.
-  promptInfo: process.env.PROMPT_INFO // You can use this to customize the bot's personality and provide context about the group or individuals for tailored interactions.
+  promptInfo: process.env.PROMPT_INFO, // You can use this to customize the bot's personality and provide context about the group or individuals for tailored interactions.
+  superUserNumbers: process.env.SUPERUSER_NUMBERS?.split('|') || []
 };
 
 // Dynamically generate the bot's initial prompt based on configuration parameters

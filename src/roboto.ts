@@ -5,7 +5,7 @@ import {
   extractAnswer,
   getContactName,
   getUnsupportedMessage,
-  includeName,
+  includeName, isSuperUser,
   logMessage,
   parseCommand
 } from './utils';
@@ -466,6 +466,9 @@ export class RobotoClass {
       },
 
       create_image: async (args) => {
+        const canCreateImages = await isSuperUser(message);
+        if (!canCreateImages) return `The user who requested this does not have permission to create or edit images. They must request authorization from Diego.`
+
         if(args.wait_message) await message.reply(args.wait_message);
         const images = await this.openAIService.createImage(args.prompt, {background: args.background});
         const media = new MessageMedia("image/png", images[0].b64_json, "image.png");
@@ -474,6 +477,8 @@ export class RobotoClass {
       },
 
       edit_image: async (args) => {
+        const canCreateImages = await isSuperUser(message);
+        if (!canCreateImages) return `The user who requested this does not have permission to create or edit images. They must request authorization from Diego.`
 
         const imageStreams = await Promise.all(
             args.imageIds.map(async (imageId: string) => {
