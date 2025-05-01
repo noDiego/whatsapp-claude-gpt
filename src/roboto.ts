@@ -523,7 +523,7 @@ export class RobotoClass {
         try {
           const edited = await this.openAIService.editImage(imageStreams, args.prompt, chatCfg, maskStream, {
             background: args.background,
-            quality: 'low'
+            quality: 'medium'
           });
           const mediaReply = new MessageMedia("image/png", edited[0].b64_json, "edited.png");
           await message.reply(mediaReply);
