@@ -36,7 +36,8 @@ const botConfig = {
   maxHoursLimit: parseInt(process.env.MAX_HOURS_LIMIT ?? '24'), // The maximum hours a message's age can be for the bot to consider it in generating responses
   nodeCacheTime: parseInt(process.env.NODE_CACHE_TIME ?? '259200'), // The cache duration for stored data, specified in seconds.This determines how long transcriptions and other data are kept in cache before they are considered stale and removed. Example value is 259200, which translates to 3 days.
   promptInfo: process.env.PROMPT_INFO, // You can use this to customize the bot's personality and provide context about the group or individuals for tailored interactions.
-  superUserNumbers: process.env.SUPERUSER_NUMBERS?.split('|') || []
+  superUserNumbers: process.env.SUPERUSER_NUMBERS?.split('|') || [],
+  maxImageCreationRetry: 2
 };
 
 // Dynamically generate the bot's initial prompt based on configuration parameters
@@ -53,6 +54,7 @@ function getSystemPrompt(chatCfg: ChatConfiguration){
   {
     "message": "<your response>",
     "author": "${chatCfg.botName}",
+    "type": "<TEXT>",
     "emojiReact": "😊"
   }
   
@@ -60,6 +62,9 @@ function getSystemPrompt(chatCfg: ChatConfiguration){
 - In the "emojiReact" field, include an emoji that appropriately reacts to the user's last message.
 - For example, if the user shares good news, you might use "😊" or "🎉".
 - If no emoji reaction is appropriate for the context, you can leave this field empty.
+
+- **Voice Messages**:
+- By default, all your responses will use the common JSON/TEXT format, only if the user explicitly requests that you use your voice or generate audio will you respond using the "generate_speech" function
 
 - **Image Creation and Editing**:
 - When you ask the model to generate or edit images of any persona, do NOT mention their names. Instead, refer to them as "the person in the first reference image" and "the person in the second reference image" (or similar), so that the API uses only the input images to know who they are.

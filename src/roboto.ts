@@ -1,5 +1,5 @@
 import { OpenaiService } from './services/openai-service';
-import { Chat, Client, GroupChat, Message, MessageMedia, MessageTypes } from 'whatsapp-web.js';
+import { Chat, Client, GroupChat, Message, MessageContent, MessageMedia, MessageTypes } from 'whatsapp-web.js';
 import {
   bufferToStream,
   extractAnswer,
@@ -10,7 +10,7 @@ import {
   parseCommand
 } from './utils';
 import logger from './logger';
-import { CONFIG } from './config';
+import { AIConfig, CONFIG } from './config';
 import { AIAnswer, AIContent, AiMessage, AIProvider, AIRole } from './interfaces/ai-interfaces';
 import NodeCache from 'node-cache';
 import { elevenTTS } from './services/elevenlabs-service';
@@ -21,12 +21,18 @@ import { ChatConfiguration } from "./interfaces/chat-configuration";
 import path from "node:path";
 import * as fs from "node:fs";
 
+export interface ChatInfo {
+  id: string;
+  busy: boolean;
+  imageRetryCount: number;
+}
+
 export class RobotoClass {
 
   private openAIService: OpenaiService;
   private allowedTypes = [MessageTypes.STICKER, MessageTypes.TEXT, MessageTypes.IMAGE, MessageTypes.VOICE, MessageTypes.AUDIO];
   private cache: NodeCache;
-  private groupProcessingStatus: { [key: string]: boolean } = {};
+  private chatInfoList: ChatInfo[];
   private whatsappClient: Client;
   private chatConfig: ChatConfig;
 
@@ -35,6 +41,16 @@ export class RobotoClass {
     this.openAIService = new OpenaiService();
     this.cache = new NodeCache();
     this.chatConfig = new ChatConfig();
+    this.chatInfoList = [];
+  }
+
+  private getChatInfo(id: string): ChatInfo {
+    let data: ChatInfo = this.chatInfoList.find(g => g.id === id);
+    if (!data) {
+      data = {id: id, busy: false, imageRetryCount: 0};
+      this.chatInfoList.push(data);
+    }
+    return data;
   }
 
   /**
@@ -52,6 +68,7 @@ export class RobotoClass {
   public async readMessage(message: Message) {
 
     const chatData: Chat = await message.getChat();
+    const chatInfo = this.getChatInfo(chatData.id._serialized);
 
     try {
 
@@ -71,10 +88,10 @@ export class RobotoClass {
 
       if (!isQuoted && !isMentioned && !command && chatData.isGroup) return false;
 
-      while (this.groupProcessingStatus[chatData.id._serialized]) {
+      while (chatInfo.busy) {
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
-      this.groupProcessingStatus[chatData.id._serialized] = true;
+      chatInfo.busy = true;
 
       // Logs the message
       logger.info('[ProcessMessage] Starting message processing');
@@ -91,7 +108,7 @@ export class RobotoClass {
       const aiMessages: AiMessage[] = await this.generateMessageArray(chatData, chatCfg);
       const aiResponse: string = await this.sendToAI(message, aiMessages, chatCfg);
 
-      if(!aiResponse){
+      if (!aiResponse) {
         logger.info('[ProcessMessage] Operation without response. Done.');
         return null;
       }
@@ -101,7 +118,7 @@ export class RobotoClass {
       //If a valid response cannot be extracted, the process ends.
       if (!chatResponse.message) return;
 
-      if(chatResponse.emojiReact)
+      if (chatResponse.emojiReact)
         message.react(chatResponse.emojiReact);
 
       logger.info('[ProcessMessage] Operation completed.');
@@ -112,7 +129,8 @@ export class RobotoClass {
       return message.reply('Error 😔');
     } finally {
       chatData.clearState();
-      this.groupProcessingStatus[chatData.id._serialized] = false;
+      chatInfo.busy = false;
+      chatInfo.imageRetryCount = 0;
     }
   }
 
@@ -129,8 +147,8 @@ export class RobotoClass {
   private async commandSelect(message: Message) {
     const {command, commandMessage} = parseCommand(message.body);
     switch (command) {
-      // case "chatconfig":
-      //   return await this.handleChatConfigCommand(message, commandMessage!);
+        // case "chatconfig":
+        //   return await this.handleChatConfigCommand(message, commandMessage!);
       case "reset":
         return await message.react('👍');
       case "reloadConfig":
@@ -187,7 +205,7 @@ export class RobotoClass {
 
         // Limit the number of processed images to only the last few and ignore audio if cached
         const media = (isImage && imageCount < chatCfg.maxImages) || (isAudio && !cachedMessage) ?
-          await msg.downloadMedia() : null;
+            await msg.downloadMedia() : null;
 
         if (media && isImage) imageCount++;
 
@@ -203,7 +221,12 @@ export class RobotoClass {
           content.push({type: 'audio', value: '<Transcribing voice message...>'});
         }
         if (isAudio && cachedMessage) content.push({type: 'audio', value: cachedMessage});
-        if (isImage && media) content.push({type: 'image', value: media.data, media_type: media.mimetype, imageId: msg.id._serialized});
+        if (isImage && media) content.push({
+          type: 'image',
+          value: media.data,
+          media_type: media.mimetype,
+          imageId: msg.id._serialized
+        });
         if (isImage && !media) content.push({type: 'text', value: '<Unprocessed image>'});
         if (msg.body && !isOther) content.push({type: 'text', value: msg.body});
 
@@ -222,7 +245,10 @@ export class RobotoClass {
       const transcription = transcriptions[idx];
       const messageIdx = transcriptionPromise.index;
       messageList[messageIdx].content = messageList[messageIdx].content.map(c =>
-        c.type === 'audio' && c.value === '<Transcribing voice message...>' ? {type: 'audio', value: transcription} : c
+          c.type === 'audio' && c.value === '<Transcribing voice message...>' ? {
+            type: 'audio',
+            value: transcription
+          } : c
       );
     });
 
@@ -299,9 +325,19 @@ export class RobotoClass {
       const gptContent: Array<any> = [];
       msg.content.forEach(c => {
         const fromBot = msg.role == AIRole.ASSISTANT;
-        if (['text', 'audio'].includes(c.type))  gptContent.push({ type: fromBot?'output_text':'input_text', text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format:'json_object'}), imageId: c.imageId })
-        else if (c.imageId) gptContent.push({ type: fromBot?'output_text':'input_text', text: JSON.stringify({imageId: c.imageId, author: msg.name, type: 'text'}) });
-        if (['image'].includes(c.type))          gptContent.push({ type: 'input_image', image_url: `data:${c.media_type};base64,${c.value}`});
+        if (['text', 'audio'].includes(c.type)) gptContent.push({
+          type: fromBot ? 'output_text' : 'input_text',
+          text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format: 'json_object'}),
+          imageId: c.imageId
+        })
+        else if (c.imageId) gptContent.push({
+          type: fromBot ? 'output_text' : 'input_text',
+          text: JSON.stringify({imageId: c.imageId, author: msg.name, type: 'text'})
+        });
+        if (['image'].includes(c.type)) gptContent.push({
+          type: 'input_image',
+          image_url: `data:${c.media_type};base64,${c.value}`
+        });
       })
       responseAPIMessageList.push({content: gptContent, role: msg.role});
     })
@@ -359,42 +395,42 @@ export class RobotoClass {
         else updateOptions.botName = value;
 
         const updatedConfig = await this.chatConfig.updateChatConfig(
-          chat.id._serialized,
-          chat.name,
-          isGroup,
-          updateOptions
+            chat.id._serialized,
+            chat.name,
+            isGroup,
+            updateOptions
         );
 
         return message.reply(
-          subCommand === 'prompt'
-            ? `✅ Updated prompt for this ${isGroup ? 'group' : 'chat'}. The bot now: ${updatedConfig.promptInfo}`
-            : `✅ Bot name for this ${isGroup ? 'group' : 'chat'} has been set to: ${updatedConfig.botName}`
+            subCommand === 'prompt'
+                ? `✅ Updated prompt for this ${isGroup ? 'group' : 'chat'}. The bot now: ${updatedConfig.promptInfo}`
+                : `✅ Bot name for this ${isGroup ? 'group' : 'chat'} has been set to: ${updatedConfig.botName}`
         );
 
       case 'remove':
         const removed = this.chatConfig.removeChatConfig(chat.id._serialized);
         return message.reply(
-          removed
-            ? `✅ The custom prompt and bot name have been removed. The bot will use the default configuration.`
-            : `This ${isGroup ? 'group' : 'chat'} did not have a custom configuration.`
+            removed
+                ? `✅ The custom prompt and bot name have been removed. The bot will use the default configuration.`
+                : `This ${isGroup ? 'group' : 'chat'} did not have a custom configuration.`
         );
 
       case 'show':
         const currentConfig = this.chatConfig.getChatConfig(chat.id._serialized);
         if (!currentConfig) return message.reply(`This ${isGroup ? 'group' : 'chat'} does not have a custom configuration.`);
 
-        let response = currentConfig.promptInfo? `Current personality: ${currentConfig.promptInfo}`:``;
+        let response = currentConfig.promptInfo ? `Current personality: ${currentConfig.promptInfo}` : ``;
         if (currentConfig.botName) response += `\nBot name: ${currentConfig.botName ?? CONFIG.botConfig.botName}`;
 
         return message.reply(response);
 
       default:
         return message.reply(
-          "Available commands:\n" +
-          `- *-chatconfig prompt [description]*: Sets the bot's personality for this ${isGroup ? 'group' : 'chat'}\n` +
-          `- *-chatconfig botname [name]*: Sets the bot's name for this ${isGroup ? 'group' : 'chat'}\n` +
-          "- *-chatconfig remove*: Removes the custom configuration\n" +
-          "- *-chatconfig show*: Displays the current configuration"
+            "Available commands:\n" +
+            `- *-chatconfig prompt [description]*: Sets the bot's personality for this ${isGroup ? 'group' : 'chat'}\n` +
+            `- *-chatconfig botname [name]*: Sets the bot's name for this ${isGroup ? 'group' : 'chat'}\n` +
+            "- *-chatconfig remove*: Removes the custom configuration\n" +
+            "- *-chatconfig show*: Displays the current configuration"
         );
     }
   }
@@ -458,19 +494,22 @@ export class RobotoClass {
    * @param chatCfg
    * @returns             Promise<string> the result or an error/unrecognized message.
    */
-  public async executeFunctions(functionName: string, args: any, message: Message, chatCfg: ChatConfiguration): Promise<string>{
+  public async executeFunctions(functionName: string, args: any, message: Message, chatCfg: ChatConfiguration): Promise<string> {
+
+    const chatInfo = this.getChatInfo(chatCfg.id);
+
     const handlers: Record<string, (args: any) => Promise<string>> = {
       generate_speech: async (args) => {
         const {input, instructions, voice} = args;
-         this.speak(message, input, chatCfg, 'mp3', voice, instructions);
-         return null;
+        this.speak(message, input, chatCfg, 'mp3', voice, instructions);
+        return null;
       },
 
       create_image: async (args) => {
         const canCreateImages = await isSuperUser(message);
         if (!canCreateImages) return `The user who requested this does not have permission to create or edit images. They must request authorization from Diego.`
 
-        if(args.wait_message) await message.reply(args.wait_message);
+        if (args.wait_message) await message.reply(args.wait_message);
         try {
           const images = await this.openAIService.createImage(args.prompt, chatCfg, {
             background: args.background,
@@ -478,9 +517,12 @@ export class RobotoClass {
           });
           const media = new MessageMedia("image/png", images[0].b64_json, "image.png");
           await message.reply(media);
-        }catch (e){
-          logger.error(e.message);
-          return `Error creating image: ${e.message}`;
+        } catch (e) {
+          logger.error(`[${e.code}]: ${e.message}`);
+          if (chatInfo.imageRetryCount >= CONFIG.botConfig.maxImageCreationRetry || e.code == '400' ||  !e.message.toLowerCase().includes('safety system'))
+            return `Error creating image: ${e.message}`;
+          chatInfo.imageRetryCount++;
+          return `OpenAI’s safety filters blocked the request. Please call create_image again with a different phrasing. Rephrase the prompt to avoid sensitive content.`;
         }
         return null;
       },
@@ -493,7 +535,7 @@ export class RobotoClass {
             args.imageIds.map(async (imageId: string) => {
 
               if (imageId.startsWith("LOCAL-")) {
-                const filename = imageId.replace("LOCAL-", "")+".jpg";
+                const filename = imageId.replace("LOCAL-", "") + ".jpg";
                 const filePath = path.join(__dirname, '/../assets/images/', filename);
                 if (!fs.existsSync(filePath)) {
                   throw new Error(`No se encontró ningún archivo local con id=${imageId}`);
@@ -503,14 +545,11 @@ export class RobotoClass {
               }
 
               const refMsg = await this.whatsappClient.getMessageById(imageId);
-              if (!refMsg) {
-                throw new Error(`No se encontró ningún mensaje con imageId=${imageId}`);
-              }
+              if (!refMsg) throw new Error(`No se encontró ningún mensaje con imageId=${imageId}`);
 
               const media = await refMsg.downloadMedia();
-              if (!media || !media.data) {
-                throw new Error(`No se pudo descargar el media de ${imageId}`);
-              }
+              if (!media || !media.data) throw new Error(`No se pudo descargar el media de ${imageId}`);
+
               const buffer = Buffer.from(media.data, 'base64');
               return bufferToStream(buffer);
             })
@@ -523,13 +562,16 @@ export class RobotoClass {
         try {
           const edited = await this.openAIService.editImage(imageStreams, args.prompt, chatCfg, maskStream, {
             background: args.background,
-            quality: 'medium'
+            quality: 'medium', size: "1536x1024"
           });
           const mediaReply = new MessageMedia("image/png", edited[0].b64_json, "edited.png");
           await message.reply(mediaReply);
-        }catch (e){
-          logger.error(e.message);
-          return `Error creating image: ${e.message}`;
+        } catch (e) {
+          logger.error(`[${e.code}]: ${e.message}`);
+          if (chatInfo.imageRetryCount >= CONFIG.botConfig.maxImageCreationRetry || e.code == '400' || !e.message.toLowerCase().includes('safety system'))
+            return `Error editing image: ${e.message}`;
+          chatInfo.imageRetryCount++;
+          return `OpenAI’s safety filters blocked the request. Please call edit_image again with a different phrasing. Rephrase the prompt to avoid sensitive content.`;
         }
         return null;
       }
@@ -554,10 +596,9 @@ export class RobotoClass {
    * @param message     The original Message to reply to.
    * @param responseMsg The text content to send.
    * @param isGroup     True if this is a group chat.
-   * @param client      The WhatsApp Client instance.
    * @returns           Promise<Message> of the sent reply.
    */
-  private returnResponse(message, responseMsg, isGroup) {
+  private returnResponse(message: Message, responseMsg: MessageContent, isGroup: boolean) {
     if (isGroup) return message.reply(responseMsg);
     else return this.whatsappClient.sendMessage(message.from, responseMsg);
   }

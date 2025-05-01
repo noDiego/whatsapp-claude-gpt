@@ -55,7 +55,7 @@ export const AITools: Array<Tool> = [
             properties: {
                 prompt: { type: "string", description: "Description of the image to generate." },
                 background: { type: ["string","null"], enum: ["opaque","transparent","auto"], description: "Transparent or opaque background. OPTIONAL", nullable: true },
-                wait_message: { type: ["string", "null"], description: "Message sent to the user at the start of processing asking them to please wait. OPTIONAL.", nullable: true }
+                wait_message: { type: ["string", "null"], description: "Message sent to the user at the start of processing asking them to please wait one minute. OPTIONAL.", nullable: true }
             },
             required: ["prompt", "background", "wait_message"],
             additionalProperties: false
@@ -78,7 +78,7 @@ This function always requires at least one reference image as input, and must no
                 },
                 mask: { type: ["string","null"], description: "Base64 of the mask (PNG with alpha channel). OPTIONAL", nullable: true },
                 background: { type: ["string","null"], enum: ["opaque","transparent","auto"], description: "Transparent or opaque background. OPTIONAL", nullable: true },
-                wait_message: { type: ["string", "null"], description: "Message sent to the user at the start of processing asking them to please wait. OPTIONAL.", nullable: true }
+                wait_message: { type: ["string", "null"], description: "Message sent to the user at the start of processing asking them to please wait one minute. OPTIONAL.", nullable: true }
             },
             required: ["prompt","imageIds","mask","background", "wait_message"],
             additionalProperties: false
