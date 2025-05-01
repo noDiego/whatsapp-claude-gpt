@@ -133,7 +133,7 @@ export class RobotoClass {
       //   return await this.handleChatConfigCommand(message, commandMessage!);
       case "reset":
         return await message.react('👍');
-      case "realoadConfig":
+      case "reloadConfig":
         await message.react('👍');
         return await this.chatConfig.reloadConfigurations();
       default:
@@ -151,10 +151,10 @@ export class RobotoClass {
    * - Initiates transcription for voice messages and waits for results.
    *
    * @param chatData           The Chat object representing the conversation.
-   * @param chatConfiguration  ChatConfiguration with custom prompts, bot name, etc.
+   * @param chatCfg  ChatConfiguration with custom prompts, bot name, etc.
    * @returns                  Promise<AiMessage[]> array of formatted messages for AI consumption.
    */
-  private async generateMessageArray(chatData: Chat, chatConfiguration: ChatConfiguration): Promise<AiMessage[]> {
+  private async generateMessageArray(chatData: Chat, chatCfg: ChatConfiguration): Promise<AiMessage[]> {
 
     const actualDate = new Date();
 
@@ -166,7 +166,7 @@ export class RobotoClass {
     let imageCount: number = 0;
 
     // Retrieve the last 'limit' number of messages to send them in order
-    const fetchedMessages = await chatData.fetchMessages({limit: chatConfiguration.maxMsgsLimit});
+    const fetchedMessages = await chatData.fetchMessages({limit: chatCfg.maxMsgsLimit});
     // Check for "-reset" command in chat history to potentially restart context
     const resetIndex = fetchedMessages.map(msg => msg.body).lastIndexOf("-reset");
     const messagesToProcess = resetIndex >= 0 ? fetchedMessages.slice(resetIndex + 1) : fetchedMessages;
@@ -175,7 +175,7 @@ export class RobotoClass {
       try {
         // Validate if the message was written less than 24 (or maxHoursLimit) hours ago; if older, it's not considered
         const msgDate = new Date(msg.timestamp * 1000);
-        if ((actualDate.getTime() - msgDate.getTime()) / (1000 * 60 * 60) > chatConfiguration.maxHoursLimit) break;
+        if ((actualDate.getTime() - msgDate.getTime()) / (1000 * 60 * 60) > chatCfg.maxHoursLimit) break;
 
         // Checks if a message already exists in the cache
         const cachedMessage = this.getCachedMessage(msg);
@@ -186,20 +186,20 @@ export class RobotoClass {
         const isOther = !isImage && !isAudio && msg.type != 'chat';
 
         // Limit the number of processed images to only the last few and ignore audio if cached
-        const media = (isImage && imageCount < chatConfiguration.maxImages) || (isAudio && !cachedMessage) ?
+        const media = (isImage && imageCount < chatCfg.maxImages) || (isAudio && !cachedMessage) ?
           await msg.downloadMedia() : null;
 
         if (media && isImage) imageCount++;
 
         const role = (!msg.fromMe || isImage) ? AIRole.USER : AIRole.ASSISTANT;
-        const name = msg.fromMe ? chatConfiguration.botName : (await getContactName(msg));
+        const name = msg.fromMe ? chatCfg.botName : (await getContactName(msg));
 
         // Assemble the content as a mix of text and any included media
         const content: Array<AIContent> = [];
         if (isOther)
           content.push({type: 'text', value: getUnsupportedMessage(msg.type, msg.body)});
         else if (isAudio && media && !cachedMessage) {
-          transcriptionPromises.push({index: messageList.length, promise: this.transcribeVoice(media, msg)});
+          transcriptionPromises.push({index: messageList.length, promise: this.transcribeVoice(media, msg, chatCfg)});
           content.push({type: 'audio', value: '<Transcribing voice message...>'});
         }
         if (isAudio && cachedMessage) content.push({type: 'audio', value: cachedMessage});
@@ -261,13 +261,13 @@ export class RobotoClass {
    * @param chatCfg
    * @returns               Promise<void> resolves when the voice message is sent.
    */
-  private async speak(message: Message, messageToSay: string | undefined, chatCfg: ChatConfiguration, responseFormat?: string, voice?: string, instructions?: string,) {
+  private async speak(message: Message, messageToSay: string | undefined, chatCfg: ChatConfiguration, responseFormat?: string, voice?: string, instructions?: string) {
     try {
       let base64Audio;
       if (chatCfg.ttsProvider == AIProvider.ELEVENLABS) {
         base64Audio = await elevenTTS(messageToSay);
       } else {
-        const audioBuffer = await this.openAIService.speech(messageToSay, responseFormat, voice, instructions);
+        const audioBuffer = await this.openAIService.speech(messageToSay, chatCfg, responseFormat, voice, instructions);
         base64Audio = audioBuffer.toString('base64');
       }
 
@@ -410,9 +410,10 @@ export class RobotoClass {
    *
    * @param media    The MessageMedia containing base64-encoded audio.
    * @param message  The original Message for cache key.
+   * @param chatCfg
    * @returns         Promise<string> the transcribed text or error placeholder.
    */
-  private async transcribeVoice(media: MessageMedia, message: Message): Promise<string> {
+  private async transcribeVoice(media: MessageMedia, message: Message, chatCfg: ChatConfiguration): Promise<string> {
     try {
 
       // Check if the transcription exists in the cache
@@ -427,7 +428,7 @@ export class RobotoClass {
 
       logger.debug(`[OpenAI->transcribeVoice] Starting audio transcription`);
 
-      const transcribedText = await this.openAIService.transcription(audioStream);
+      const transcribedText = await this.openAIService.transcription(audioStream, chatCfg);
 
       // Log the transcribed text
       logger.debug(`[OpenAI->transcribeVoice] Transcribed text: ${transcribedText}`);
@@ -470,9 +471,17 @@ export class RobotoClass {
         if (!canCreateImages) return `The user who requested this does not have permission to create or edit images. They must request authorization from Diego.`
 
         if(args.wait_message) await message.reply(args.wait_message);
-        const images = await this.openAIService.createImage(args.prompt, {background: args.background});
-        const media = new MessageMedia("image/png", images[0].b64_json, "image.png");
-        await message.reply(media);
+        try {
+          const images = await this.openAIService.createImage(args.prompt, chatCfg, {
+            background: args.background,
+            quality: 'low'
+          });
+          const media = new MessageMedia("image/png", images[0].b64_json, "image.png");
+          await message.reply(media);
+        }catch (e){
+          logger.error(e.message);
+          return `Error creating image: ${e.message}`;
+        }
         return null;
       },
 
@@ -511,9 +520,17 @@ export class RobotoClass {
         if (args.mask) maskStream = bufferToStream(Buffer.from(args.mask, 'base64'));
         if (args.wait_message) await message.reply(args.wait_message);
 
-        const edited = await this.openAIService.editImage(imageStreams, args.prompt, maskStream,{ background: args.background });
-        const mediaReply = new MessageMedia("image/png", edited[0].b64_json, "edited.png");
-        await message.reply(mediaReply);
+        try {
+          const edited = await this.openAIService.editImage(imageStreams, args.prompt, chatCfg, maskStream, {
+            background: args.background,
+            quality: 'low'
+          });
+          const mediaReply = new MessageMedia("image/png", edited[0].b64_json, "edited.png");
+          await message.reply(mediaReply);
+        }catch (e){
+          logger.error(e.message);
+          return `Error creating image: ${e.message}`;
+        }
         return null;
       }
     };

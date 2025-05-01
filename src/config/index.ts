@@ -53,7 +53,6 @@ function getSystemPrompt(chatCfg: ChatConfiguration){
   {
     "message": "<your response>",
     "author": "${chatCfg.botName}",
-    "type": "<TEXT>",
     "emojiReact": "😊"
   }
   
