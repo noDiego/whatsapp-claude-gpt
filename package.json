@@ -41,6 +41,7 @@
     "@anthropic-ai/sdk": "^0.25.2",
     "axios": "^1.8.4",
     "dotenv": "^16.5.0",
+    "lodash.mergewith": "^4.6.2",
     "node-cache": "^5.1.2",
     "openai": "^4.96.2",
     "pg": "^8.15.6",

@@ -5,6 +5,7 @@ import logger from '../logger';
 import { CONFIG } from './index';
 import { ChatConfiguration } from "../interfaces/chat-configuration";
 import { PostgresClient } from "../db/postgresql";
+import mergeWith from 'lodash.mergewith';
 
 const CHATCONFIG_FILE = path.join(process.cwd(), 'chat-configurations.json');
 
@@ -145,9 +146,17 @@ export class ChatConfig {
       voiceCreationEnabled: CONFIG.AIConfig.voiceCreationEnabled
     }
 
-    const override = this.readConfig(chatId, chatName);
+    const override = this.readConfig(chatId, chatName) || {};
 
-    return { ...defaults, ...override }
+    const customizer = (objVal: any, srcVal: any) => {
+      if (srcVal === undefined || srcVal === null ||
+          (typeof srcVal === 'string' && srcVal.trim() === '')) {
+        return objVal;
+      }
+      return undefined;
+    };
+
+    return mergeWith({...defaults}, override, customizer);
   }
 
   public async updateChatConfig(chatId: string, chatName: string, isGroup: boolean, options: {

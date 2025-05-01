@@ -164,12 +164,12 @@ export function logConfigInfo() {
   // Voice message handling
 
   // Transcription (Speech-to-Text)
-  logger.info(`TRANSCRIPTION (Speech-to-Text):`);
+  logger.info(`✍️ TRANSCRIPTION (Speech-to-Text):`);
   logger.info(`  • Model: ${AIConfig.sttModel}`);
   logger.info(`  • Language: ${AIConfig.sttLanguage}`);
 
   // Speech (Text-to-Speech)
-  logger.info(` SPEECH (Text-to-Speech):`);
+  logger.info(`🔊 SPEECH (Text-to-Speech):`);
   logger.info(`  • Provider: ${AIConfig.ttsProvider}`);
   logger.info(`  • Model: ${AIConfig.ttsModel}`);
   logger.info(`  • Voice: ${AIConfig.ttsVoice}`);
