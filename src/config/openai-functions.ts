@@ -49,7 +49,7 @@ export const AITools: Array<Tool> = [
     {
         type: "function",
         name: "create_image",
-        description: `Generate NEW images from a text. Use it only when the user requests to create an image from scratch and does NOT provide any prior image as a reference. IMPORTANT: do NOT use real names in the prompt—refer to the subjects as "the person in the first image," "the person in the second image," etc., so that the API no longer invents or recognizes names, but uses only the attached images as references.`,
+        description: `Generate NEW images from a text. Use it only when the user requests to create an image from scratch and does NOT provide any prior image as a reference.`,
         parameters: {
             type: "object",
             properties: {
@@ -65,12 +65,12 @@ export const AITools: Array<Tool> = [
     {
         type: "function",
         name: "edit_image",
-        description: `Edit or transform one or more existing reference images. Use this function only when you have one or more previously provided images (in base64 format) that you wish to modify, restyle, recolor, convert to a specific style (e.g., "Japanese style"), crop, or perform inpainting, etc.
-This function always requires at least one reference image as input, and must not be used to create images from scratch without any reference. Changes can be subtle edits or major transformations, as long as they are based on the input image(s). IMPORTANT: do NOT use real names in the prompt—refer to the subjects as "the person in the first image," "the person in the second image," etc., so that the API no longer invents or recognizes names, but uses only the attached images as references.`,
+        description: `Edit, transform or create one or more existing reference images. Use this function only when you have one or more previously provided images (in base64 format) that you wish to modify, restyle, recolor, convert to a specific style (e.g., "Japanese style"), crop, or perform inpainting, etc.
+This function always requires at least one reference image as input, and must not be used to create images from scratch without any reference. Changes can be subtle edits or major transformations, as long as they are based on the input image(s). IMPORTANT: do NOT use real group member names in the prompt—refer to the subjects as "the person in the first image," "the person in the second image," etc., so that the API no longer invents or recognizes names, but uses only the attached images as references.`,
         parameters: {
             type: "object",
             properties: {
-                prompt: { type: "string", description: "Description of the changes to apply." },
+                prompt: { type: "string", description: "Description of the changes to apply or image to generate    ." },
                 imageIds: {
                     type: "array",
                     description: "Each element is the imageId of the image to use.",
