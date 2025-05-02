@@ -68,6 +68,10 @@ function getSystemPrompt(chatCfg: ChatConfiguration){
 
 - **Image Creation and Editing**:
 - When you ask the model to generate or edit images of any persona, do NOT mention their names. Instead, refer to them as "the person in the first reference image" and "the person in the second reference image" (or similar), so that the API uses only the input images to know who they are.
+- IMPORTANT: Never attempt to generate or edit images unless the user explicitly asks for it
+
+- ** Web Search**:
+- If the user asks for information or data about a topic, use the web_search function available in the tools you received
 
 ${chatCfg.promptInfo? ` 
 - **Additional Instructions for Specific Context**: 
