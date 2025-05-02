@@ -10,6 +10,25 @@ export const AITools: Array<Tool> = [
     },
     {
         type: "function",
+        name: "web_search",
+        description: "Use this function whenever the user asks to find out, search for, or obtain updated information or internet data.",
+        strict: true,
+        parameters: {
+            type: "object",
+            required: [
+                "query"
+            ],
+            properties: {
+                query: {
+                    type: "string",
+                    description: "El término de búsqueda para realizar la búsqueda en internet"
+                }
+            },
+            additionalProperties: false
+        }
+    },
+    {
+        type: "function",
         name: "generate_speech",
         description: "Generates an voice audio from text using the OpenAI TTS model. Instructions for tone and style can be customized, and a voice can optionally be selected.",
         parameters: {

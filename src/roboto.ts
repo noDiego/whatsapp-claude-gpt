@@ -505,6 +505,10 @@ export class RobotoClass {
         return null;
       },
 
+      web_search: async (args) => {
+        return await this.openAIService.webSearch(args.query);
+      },
+
       create_image: async (args) => {
         const canCreateImages = await isSuperUser(message);
         if (!canCreateImages) return `The user who requested this does not have permission to create or edit images. They must request authorization from Diego.`

@@ -44,8 +44,9 @@ export class OpenaiService {
       text: { format: { type: responseType } },
       reasoning: {},
       tools: tools,
-      temperature: 0.8,
-      top_p: 0.9,
+      temperature: 1,
+      max_output_tokens: 2048,
+      top_p: 1,
       store: true
     });
 
@@ -57,6 +58,8 @@ export class OpenaiService {
 
     const updatedMessages: ResponseInput = [...messageList as any];
     let gotAnyResult = false;
+
+    const a = `When the user asks \\"search for information\\", \\"search data\\", or uses keywords like \\"search\\", \\"investigate\\", \\"find out\\", you should use the web_search function and never create_image unless they explicitly mention creating images`
 
     for (const toolCall of functionCalls) {
       const name = toolCall.name;
@@ -87,6 +90,42 @@ export class OpenaiService {
     }
     if (!gotAnyResult) return null;
     return this.sendChatWithTools(updatedMessages, responseType, tools, message, chatCfg);
+  }
+
+
+  async webSearch(searchQuery: string){
+
+    logger.info(`[OpenAI->webSearch] Searching "${searchQuery}"`);
+
+    const responseResult = await this.client.responses.create({
+      model: 'gpt-4.1-mini',
+      input: [{
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: searchQuery
+          }
+        ]
+      }],
+      text: { format: { type: 'text' } },
+      reasoning: {},
+      tools: [
+        {
+          type: "web_search_preview",
+          user_location: {
+            type: "approximate"
+          },
+          search_context_size: "medium"
+        }
+      ],
+      temperature: 1,
+      max_output_tokens: 2048,
+      top_p: 1,
+      store: true
+    });
+
+    return responseResult.output_text;
   }
 
   /**
