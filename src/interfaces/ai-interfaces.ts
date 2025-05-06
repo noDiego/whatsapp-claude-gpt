@@ -11,7 +11,7 @@ export enum AIRole {
 }
 
 export interface AIContent {
-  imageId?: string;
+  image_id?: string;
   value?: string;
   type: 'text' | 'image' | 'audio';
   media_type?: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' | string;

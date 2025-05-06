@@ -214,20 +214,19 @@ export class RobotoClass {
 
         // Assemble the content as a mix of text and any included media
         const content: Array<AIContent> = [];
-        if (isOther)
-          content.push({type: 'text', value: getUnsupportedMessage(msg.type, msg.body)});
-        else if (isAudio && media && !cachedMessage) {
-          transcriptionPromises.push({index: messageList.length, promise: this.transcribeVoice(media, msg, chatCfg)});
-          content.push({type: 'audio', value: '<Transcribing voice message...>'});
-        }
-        if (isAudio && cachedMessage) content.push({type: 'audio', value: cachedMessage});
         if (isImage && media) content.push({
           type: 'image',
           value: media.data,
           media_type: media.mimetype,
-          imageId: msg.id._serialized
+          image_id: msg.id._serialized
         });
         if (isImage && !media) content.push({type: 'text', value: '<Unprocessed image>'});
+        if (isOther) content.push({type: 'text', value: getUnsupportedMessage(msg.type, msg.body)});
+        if (isAudio && media && !cachedMessage) {
+          transcriptionPromises.push({index: messageList.length, promise: this.transcribeVoice(media, msg, chatCfg)});
+          content.push({type: 'audio', value: '<Transcribing voice message...>'});
+        }
+        if (isAudio && cachedMessage) content.push({type: 'audio', value: cachedMessage});
         if (msg.body && !isOther) content.push({type: 'text', value: msg.body});
 
         messageList.push({role: role, name: name, content: content});
@@ -327,16 +326,19 @@ export class RobotoClass {
         const fromBot = msg.role == AIRole.ASSISTANT;
         if (['text', 'audio'].includes(c.type)) gptContent.push({
           type: fromBot ? 'output_text' : 'input_text',
-          text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format: 'json_object', imageId: c.imageId}),
-        })
-        else if (c.imageId) gptContent.push({
-          type: fromBot ? 'output_text' : 'input_text',
-          text: JSON.stringify({imageId: c.imageId, author: msg.name, type: 'text'})
+          text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format: 'json_object'}),
         });
-        if (['image'].includes(c.type)) gptContent.push({
-          type: 'input_image',
-          image_url: `data:${c.media_type};base64,${c.value}`
-        });
+        if (['image'].includes(c.type)) {
+          gptContent.push({
+            type: 'input_image',
+            image_url: `data:${c.media_type};base64,${c.value}`
+          });
+          gptContent.push({
+            image_id: c.image_id,
+            author: msg.name,
+            note: 'refer to this image by its image_id'
+          });
+        }
       })
       responseAPIMessageList.push({content: gptContent, role: msg.role});
     })
