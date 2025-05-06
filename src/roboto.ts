@@ -334,9 +334,12 @@ export class RobotoClass {
             image_url: `data:${c.media_type};base64,${c.value}`
           });
           gptContent.push({
-            image_id: c.image_id,
-            author: msg.name,
-            note: 'refer to this image by its image_id'
+            type: fromBot ? 'output_text' : 'input_text',
+            text: JSON.stringify({
+              image_id: c.image_id,
+              author: msg.name,
+              note: 'refer to this image by its image_id'
+            })
           });
         }
       })
