@@ -327,8 +327,7 @@ export class RobotoClass {
         const fromBot = msg.role == AIRole.ASSISTANT;
         if (['text', 'audio'].includes(c.type)) gptContent.push({
           type: fromBot ? 'output_text' : 'input_text',
-          text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format: 'json_object'}),
-          imageId: c.imageId
+          text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format: 'json_object', imageId: c.imageId}),
         })
         else if (c.imageId) gptContent.push({
           type: fromBot ? 'output_text' : 'input_text',

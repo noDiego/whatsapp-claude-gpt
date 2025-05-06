@@ -21,7 +21,7 @@ export const AITools: Array<Tool> = [
             properties: {
                 query: {
                     type: "string",
-                    description: "El término de búsqueda para realizar la búsqueda en internet"
+                    description: "Search term to perform the internet search"
                 }
             },
             additionalProperties: false
