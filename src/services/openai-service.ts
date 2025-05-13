@@ -93,9 +93,9 @@ export class OpenaiService {
   }
 
 
-  async webSearch(searchQuery: string){
+  async webSearch(searchQuery: string, options: { country: string, region: string, city: string, timezone: string }){
 
-    logger.info(`[OpenAI->webSearch] Searching "${searchQuery}"`);
+    logger.info(`[OpenAI->webSearch] Searching "${searchQuery}" with options :${JSON.stringify(options)}`);
 
     const responseResult = await this.client.responses.create({
       model: 'gpt-4.1-mini',
@@ -114,7 +114,11 @@ export class OpenaiService {
         {
           type: "web_search_preview",
           user_location: {
-            type: "approximate"
+            type: "approximate",
+            country: options.country,
+            region: options.region,
+            city: options.city,
+            timezone: options.region || options.city || options.city ? null : options.timezone
           },
           search_context_size: "medium"
         }

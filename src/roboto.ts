@@ -510,7 +510,7 @@ export class RobotoClass {
       },
 
       web_search: async (args) => {
-        return await this.openAIService.webSearch(args.query);
+        return await this.openAIService.webSearch(args.query, args);
       },
 
       create_image: async (args) => {

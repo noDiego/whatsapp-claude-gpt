@@ -2,27 +2,19 @@ import {Tool} from "openai/src/resources/responses/responses";
 
 export const AITools: Array<Tool> = [
     {
-        type: "web_search_preview",
-        user_location: {
-            type: "approximate"
-        },
-        search_context_size: "medium"
-    },
-    {
         type: "function",
         name: "web_search",
         description: "Use this function whenever the user asks to find out, search for, or obtain updated information or internet data.",
         strict: true,
         parameters: {
             type: "object",
-            required: [
-                "query"
-            ],
+            required: [ "query", "country", "region", "city","timezone" ],
             properties: {
-                query: {
-                    type: "string",
-                    description: "Search term to perform the internet search"
-                }
+                query: { type: "string", description: "Search term to perform the internet search" },
+                country: { type: "string", description: "Two-letter ISO country code (e.g., CL for Chile)" },
+                region: { type: "string", description: "Region or state (free text, e.g., Region Metropolitana)" },
+                city: { type: "string", description: "City (free text, e.g., Santiago)" },
+                timezone: { type: ["string","null"], description: "IANA timezone, e.g., America/Santiago", nullable: true }
             },
             additionalProperties: false
         }
