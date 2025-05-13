@@ -11,9 +11,9 @@ export const AITools: Array<Tool> = [
             required: [ "query", "country", "region", "city","timezone" ],
             properties: {
                 query: { type: "string", description: "Search term to perform the internet search" },
-                country: { type: "string", description: "Two-letter ISO country code (e.g., CL for Chile)" },
-                region: { type: "string", description: "Region or state (free text, e.g., Region Metropolitana)" },
-                city: { type: "string", description: "City (free text, e.g., Santiago)" },
+                country: { type: ["string","null"], description: "Two-letter ISO country code (e.g., CL for Chile)", nullable: true },
+                region: { type: ["string","null"], description: "Region or state (free text, e.g., Region Metropolitana)", nullable: true },
+                city: { type: ["string","null"], description: "City (free text, e.g., Santiago)", nullable: true },
                 timezone: { type: ["string","null"], description: "IANA timezone, e.g., America/Santiago", nullable: true }
             },
             additionalProperties: false
