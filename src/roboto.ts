@@ -521,7 +521,7 @@ export class RobotoClass {
         try {
           const images = await this.openAIService.createImage(args.prompt, chatCfg, {
             background: args.background,
-            quality: 'low'
+            quality: 'medium'
           });
           const media = new MessageMedia("image/png", images[0].b64_json, "image.png");
           await message.reply(media);
@@ -535,7 +535,7 @@ export class RobotoClass {
         return null;
       },
 
-      edit_image: async (args) => {
+      transform_image: async (args) => {
         const canCreateImages = await isSuperUser(message);
         if (!canCreateImages) return `The user who requested this does not have permission to create or edit images. They must request authorization from Diego.`
 
@@ -576,10 +576,10 @@ export class RobotoClass {
           await message.reply(mediaReply);
         } catch (e) {
           logger.error(`[${e.code}]: ${e.message}`);
-          if (chatInfo.imageRetryCount >= CONFIG.botConfig.maxImageCreationRetry || e.code == '400' || !e.message.toLowerCase().includes('safety system'))
+          if (chatInfo.imageRetryCount >= CONFIG.botConfig.maxImageCreationRetry || e.code != '400' || !e.message.toLowerCase().includes('safety system'))
             return `Error editing image: ${e.message}`;
           chatInfo.imageRetryCount++;
-          return `OpenAI’s safety filters blocked the request. Please call edit_image again with a different phrasing. Rephrase the prompt to avoid sensitive content.`;
+          return `OpenAI’s safety filters blocked the request. Please call transform_image again with a different phrasing. Rephrase the prompt to avoid sensitive content.`;
         }
         return null;
       }

@@ -223,11 +223,13 @@ export class OpenaiService {
       prompt,
       n: options?.n ?? 1,
       size: options?.size ?? "1024x1024",
-      quality: options?.quality ?? "low",
+      quality: options?.quality ?? "medium",
       background: options?.background ?? "auto",
       output_format: "jpeg",
       moderation: 'low'
     };
+
+    logger.debug(`[OpenAI->editImage] Creating Imagen with Quality:${params.quality}. Size:${params.size}`);
 
     if (maskFile) {
       params.mask = maskFile;

@@ -75,9 +75,8 @@ export const AITools: Array<Tool> = [
     },
     {
         type: "function",
-        name: "edit_image",
-        description: `Edit, transform or create one or more existing reference images. Use this function only when you have one or more previously provided images (in base64 format) that you wish to modify, restyle, recolor, convert to a specific style (e.g., "Japanese style"), crop, or perform inpainting, etc.
-This function always requires at least one reference image as input, and must not be used to create images from scratch without any reference. Changes can be subtle edits or major transformations, as long as they are based on the input image(s). IMPORTANT: do NOT use real group member names in the prompt—refer to the subjects as "the person in the first image," "the person in the second image," etc., so that the API no longer invents or recognizes names, but uses only the attached images as references.`,
+        name: "transform_image",
+        description: `Create, transform, or edit images using one or more provided reference images (in base64 format). Use this function both for subtle modifications and for generating new images that are based on the input images (for example, changing the artistic style, merging elements, or reinterpreting the scene). At least one reference image is always required as a base. Important: never use real person names in the prompt; always refer to subjects as "the person in the first image", etc. Do not use this function to create images entirely from scratch without reference images.`,
         parameters: {
             type: "object",
             properties: {
