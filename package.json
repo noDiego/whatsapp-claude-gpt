@@ -46,7 +46,7 @@
     "openai": "^4.96.2",
     "pg": "^8.15.6",
     "qrcode-terminal": "^0.12.0",
-    "whatsapp-web.js": "^1.27.0",
+    "whatsapp-web.js": "^1.30.0",
     "winston": "^3.17.0",
     "winston-daily-rotate-file": "^5.0.0"
   },
