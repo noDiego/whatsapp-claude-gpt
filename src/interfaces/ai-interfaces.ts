@@ -15,6 +15,7 @@ export interface AIContent {
   value?: string;
   type: 'text' | 'image' | 'audio';
   media_type?: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' | string;
+  dateString: string;
 }
 
 export enum AIProvider {

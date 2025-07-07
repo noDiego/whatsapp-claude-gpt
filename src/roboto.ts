@@ -218,16 +218,17 @@ export class RobotoClass {
           type: 'image',
           value: media.data,
           media_type: media.mimetype,
-          image_id: msg.id._serialized
+          image_id: msg.id._serialized,
+          dateString: new Date(msg.timestamp).toLocaleString()
         });
-        if (isImage && !media) content.push({type: 'text', value: '<Unprocessed image>'});
-        if (isOther) content.push({type: 'text', value: getUnsupportedMessage(msg.type, msg.body)});
+        if (isImage && !media) content.push({type: 'text', value: '<Unprocessed image>', dateString: new Date(msg.timestamp).toLocaleString()});
+        if (isOther) content.push({type: 'text', value: getUnsupportedMessage(msg.type, msg.body), dateString: new Date(msg.timestamp).toLocaleString()});
         if (isAudio && media && !cachedMessage) {
           transcriptionPromises.push({index: messageList.length, promise: this.transcribeVoice(media, msg, chatCfg)});
-          content.push({type: 'audio', value: '<Transcribing voice message...>'});
+          content.push({type: 'audio', value: '<Transcribing voice message...>', dateString: new Date(msg.timestamp).toLocaleString()});
         }
-        if (isAudio && cachedMessage) content.push({type: 'audio', value: cachedMessage});
-        if (msg.body && !isOther) content.push({type: 'text', value: msg.body});
+        if (isAudio && cachedMessage) content.push({type: 'audio', value: cachedMessage, dateString: new Date(msg.timestamp).toLocaleString()});
+        if (msg.body && !isOther) content.push({type: 'text', value: msg.body, dateString: new Date(msg.timestamp).toLocaleString()});
 
         messageList.push({role: role, name: name, content: content});
       } catch (e: any) {
@@ -246,7 +247,8 @@ export class RobotoClass {
       messageList[messageIdx].content = messageList[messageIdx].content.map(c =>
           c.type === 'audio' && c.value === '<Transcribing voice message...>' ? {
             type: 'audio',
-            value: transcription
+            value: transcription,
+            dateString: c.dateString
           } : c
       );
     });
@@ -326,7 +328,7 @@ export class RobotoClass {
         const fromBot = msg.role == AIRole.ASSISTANT;
         if (['text', 'audio'].includes(c.type)) gptContent.push({
           type: fromBot ? 'output_text' : 'input_text',
-          text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format: 'json_object'}),
+          text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format: 'json_object', date: c.dateString}),
         });
         if (['image'].includes(c.type)) {
           gptContent.push({
@@ -338,7 +340,8 @@ export class RobotoClass {
             text: JSON.stringify({
               image_id: c.image_id,
               author: msg.name,
-              note: 'refer to this image by its image_id'
+              note: 'refer to this image by its image_id',
+              date: c.dateString
             })
           });
         }
