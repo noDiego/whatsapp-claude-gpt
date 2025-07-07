@@ -19,9 +19,9 @@ export function getFormattedDate() {
 }
 
 export function logMessage(message: Message, chat: Chat) {
-  const actualDate = new Date();
+  const msgDate = new Date(message.timestamp * 1000);
   logger.info(
-    `{ chatUser:${chat.id.user}, isGroup:${chat.isGroup}, grId:${chat.id._serialized}, grName:${chat.name}, author:'${message.author}', date:'${actualDate.toLocaleDateString()}-${actualDate.toLocaleTimeString()}', msg:'${message.body}' }`
+    `[ReceivedMessage] {chatUser:${chat.id.user}, isGroup:${chat.isGroup}, grId:${chat.id._serialized}, grName:${chat.name}, date:'${msgDate.toLocaleString()}', msg:'${message.body}'}`
   );
 }
 

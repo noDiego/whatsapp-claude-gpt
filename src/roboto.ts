@@ -219,16 +219,16 @@ export class RobotoClass {
           value: media.data,
           media_type: media.mimetype,
           image_id: msg.id._serialized,
-          dateString: new Date(msg.timestamp).toLocaleString()
+          dateString: msgDate.toLocaleString()
         });
-        if (isImage && !media) content.push({type: 'text', value: '<Unprocessed image>', dateString: new Date(msg.timestamp).toLocaleString()});
-        if (isOther) content.push({type: 'text', value: getUnsupportedMessage(msg.type, msg.body), dateString: new Date(msg.timestamp).toLocaleString()});
+        if (isImage && !media) content.push({type: 'text', value: '<Unprocessed image>', dateString: msgDate.toLocaleString()});
+        if (isOther) content.push({type: 'text', value: getUnsupportedMessage(msg.type, msg.body), dateString: msgDate.toLocaleString()});
         if (isAudio && media && !cachedMessage) {
           transcriptionPromises.push({index: messageList.length, promise: this.transcribeVoice(media, msg, chatCfg)});
-          content.push({type: 'audio', value: '<Transcribing voice message...>', dateString: new Date(msg.timestamp).toLocaleString()});
+          content.push({type: 'audio', value: '<Transcribing voice message...>', dateString: msgDate.toLocaleString()});
         }
-        if (isAudio && cachedMessage) content.push({type: 'audio', value: cachedMessage, dateString: new Date(msg.timestamp).toLocaleString()});
-        if (msg.body && !isOther) content.push({type: 'text', value: msg.body, dateString: new Date(msg.timestamp).toLocaleString()});
+        if (isAudio && cachedMessage) content.push({type: 'audio', value: cachedMessage, dateString: msgDate.toLocaleString()});
+        if (msg.body && !isOther) content.push({type: 'text', value: msg.body, dateString: msgDate.toLocaleString()});
 
         messageList.push({role: role, name: name, content: content});
       } catch (e: any) {
