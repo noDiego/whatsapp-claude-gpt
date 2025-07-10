@@ -21,6 +21,7 @@ import { AITools } from "./config/openai-functions";
 import { ChatConfiguration } from "./interfaces/chat-configuration";
 import path from "node:path";
 import * as fs from "node:fs";
+import { ReminderManager } from "./services/reminder-service";
 
 export interface ChatInfo {
   id: string;
@@ -36,12 +37,14 @@ export class RobotoClass {
   private chatInfoList: ChatInfo[];
   private whatsappClient: Client;
   private chatConfig: ChatConfig;
+  private reminderManager: ReminderManager;
 
   public constructor(client: Client) {
     this.whatsappClient = client;
     this.openAIService = new OpenaiService();
     this.cache = new NodeCache();
     this.chatConfig = new ChatConfig();
+    this.reminderManager = new ReminderManager();
     this.chatInfoList = [];
   }
 
@@ -355,96 +358,6 @@ export class RobotoClass {
   }
 
   /**
-   * Processes “-chatconfig” subcommands to customize per-chat behavior.
-   *
-   * Supported subcommands:
-   * - prompt [text]:   Set a custom personality prompt.
-   * - botname [name]:  Change the bot’s display name.
-   * - remove:          Reset to default configuration.
-   * - show:            Display current settings.
-   *
-   * - In group chats, only administrators may modify settings.
-   *
-   * @param message      The Message object containing the command.
-   * @param commandText  The subcommand and its arguments (without the prefix).
-   * @returns            Promise<Message> the reply message confirming action.
-   */
-  private async handleChatConfigCommand(message: Message, commandText: string) {
-    const chat = await message.getChat();
-    const isGroup = chat.isGroup;
-
-    // Solo verificar permisos de administrador en grupos
-    if (isGroup) {
-      const groupChat = chat as GroupChat;
-      const participant = await groupChat.participants.find(p => p.id._serialized === message.author);
-      const isAdmin = participant?.isAdmin || participant?.isSuperAdmin;
-      if (!isAdmin) {
-        return message.reply("Only group administrators can change the bot's configuration in groups.");
-      }
-    }
-
-    const parts = commandText.split(' ');
-    const subCommand = parts[0].toLowerCase();
-
-    switch (subCommand) {
-      case 'prompt':
-      case 'botname':
-        const value = parts.slice(1).join(' ');
-        if (!value) return message.reply(`Please provide a ${subCommand === 'prompt' ? 'prompt description' : 'name for the bot'}.`);
-
-        const existingConfig = this.chatConfig.getChatConfig(chat.id._serialized);
-
-        const updateOptions: any = {
-          promptInfo: existingConfig?.promptInfo || CONFIG.botConfig.promptInfo,
-          botName: existingConfig?.botName
-        };
-
-        if (subCommand === 'prompt') updateOptions.promptInfo = value;
-        else updateOptions.botName = value;
-
-        const updatedConfig = await this.chatConfig.updateChatConfig(
-            chat.id._serialized,
-            chat.name,
-            isGroup,
-            updateOptions
-        );
-
-        return message.reply(
-            subCommand === 'prompt'
-                ? `✅ Updated prompt for this ${isGroup ? 'group' : 'chat'}. The bot now: ${updatedConfig.promptInfo}`
-                : `✅ Bot name for this ${isGroup ? 'group' : 'chat'} has been set to: ${updatedConfig.botName}`
-        );
-
-      case 'remove':
-        const removed = this.chatConfig.removeChatConfig(chat.id._serialized);
-        return message.reply(
-            removed
-                ? `✅ The custom prompt and bot name have been removed. The bot will use the default configuration.`
-                : `This ${isGroup ? 'group' : 'chat'} did not have a custom configuration.`
-        );
-
-      case 'show':
-        const currentConfig = this.chatConfig.getChatConfig(chat.id._serialized);
-        if (!currentConfig) return message.reply(`This ${isGroup ? 'group' : 'chat'} does not have a custom configuration.`);
-
-        let response = currentConfig.promptInfo ? `Current personality: ${currentConfig.promptInfo}` : ``;
-        if (currentConfig.botName) response += `\nBot name: ${currentConfig.botName ?? CONFIG.botConfig.botName}`;
-
-        return message.reply(response);
-
-      default:
-        return message.reply(
-            "Available commands:\n" +
-            `- *-chatconfig prompt [description]*: Sets the bot's personality for this ${isGroup ? 'group' : 'chat'}\n` +
-            `- *-chatconfig botname [name]*: Sets the bot's name for this ${isGroup ? 'group' : 'chat'}\n` +
-            "- *-chatconfig remove*: Removes the custom configuration\n" +
-            "- *-chatconfig show*: Displays the current configuration"
-        );
-    }
-  }
-
-
-  /**
    * Transcribes a voice message to text, using cache when possible.
    *
    * - Checks NodeCache for existing transcription.
@@ -460,35 +373,24 @@ export class RobotoClass {
   private async transcribeVoice(media: MessageMedia, message: Message, chatCfg: ChatConfiguration): Promise<string> {
     try {
 
-      // Check if the transcription exists in the cache
       const cachedMessage = this.getCachedMessage(message);
       if (cachedMessage) return cachedMessage;
 
-      // Convert the base64 media data to a Buffer
       const audioBuffer = Buffer.from(media.data, 'base64');
-
-      // Convert the buffer to a stream
       const audioStream = bufferToStream(audioBuffer);
 
       logger.debug(`[OpenAI->transcribeVoice] Starting audio transcription`);
-
       const transcribedText = await this.openAIService.transcription(audioStream, chatCfg);
-
-      // Log the transcribed text
       logger.debug(`[OpenAI->transcribeVoice] Transcribed text: ${transcribedText}`);
 
-      // Store in cache
       this.cache.set(message.id._serialized, transcribedText, CONFIG.botConfig.nodeCacheTime);
-
       return transcribedText;
 
     } catch (error: any) {
-      // Error handling
       logger.error(`Error transcribing voice message: ${error.message}`);
       return '<Error transcribing voice message>';
     }
   }
-
 
   /**
    * Invokes a local handler for a tool (function_call) issued by the AI.
@@ -574,7 +476,51 @@ export class RobotoClass {
           return `OpenAI's safety filters blocked the request. Please call generate_image again with a different phrasing. Rephrase the prompt to avoid sensitive content.`;
         }
         return null;
-      }
+      },
+
+      get_reminders: async (args) => {
+        const chatData: Chat = await message.getChat();
+        const userId = chatData.isGroup? chatData.id._serialized : await getContactName(message);
+        const reminders = await this.reminderManager.getRemindersByUser(userId);
+        return JSON.stringify(reminders);
+      },
+
+      reminder_manager: async (args) => {
+
+        const {action, message: reminderMessage, reminder_date, reminder_id} = args;
+        const chatData: Chat = await message.getChat();
+        const userId = chatData.isGroup? chatData.id._serialized : await getContactName(message);
+        let responseMessage = '';
+        let reminder;
+
+        switch (action){
+          case 'list':
+            const remindersList = await this.reminderManager.getRemindersByUser(userId);
+            responseMessage = JSON.stringify(remindersList);
+            break;
+          case 'create':
+            reminder = this.reminderManager.createReminder({
+              message: reminderMessage,
+              reminderDate: new Date(reminder_date),
+              userId: userId
+            });
+            responseMessage = `Reminder created successfully. (Data: ${JSON.stringify(reminder)})`;
+            break;
+          case 'update':
+            reminder = this.reminderManager.updateReminder(reminder_id, {
+              message: reminderMessage,
+              reminderDate: new Date(reminder_date)
+            });
+            responseMessage = `Reminder updated successfully. (Data: ${JSON.stringify(reminder)})`;
+            break;
+          case 'delete':
+            this.reminderManager.deleteReminder(reminder_id);
+            responseMessage = `Reminder deleted successfully`;
+            break;
+        }
+
+        return responseMessage;
+      },
     };
     try {
       if (handlers[functionName]) {

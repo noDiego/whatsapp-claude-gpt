@@ -49,13 +49,14 @@ export const AITools: Array<Tool> = [
                         "shimmer",
                         "verse"
                     ],
-                    description: "The name of the voice to use (e.g., 'coral', 'alloy', 'ash', 'onyx'). Optional."
+                    description: "The name of the voice to use (e.g., 'coral', 'alloy', 'ash', 'onyx'). Optional.",
+                    nullable: true
                 }
             },
-            required: ["input", "instructions", "voice"],
+            required: ["input", "instructions"],
             additionalProperties: false
         },
-        strict: true
+        strict: false
     },
     {
         type: "function",
@@ -81,5 +82,44 @@ export const AITools: Array<Tool> = [
             additionalProperties: false
         },
         strict: false
+    },
+    {
+        type: "function",
+        name: "reminder_manager",
+        description: `Complete reminder management system. Use this function to:
+    - LIST/GET: Retrieve all pending reminders for the user or group (use action 'list')
+    - CREATE: Add new reminders with a message and date/time (use action 'create')
+    - UPDATE: Modify existing reminders by their ID (use action 'update') 
+    - DELETE: Remove reminders by their ID (use action 'delete')
+    
+    Always use 'list' first to get reminder IDs before updating or deleting.`,
+        strict: true,
+        parameters: {
+            type: "object",
+            required: ["action"],
+            properties: {
+                action: {
+                    type: "string",
+                    enum: ["list", "create", "update", "delete"],
+                    description: "Action to perform: 'list' to get all pending reminders, 'create' to add new reminders, 'update' to modify existing ones, 'delete' to remove reminders"
+                },
+                message: {
+                    type: ["string", "null"],
+                    description: "The reminder message text. REQUIRED for 'create' and 'update' actions. Not used for 'list' and 'delete'.",
+                    nullable: true
+                },
+                reminder_date: {
+                    type: ["string", "null"],
+                    description: "When the reminder should trigger, in ISO 8601 format (e.g., '2024-12-25T10:30:00Z'). REQUIRED for 'create' and 'update' actions. Not used for 'list' and 'delete'.",
+                    nullable: true
+                },
+                reminder_id: {
+                    type: ["string", "null"],
+                    description: "The unique identifier of the reminder. REQUIRED for 'update' and 'delete' actions. Not used for 'list' and 'create'. Get IDs by using action 'list' first.",
+                    nullable: true
+                }
+            },
+            additionalProperties: false
+        }
     }
 ];
