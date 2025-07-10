@@ -3,6 +3,8 @@ import { ChatConfiguration } from "../interfaces/chat-configuration";
 
 config();
 
+const systemTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
 const DBConfig = {
   user: String(process.env.PSQL_USER),
   password: String(process.env.PSQL_PASS),
@@ -30,6 +32,7 @@ export const AIConfig = {
 const botConfig = {
   chatconfigStorage: process.env.CHAT_CONFIG_STORAGE ?? 'file', // If set to 'database', a connection to a configured database in "DBConfig" will be used for custom chat configurations
   preferredLanguage: process.env.PREFERRED_LANGUAGE ?? '', // The default language for the bot. If not specified, the bot will use the language of the chat it is responding to
+  botTimezone: process.env.BOT_TIMEZONE ?? systemTimezone ?? 'UTC',
   botName: process.env.BOT_NAME ?? 'Roboto', // The name of the bot, used to identify when the bot is being addressed in group chats
   maxImages: parseInt(process.env.MAX_IMAGES ?? '7'), // The maximum number of images the bot will process from the last received messages
   maxMsgsLimit: parseInt(process.env.MAX_MSGS_LIMIT ?? '30'), // The maximum number of recent messages the bot will consider for generating a coherent response

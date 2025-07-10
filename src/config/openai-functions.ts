@@ -1,4 +1,5 @@
 import {Tool} from "openai/src/resources/responses/responses";
+import { CONFIG } from "./index";
 
 export const AITools: Array<Tool> = [
     {
@@ -93,10 +94,9 @@ export const AITools: Array<Tool> = [
     - DELETE: Remove reminders by their ID (use action 'delete')
     
     Always use 'list' first to get reminder IDs before updating or deleting.`,
-        strict: true,
+        strict: false,
         parameters: {
             type: "object",
-            required: ["action"],
             properties: {
                 action: {
                     type: "string",
@@ -110,7 +110,12 @@ export const AITools: Array<Tool> = [
                 },
                 reminder_date: {
                     type: ["string", "null"],
-                    description: "When the reminder should trigger, in ISO 8601 format (e.g., '2024-12-25T10:30:00Z'). REQUIRED for 'create' and 'update' actions. Not used for 'list' and 'delete'.",
+                    description: "When the reminder should trigger, in yyyy-MM-ddTHH:mm:ss format (e.g., '2024-12-25T10:30:00'). REQUIRED for 'create' and 'update' actions. Not used for 'list' and 'delete'.",
+                    nullable: true
+                },
+                reminder_date_timezone: {
+                    type: ["string", "null"],
+                    description: `Specifies the IANA timezone (e.g., 'America/Santiago') that applies to the reminder date and time. This field is used only during creation or update of a reminder. You do not need to specify it unless the user explicitly states they are in a different timezone; by default, '${CONFIG.botConfig.botTimezone}' will be used.`,
                     nullable: true
                 },
                 reminder_id: {
@@ -119,6 +124,7 @@ export const AITools: Array<Tool> = [
                     nullable: true
                 }
             },
+            required: ["action"],
             additionalProperties: false
         }
     }

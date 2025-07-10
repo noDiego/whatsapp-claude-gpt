@@ -3,8 +3,8 @@ import { OpenAI, toFile } from 'openai';
 import { AIConfig } from '../config';
 import { ResponseInput, ResponseUsage, Tool } from "openai/resources/responses/responses";
 import { Message } from "whatsapp-web.js";
-import Roboto from "../index";
 import { ChatConfiguration } from "../interfaces/chat-configuration";
+import Roboto from "../roboto";
 
 export class OpenaiService {
 

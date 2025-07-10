@@ -3,6 +3,7 @@ import * as path from 'path';
 import { Reminder, ReminderCreateInput } from '../interfaces/reminder';
 import logger from '../logger';
 import { v4 as uuidv4 } from 'uuid';
+import client from "../index";
 
 export class ReminderManager {
     private filePath: string;
@@ -12,6 +13,33 @@ export class ReminderManager {
         this.filePath = filePath;
         this.ensureFileExists();
         this.loadReminders();
+        this.startReminderChecker();
+    }
+
+    private startReminderChecker() {
+        setInterval(() => {
+            this.checkReminders();
+        }, 60 * 1000); // cada minuto
+    }
+
+    private async checkReminders() {
+        const now = new Date();
+        // Recuerda usar UTC o la misma TZ que usan tus horarios
+        // Solo recordatorios activos y cuya fecha <= ahora
+        const dueReminders = this.reminders.filter(r =>
+            r.isActive && (!r.reminderDate || new Date(r.reminderDate) <= now)
+        );
+        for (const reminder of dueReminders) {
+            try {
+                // Intenta enviar mensaje
+                await client.sendMessage(reminder.userId, `🔔 Recordatorio:\n"${reminder.message}"\n(${reminder.reminderDate})`);
+                // Elimina el recordatorio
+                this.deleteReminder(reminder.id);
+                logger.info(`Reminder sent to ${reminder.userId} and deleted (${reminder.id})`);
+            } catch (err) {
+                logger.error(`Error sending reminder to ${reminder.userId}: ${err.message}`);
+            }
+        }
     }
 
     /**
@@ -20,7 +48,7 @@ export class ReminderManager {
     private ensureFileExists(): void {
         const dir = path.join(process.cwd(), this.filePath);
         if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(dir, JSON.stringify([]), 'utf8');
         }
     }
 
@@ -36,8 +64,7 @@ export class ReminderManager {
                 // Convert date strings back to Date objects
                 this.reminders = parsedData.map((reminder: any) => ({
                     ...reminder,
-                    requestedDate: new Date(reminder.requestedDate),
-                    reminderDate: new Date(reminder.reminderDate),
+                    reminderDate: reminder.reminderDate,
                     createdAt: new Date(reminder.createdAt),
                     updatedAt: new Date(reminder.updatedAt)
                 }));

@@ -1,9 +1,10 @@
 import { OpenaiService } from './services/openai-service';
-import { Chat, Client, GroupChat, Message, MessageContent, MessageMedia, MessageTypes } from 'whatsapp-web.js';
+import { Chat, Client, Message, MessageContent, MessageMedia, MessageTypes } from 'whatsapp-web.js';
 import {
   bufferToStream,
   extractAnswer,
   getContactName,
+  getFormattedDate,
   getUnsupportedMessage,
   includeName,
   isSuperUser,
@@ -22,6 +23,7 @@ import { ChatConfiguration } from "./interfaces/chat-configuration";
 import path from "node:path";
 import * as fs from "node:fs";
 import { ReminderManager } from "./services/reminder-service";
+import client from "./index";
 
 export interface ChatInfo {
   id: string;
@@ -39,7 +41,7 @@ export class RobotoClass {
   private chatConfig: ChatConfig;
   private reminderManager: ReminderManager;
 
-  public constructor(client: Client) {
+  public constructor() {
     this.whatsappClient = client;
     this.openAIService = new OpenaiService();
     this.cache = new NodeCache();
@@ -223,16 +225,16 @@ export class RobotoClass {
           value: media.data,
           media_type: media.mimetype,
           image_id: msg.id._serialized,
-          dateString: msgDate.toLocaleString()
+          dateString: getFormattedDate(msgDate)
         });
-        if (isImage && !media) content.push({type: 'text', value: '<Unprocessed image>', dateString: msgDate.toLocaleString()});
-        if (isOther) content.push({type: 'text', value: getUnsupportedMessage(msg.type, msg.body), dateString: msgDate.toLocaleString()});
+        if (isImage && !media) content.push({type: 'text', value: '<Unprocessed image>', dateString: getFormattedDate(msgDate)});
+        if (isOther) content.push({type: 'text', value: getUnsupportedMessage(msg.type, msg.body), dateString: getFormattedDate(msgDate)});
         if (isAudio && media && !cachedMessage) {
           transcriptionPromises.push({index: messageList.length, promise: this.transcribeVoice(media, msg, chatCfg)});
-          content.push({type: 'audio', value: '<Transcribing voice message...>', dateString: msgDate.toLocaleString()});
+          content.push({type: 'audio', value: '<Transcribing voice message...>', dateString: getFormattedDate(msgDate)});
         }
-        if (isAudio && cachedMessage) content.push({type: 'audio', value: cachedMessage, dateString: msgDate.toLocaleString()});
-        if (msg.body && !isOther) content.push({type: 'text', value: msg.body, dateString: msgDate.toLocaleString()});
+        if (isAudio && cachedMessage) content.push({type: 'audio', value: cachedMessage, dateString: getFormattedDate(msgDate)});
+        if (msg.body && !isOther) content.push({type: 'text', value: msg.body, dateString: getFormattedDate(msgDate)});
 
         messageList.push({role: role, name: name, content: content});
       } catch (e: any) {
@@ -406,6 +408,9 @@ export class RobotoClass {
    */
   public async executeFunctions(functionName: string, args: any, message: Message, chatCfg: ChatConfiguration): Promise<string> {
 
+    logger.debug(`[executeFunctions] Called function "${functionName}".`);
+    logger.debug(`[executeFunctions] Args: ${JSON.stringify(args)}`);
+
     const chatInfo = this.getChatInfo(chatCfg.id);
 
     const handlers: Record<string, (args: any) => Promise<string>> = {
@@ -501,7 +506,7 @@ export class RobotoClass {
           case 'create':
             reminder = this.reminderManager.createReminder({
               message: reminderMessage,
-              reminderDate: new Date(reminder_date),
+              reminderDate: reminder_date,
               userId: userId
             });
             responseMessage = `Reminder created successfully. (Data: ${JSON.stringify(reminder)})`;
@@ -509,7 +514,7 @@ export class RobotoClass {
           case 'update':
             reminder = this.reminderManager.updateReminder(reminder_id, {
               message: reminderMessage,
-              reminderDate: new Date(reminder_date)
+              reminderDate: new reminder_date
             });
             responseMessage = `Reminder updated successfully. (Data: ${JSON.stringify(reminder)})`;
             break;
@@ -562,3 +567,6 @@ export class RobotoClass {
   }
 
 }
+
+const Roboto = new RobotoClass();
+export default Roboto;
