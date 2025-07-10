@@ -59,40 +59,27 @@ export const AITools: Array<Tool> = [
     },
     {
         type: "function",
-        name: "create_image",
-        description: `Generate NEW images from a text. Use it only when the user requests to create an image from scratch and does NOT provide any prior image as a reference.`,
+        name: "generate_image",
+        description: `Generate or edit images. Use this function to:
+    - Create NEW images from scratch (when no reference images are provided)
+    - Transform or edit existing images (when reference images are provided)
+    Important: never use real person names in the prompt; always refer to subjects as "the person in the first image", etc.`,
         parameters: {
             type: "object",
             properties: {
-                prompt: { type: "string", description: "Description of the image to generate." },
-                background: { type: ["string","null"], enum: ["opaque","transparent","auto"], description: "Transparent or opaque background. OPTIONAL", nullable: true },
-                wait_message: { type: ["string", "null"], description: "Message sent to the user at the start of processing asking them to please wait one minute. OPTIONAL.", nullable: true }
-            },
-            required: ["prompt", "background", "wait_message"],
-            additionalProperties: false
-        },
-        strict: true
-    },
-    {
-        type: "function",
-        name: "transform_image",
-        description: `Create, transform, or edit images using one or more provided reference images (in base64 format). Use this function both for subtle modifications and for generating new images that are based on the input images (for example, changing the artistic style, merging elements, or reinterpreting the scene). At least one reference image is always required as a base. Important: never use real person names in the prompt; always refer to subjects as "the person in the first image", etc. Do not use this function to create images entirely from scratch without reference images.`,
-        parameters: {
-            type: "object",
-            properties: {
-                prompt: { type: "string", description: "Description of the changes to apply or image to generate    ." },
+                prompt: { type: "string", description: "Description of the image to generate or changes to apply." },
                 imageIds: {
-                    type: "array",
-                    description: "Each element is the imageId of the image to use.",
-                    items: { type: "string" }
+                    type: ["array", "null"],
+                    description: "Array of imageIds to use as reference. Leave null or empty to create from scratch. (Optional)",
+                    items: { type: "string" },
+                    nullable: true
                 },
-                mask: { type: ["string","null"], description: "Base64 of the mask (PNG with alpha channel). OPTIONAL", nullable: true },
                 background: { type: ["string","null"], enum: ["opaque","transparent","auto"], description: "Transparent or opaque background. OPTIONAL", nullable: true },
                 wait_message: { type: ["string", "null"], description: "Message sent to the user at the start of processing asking them to please wait one minute. OPTIONAL.", nullable: true }
             },
-            required: ["prompt","imageIds","mask","background", "wait_message"],
+            required: ["prompt"],
             additionalProperties: false
         },
-        strict: true
+        strict: false
     }
 ];

@@ -5,12 +5,13 @@ import {
   extractAnswer,
   getContactName,
   getUnsupportedMessage,
-  includeName, isSuperUser,
+  includeName,
+  isSuperUser,
   logMessage,
   parseCommand
 } from './utils';
 import logger from './logger';
-import { AIConfig, CONFIG } from './config';
+import { CONFIG } from './config';
 import { AIAnswer, AIContent, AiMessage, AIProvider, AIRole } from './interfaces/ai-interfaces';
 import NodeCache from 'node-cache';
 import { elevenTTS } from './services/elevenlabs-service';
@@ -516,73 +517,61 @@ export class RobotoClass {
         return await this.openAIService.webSearch(args.query, args);
       },
 
-      create_image: async (args) => {
+      generate_image: async (args) => {
         const canCreateImages = await isSuperUser(message);
         if (!canCreateImages) return `The user who requested this does not have permission to create or edit images. They must request authorization from Diego.`
 
         if (args.wait_message) await message.reply(args.wait_message);
-        try {
-          const images = await this.openAIService.createImage(args.prompt, chatCfg, {
-            background: args.background,
-            quality: 'medium'
-          });
-          const media = new MessageMedia("image/png", images[0].b64_json, "image.png");
-          await message.reply(media);
-        } catch (e) {
-          logger.error(`[${e.code}]: ${e.message}`);
-          if (chatInfo.imageRetryCount >= CONFIG.botConfig.maxImageCreationRetry || e.code == '400' ||  !e.message.toLowerCase().includes('safety system'))
-            return `Error creating image: ${e.message}`;
-          chatInfo.imageRetryCount++;
-          return `OpenAI’s safety filters blocked the request. Please call create_image again with a different phrasing. Rephrase the prompt to avoid sensitive content.`;
-        }
-        return null;
-      },
-
-      transform_image: async (args) => {
-        const canCreateImages = await isSuperUser(message);
-        if (!canCreateImages) return `The user who requested this does not have permission to create or edit images. They must request authorization from Diego.`
-
-        const imageStreams = await Promise.all(
-            args.imageIds.map(async (imageId: string) => {
-
-              if (imageId.startsWith("LOCAL-")) {
-                const filename = imageId.replace("LOCAL-", "") + ".jpg";
-                const filePath = path.join(__dirname, '/../assets/images/', filename);
-                if (!fs.existsSync(filePath)) {
-                  throw new Error(`No se encontró ningún archivo local con id=${imageId}`);
-                }
-                const fileStream = fs.createReadStream(filePath);
-                return fileStream;
-              }
-
-              const refMsg = await this.whatsappClient.getMessageById(imageId);
-              if (!refMsg) throw new Error(`No se encontró ningún mensaje con imageId=${imageId}`);
-
-              const media = await refMsg.downloadMedia();
-              if (!media || !media.data) throw new Error(`No se pudo descargar el media de ${imageId}`);
-
-              const buffer = Buffer.from(media.data, 'base64');
-              return bufferToStream(buffer);
-            })
-        );
-
-        let maskStream;
-        if (args.mask) maskStream = bufferToStream(Buffer.from(args.mask, 'base64'));
-        if (args.wait_message) await message.reply(args.wait_message);
 
         try {
-          const edited = await this.openAIService.editImage(imageStreams, args.prompt, chatCfg, maskStream, {
-            background: args.background,
-            quality: 'medium', size: "1536x1024"
-          });
-          const mediaReply = new MessageMedia("image/png", edited[0].b64_json, "edited.png");
-          await message.reply(mediaReply);
+          const hasReferenceImages = args.imageIds && args.imageIds.length > 0;
+
+          if (hasReferenceImages) {
+            const imageStreams = await Promise.all(
+                args.imageIds.map(async (imageId: string) => {
+                  if (imageId.startsWith("LOCAL-")) {
+                    const filename = imageId.replace("LOCAL-", "") + ".jpg";
+                    const filePath = path.join(__dirname, '/../assets/images/', filename);
+                    if (!fs.existsSync(filePath)) throw new Error(`No se encontró ningún archivo local con id=${imageId}`);
+
+                    return fs.createReadStream(filePath);
+                  }
+
+                  const refMsg = await this.whatsappClient.getMessageById(imageId);
+                  if (!refMsg) throw new Error(`No se encontró ningún mensaje con imageId=${imageId}`);
+
+                  const media = await refMsg.downloadMedia();
+                  if (!media || !media.data) throw new Error(`No se pudo descargar el media de ${imageId}`);
+
+                  const buffer = Buffer.from(media.data, 'base64');
+                  return bufferToStream(buffer);
+                })
+            );
+
+            let maskStream;
+            if (args.mask) maskStream = bufferToStream(Buffer.from(args.mask, 'base64'));
+
+            const edited = await this.openAIService.editImage(imageStreams, args.prompt, chatCfg, maskStream, {
+              background: args.background,
+              quality: 'medium',
+              size: "1536x1024"
+            });
+            const mediaReply = new MessageMedia("image/png", edited[0].b64_json, "edited.png");
+            await message.reply(mediaReply);
+          } else {
+            const images = await this.openAIService.createImage(args.prompt, chatCfg, {
+              background: args.background,
+              quality: 'medium'
+            });
+            const media = new MessageMedia("image/png", images[0].b64_json, "image.png");
+            await message.reply(media);
+          }
         } catch (e) {
           logger.error(`[${e.code}]: ${e.message}`);
-          if (chatInfo.imageRetryCount >= CONFIG.botConfig.maxImageCreationRetry || e.code != '400' || !e.message.toLowerCase().includes('safety system'))
-            return `Error editing image: ${e.message}`;
+          if (chatInfo.imageRetryCount >= CONFIG.botConfig.maxImageCreationRetry || e.code == '400' || !e.message.toLowerCase().includes('safety system'))
+            return `Error generating image: ${e.message}`;
           chatInfo.imageRetryCount++;
-          return `OpenAI’s safety filters blocked the request. Please call transform_image again with a different phrasing. Rephrase the prompt to avoid sensitive content.`;
+          return `OpenAI's safety filters blocked the request. Please call generate_image again with a different phrasing. Rephrase the prompt to avoid sensitive content.`;
         }
         return null;
       }
