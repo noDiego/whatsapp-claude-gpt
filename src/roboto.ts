@@ -23,7 +23,6 @@ import { ChatConfiguration } from "./interfaces/chat-configuration";
 import path from "node:path";
 import * as fs from "node:fs";
 import { ReminderManager } from "./services/reminder-service";
-import client from "./index";
 
 export interface ChatInfo {
   id: string;
@@ -41,12 +40,12 @@ export class RobotoClass {
   private chatConfig: ChatConfig;
   private reminderManager: ReminderManager;
 
-  public constructor() {
+  public constructor(client) {
     this.whatsappClient = client;
     this.openAIService = new OpenaiService();
     this.cache = new NodeCache();
     this.chatConfig = new ChatConfig();
-    this.reminderManager = new ReminderManager();
+    this.reminderManager = new ReminderManager(client);
     this.chatInfoList = [];
   }
 
@@ -567,6 +566,3 @@ export class RobotoClass {
   }
 
 }
-
-const Roboto = new RobotoClass();
-export default Roboto;

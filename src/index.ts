@@ -2,11 +2,13 @@ import logger from './logger';
 import { Client, Message } from 'whatsapp-web.js';
 import { logConfigInfo } from './utils';
 import qrcode from 'qrcode-terminal';
-import Roboto from "./roboto";
+import { RobotoClass } from "./roboto";
 
 const client = new Client({
   // authStrategy: new LocalAuth()
 });
+
+const Roboto = new RobotoClass(client);
 
 require('dotenv').config();
 
@@ -30,4 +32,4 @@ try {
   logger.error(`ERROR: ${e.message}`);
 }
 
-export default client;
+export default Roboto;

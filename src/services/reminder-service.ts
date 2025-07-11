@@ -3,14 +3,15 @@ import * as path from 'path';
 import { Reminder, ReminderCreateInput } from '../interfaces/reminder';
 import logger from '../logger';
 import { v4 as uuidv4 } from 'uuid';
-import client from "../index";
 
 export class ReminderManager {
     private filePath: string;
     private reminders: Reminder[] = [];
+    private wspClient;
 
-    constructor(filePath: string = 'reminders.json') {
+    constructor(client, filePath: string = 'reminders.json') {
         this.filePath = filePath;
+        this.wspClient = client;
         this.ensureFileExists();
         this.loadReminders();
         this.startReminderChecker();
@@ -32,7 +33,7 @@ export class ReminderManager {
         for (const reminder of dueReminders) {
             try {
                 // Intenta enviar mensaje
-                await client.sendMessage(reminder.userId, `🔔 Recordatorio:\n"${reminder.message}"\n(${reminder.reminderDate})`);
+                await this.wspClient.sendMessage(reminder.userId, `🔔 Recordatorio:\n"${reminder.message}"\n(${reminder.reminderDate})`);
                 // Elimina el recordatorio
                 this.deleteReminder(reminder.id);
                 logger.info(`Reminder sent to ${reminder.userId} and deleted (${reminder.id})`);

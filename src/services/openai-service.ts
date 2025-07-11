@@ -4,7 +4,8 @@ import { AIConfig } from '../config';
 import { ResponseInput, ResponseUsage, Tool } from "openai/resources/responses/responses";
 import { Message } from "whatsapp-web.js";
 import { ChatConfiguration } from "../interfaces/chat-configuration";
-import Roboto from "../roboto";
+
+import Roboto from "../index";
 
 export class OpenaiService {
 
