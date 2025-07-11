@@ -3,6 +3,7 @@ import * as path from 'path';
 import { Reminder, ReminderCreateInput } from '../interfaces/reminder';
 import logger from '../logger';
 import { v4 as uuidv4 } from 'uuid';
+import { fromZonedTime } from 'date-fns-tz';
 
 export class ReminderManager {
     private filePath: string;
@@ -25,16 +26,13 @@ export class ReminderManager {
 
     private async checkReminders() {
         const now = new Date();
-        // Recuerda usar UTC o la misma TZ que usan tus horarios
-        // Solo recordatorios activos y cuya fecha <= ahora
-        const dueReminders = this.reminders.filter(r =>
-            r.isActive && (!r.reminderDate || new Date(r.reminderDate) <= now)
-        );
+        const dueReminders = this.reminders.filter(r => {
+            const date = fromZonedTime(r.reminderDate, r.reminderDateTZ);
+            return date <= now;
+        });
         for (const reminder of dueReminders) {
             try {
-                // Intenta enviar mensaje
                 await this.wspClient.sendMessage(reminder.userId, `🔔 Recordatorio:\n"${reminder.message}"\n(${reminder.reminderDate})`);
-                // Elimina el recordatorio
                 this.deleteReminder(reminder.id);
                 logger.info(`Reminder sent to ${reminder.userId} and deleted (${reminder.id})`);
             } catch (err) {
@@ -106,6 +104,7 @@ export class ReminderManager {
                 id: uuidv4(),
                 message: input.message,
                 reminderDate: input.reminderDate,
+                reminderDateTZ: input.reminderDateTZ,
                 userId: input.userId,
                 isActive: true,
                 createdAt: now,
@@ -140,6 +139,7 @@ export class ReminderManager {
             // Update fields if provided
             if (updates.message !== undefined) reminder.message = updates.message;
             if (updates.reminderDate !== undefined) reminder.reminderDate = updates.reminderDate;
+            if (updates.reminderDateTZ !== undefined) reminder.reminderDateTZ = updates.reminderDateTZ;
 
             reminder.updatedAt = new Date();
 

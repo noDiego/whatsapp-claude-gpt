@@ -491,7 +491,7 @@ export class RobotoClass {
 
       reminder_manager: async (args) => {
 
-        const {action, message: reminderMessage, reminder_date, reminder_id} = args;
+        const {action, message: reminderMessage, reminder_date, reminder_date_timezone, reminder_id} = args;
         const chatData: Chat = await message.getChat();
         const userId = chatData.isGroup? chatData.id._serialized : await getContactName(message);
         let responseMessage = '';
@@ -506,6 +506,7 @@ export class RobotoClass {
             reminder = this.reminderManager.createReminder({
               message: reminderMessage,
               reminderDate: reminder_date,
+              reminderDateTZ: reminder_date_timezone,
               userId: userId
             });
             responseMessage = `Reminder created successfully. (Data: ${JSON.stringify(reminder)})`;
@@ -513,7 +514,8 @@ export class RobotoClass {
           case 'update':
             reminder = this.reminderManager.updateReminder(reminder_id, {
               message: reminderMessage,
-              reminderDate: new reminder_date
+              reminderDate: new reminder_date,
+              reminderDateTZ: reminder_date_timezone
             });
             responseMessage = `Reminder updated successfully. (Data: ${JSON.stringify(reminder)})`;
             break;
