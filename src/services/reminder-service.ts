@@ -8,6 +8,7 @@ import Roboto from "../index";
 import { AIRole } from "../interfaces/ai-interfaces";
 import { ChatConfig } from "../config/chat-configurations";
 import { extractAnswer } from "../utils";
+import { CONFIG } from "../config";
 
 export class ReminderManager {
     private filePath: string;
@@ -38,16 +39,16 @@ export class ReminderManager {
         });
         for (const reminder of dueReminders) {
             try {
+                const chatCfg = this.chatConfig.getChatConfig(reminder.chatId, reminder.chatName)
                 const msg = Roboto.convertIaMessagesLang([{
                     role: AIRole.USER,
-                    name: 'System',
+                    name: 'SYSTEM',
                     content: [{
                         type: 'text',
                         value: `SYSTEM: The user has a reminder, write a message to remind them of the following: "${reminder.message}". Date: "${reminder.reminderDate}"`,
                         dateString: ''
                     }]
-                }])
-                const chatCfg = this.chatConfig.getChatConfig(reminder.chatId, reminder.chatName)
+                }], CONFIG.getSystemPrompt(chatCfg));
                 const aiResponse = await Roboto.openAIService.sendChat(msg, 'text', chatCfg);
                 const reminderMsg = extractAnswer(aiResponse, chatCfg.botName);
                 await this.wspClient.sendMessage(reminder.chatId, reminderMsg.message);
