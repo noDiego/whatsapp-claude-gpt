@@ -83,15 +83,20 @@ export class ChatConfig {
   private chatConfigurations: ChatConfiguration[];
   private storage: ChatConfigStorage;
   private useDatabase: boolean;
+  private static instance: ChatConfig;
 
-  constructor() {
-    this.chatConfigurations = [];
-    this.useDatabase = process.env.CHAT_CONFIG_STORAGE?.toLowerCase() === 'database';
-    this.storage = this.useDatabase
-        ? new PostgresChatConfigStorage()
-        : new JsonChatConfigStorage();
+  public static getInstance(): ChatConfig {
+    if (!ChatConfig.instance) ChatConfig.instance = new ChatConfig();
+    return ChatConfig.instance;
+  }
 
-    this.initializeConfigs();
+  private constructor() {
+      this.chatConfigurations = [];
+      this.useDatabase = process.env.CHAT_CONFIG_STORAGE?.toLowerCase() === 'database';
+      this.storage = this.useDatabase
+          ? new PostgresChatConfigStorage()
+          : new JsonChatConfigStorage();
+      this.initializeConfigs();
   }
 
   private async initializeConfigs() {

@@ -21,8 +21,9 @@ import { ResponseInput } from "openai/resources/responses/responses";
 import { AITools } from "./config/openai-functions";
 import { ChatConfiguration } from "./interfaces/chat-configuration";
 import path from "node:path";
-import * as fs from "node:fs";
 import { ReminderManager } from "./services/reminder-service";
+import { Array, Record } from "openai/core";
+import * as fs from "node:fs";
 
 export interface ChatInfo {
   id: string;
@@ -32,7 +33,7 @@ export interface ChatInfo {
 
 export class RobotoClass {
 
-  private openAIService: OpenaiService;
+  private _openAIService: OpenaiService;
   private allowedTypes = [MessageTypes.STICKER, MessageTypes.TEXT, MessageTypes.IMAGE, MessageTypes.VOICE, MessageTypes.AUDIO];
   private cache: NodeCache;
   private chatInfoList: ChatInfo[];
@@ -42,11 +43,15 @@ export class RobotoClass {
 
   public constructor(client) {
     this.whatsappClient = client;
-    this.openAIService = new OpenaiService();
+    this._openAIService = new OpenaiService();
     this.cache = new NodeCache();
-    this.chatConfig = new ChatConfig();
+    this.chatConfig = ChatConfig.getInstance();
     this.reminderManager = new ReminderManager(client);
     this.chatInfoList = [];
+  }
+
+  get openAIService(): OpenaiService {
+    return this._openAIService;
   }
 
   private getChatInfo(id: string): ChatInfo {
@@ -276,7 +281,7 @@ export class RobotoClass {
   private async sendToAI(message: Message, messageList: AiMessage[], chatCfg: ChatConfiguration) {
     const systemPrompt = CONFIG.getSystemPrompt(chatCfg);
     const convertedMessageList: ResponseInput = this.convertIaMessagesLang(messageList.reverse(), systemPrompt) as ResponseInput;
-    return await this.openAIService.sendChatWithTools(convertedMessageList, 'text', AITools, message, chatCfg);
+    return await this._openAIService.sendChatWithTools(convertedMessageList, 'text', AITools, message, chatCfg);
   }
 
   /**
@@ -299,7 +304,7 @@ export class RobotoClass {
       if (chatCfg.ttsProvider == AIProvider.ELEVENLABS) {
         base64Audio = await elevenTTS(messageToSay);
       } else {
-        const audioBuffer = await this.openAIService.speech(messageToSay, chatCfg, responseFormat, voice, instructions);
+        const audioBuffer = await this._openAIService.speech(messageToSay, chatCfg, responseFormat, voice, instructions);
         base64Audio = audioBuffer.toString('base64');
       }
 
@@ -325,7 +330,7 @@ export class RobotoClass {
    * @param systemPrompt  Optional system prompt to include at the start.
    * @returns             ResponseInput[] formatted for the OpenAI API.
    */
-  private convertIaMessagesLang(messageList: AiMessage[], systemPrompt?: string): ResponseInput {
+  public convertIaMessagesLang(messageList: AiMessage[], systemPrompt?: string): ResponseInput {
     const responseAPIMessageList: ResponseInput = [];
     messageList.forEach(msg => {
       const gptContent: Array<any> = [];
@@ -381,7 +386,7 @@ export class RobotoClass {
       const audioStream = bufferToStream(audioBuffer);
 
       logger.debug(`[OpenAI->transcribeVoice] Starting audio transcription`);
-      const transcribedText = await this.openAIService.transcription(audioStream, chatCfg);
+      const transcribedText = await this._openAIService.transcription(audioStream, chatCfg);
       logger.debug(`[OpenAI->transcribeVoice] Transcribed text: ${transcribedText}`);
 
       this.cache.set(message.id._serialized, transcribedText, CONFIG.botConfig.nodeCacheTime);
@@ -420,7 +425,7 @@ export class RobotoClass {
       },
 
       web_search: async (args) => {
-        return await this.openAIService.webSearch(args.query, args);
+        return await this._openAIService.webSearch(args.query, args);
       },
 
       generate_image: async (args) => {
@@ -457,7 +462,7 @@ export class RobotoClass {
             let maskStream;
             if (args.mask) maskStream = bufferToStream(Buffer.from(args.mask, 'base64'));
 
-            const edited = await this.openAIService.editImage(imageStreams, args.prompt, chatCfg, maskStream, {
+            const edited = await this._openAIService.editImage(imageStreams, args.prompt, chatCfg, maskStream, {
               background: args.background,
               quality: 'medium',
               size: "1536x1024"
@@ -465,7 +470,7 @@ export class RobotoClass {
             const mediaReply = new MessageMedia("image/png", edited[0].b64_json, "edited.png");
             await message.reply(mediaReply);
           } else {
-            const images = await this.openAIService.createImage(args.prompt, chatCfg, {
+            const images = await this._openAIService.createImage(args.prompt, chatCfg, {
               background: args.background,
               quality: 'medium'
             });
@@ -494,6 +499,7 @@ export class RobotoClass {
         const {action, message: reminderMessage, reminder_date, reminder_date_timezone, reminder_id} = args;
         const chatData: Chat = await message.getChat();
         const chatId = chatData.id._serialized;
+        const chatName = await getContactName(message);
         let responseMessage = '';
         let reminder;
 
@@ -507,7 +513,8 @@ export class RobotoClass {
               message: reminderMessage,
               reminderDate: reminder_date,
               reminderDateTZ: reminder_date_timezone,
-              chatId: chatId
+              chatId: chatId,
+              chatName: chatName
             });
             responseMessage = `Reminder created successfully. (Data: ${JSON.stringify(reminder)})`;
             break;

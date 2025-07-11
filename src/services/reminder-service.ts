@@ -4,11 +4,16 @@ import { Reminder, ReminderCreateInput } from '../interfaces/reminder';
 import logger from '../logger';
 import { v4 as uuidv4 } from 'uuid';
 import { fromZonedTime } from 'date-fns-tz';
+import Roboto from "../index";
+import { AIRole } from "../interfaces/ai-interfaces";
+import { ChatConfig } from "../config/chat-configurations";
+import { extractAnswer } from "../utils";
 
 export class ReminderManager {
     private filePath: string;
     private reminders: Reminder[] = [];
     private wspClient;
+    private chatConfig: ChatConfig;
 
     constructor(client, filePath: string = 'reminders.json') {
         this.filePath = filePath;
@@ -16,6 +21,7 @@ export class ReminderManager {
         this.ensureFileExists();
         this.loadReminders();
         this.startReminderChecker();
+        this.chatConfig = ChatConfig.getInstance();
     }
 
     private startReminderChecker() {
@@ -32,7 +38,19 @@ export class ReminderManager {
         });
         for (const reminder of dueReminders) {
             try {
-                await this.wspClient.sendMessage(reminder.chatId, `🔔 Recordatorio:\n"${reminder.message}"\n(${reminder.reminderDate})`);
+                const msg = Roboto.convertIaMessagesLang([{
+                    role: AIRole.USER,
+                    name: 'System',
+                    content: [{
+                        type: 'text',
+                        value: `SYSTEM: The user has a reminder, write a message to remind them of the following: "${reminder.message}". Date: "${reminder.reminderDate}"`,
+                        dateString: ''
+                    }]
+                }])
+                const chatCfg = this.chatConfig.getChatConfig(reminder.chatId, reminder.chatName)
+                const aiResponse = await Roboto.openAIService.sendChat(msg, 'text', chatCfg);
+                const reminderMsg = extractAnswer(aiResponse, chatCfg.botName);
+                await this.wspClient.sendMessage(reminder.chatId, reminderMsg.message);
                 this.deleteReminder(reminder.id);
                 logger.info(`Reminder sent to ${reminder.chatId} and deleted (${reminder.id})`);
             } catch (err) {
@@ -106,6 +124,7 @@ export class ReminderManager {
                 reminderDate: input.reminderDate,
                 reminderDateTZ: input.reminderDateTZ,
                 chatId: input.chatId,
+                chatName: input.chatName,
                 isActive: true,
                 createdAt: now,
                 updatedAt: now

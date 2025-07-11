@@ -46,7 +46,7 @@ export class OpenaiService {
       reasoning: {},
       tools: tools,
       temperature: 1,
-      max_output_tokens: 2048,
+      max_output_tokens: 4096,
       top_p: 1,
       store: true
     });
@@ -91,6 +91,31 @@ export class OpenaiService {
     }
     if (!gotAnyResult) return null;
     return this.sendChatWithTools(updatedMessages, responseType, tools, message, chatCfg);
+  }
+
+  async sendChat(
+      messageList: ResponseInput,
+      responseType: any = 'json_object',
+      chatCfg: ChatConfiguration
+  ): Promise<string> {
+    logger.info(`[OpenAI] Sending ${messageList.length} messages`);
+    logger.debug(`[OpenAI] Sending Msg: ${JSON.stringify(messageList[messageList.length - 1])}`);
+
+    const responseResult = await this.client.responses.create({
+      model: chatCfg.chatModel,
+      input: messageList,
+      text: { format: { type: responseType } },
+      reasoning: {},
+      temperature: 1,
+      max_output_tokens: 4096,
+      top_p: 1,
+      store: true
+    });
+
+    logger.debug('[OpenAI] Completion Response:' + JSON.stringify(responseResult.output_text));
+    this.calculateCost(responseResult.usage, chatCfg.chatModel);
+
+    return responseResult.output_text;
   }
 
 
