@@ -3,7 +3,7 @@ export interface Reminder {
     message: string;
     reminderDate: string;
     reminderDateTZ: string;
-    userId: string;
+    chatId: string;
     isActive: boolean;
     createdAt: Date;
     updatedAt: Date;
@@ -13,5 +13,5 @@ export interface ReminderCreateInput {
     message: string;
     reminderDate: string;
     reminderDateTZ: string;
-    userId?: string;
+    chatId?: string;
 }

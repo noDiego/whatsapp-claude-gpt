@@ -32,11 +32,11 @@ export class ReminderManager {
         });
         for (const reminder of dueReminders) {
             try {
-                await this.wspClient.sendMessage(reminder.userId, `🔔 Recordatorio:\n"${reminder.message}"\n(${reminder.reminderDate})`);
+                await this.wspClient.sendMessage(reminder.chatId, `🔔 Recordatorio:\n"${reminder.message}"\n(${reminder.reminderDate})`);
                 this.deleteReminder(reminder.id);
-                logger.info(`Reminder sent to ${reminder.userId} and deleted (${reminder.id})`);
+                logger.info(`Reminder sent to ${reminder.chatId} and deleted (${reminder.id})`);
             } catch (err) {
-                logger.error(`Error sending reminder to ${reminder.userId}: ${err.message}`);
+                logger.error(`Error sending reminder to ${reminder.chatId}: ${err.message}`);
             }
         }
     }
@@ -105,7 +105,7 @@ export class ReminderManager {
                 message: input.message,
                 reminderDate: input.reminderDate,
                 reminderDateTZ: input.reminderDateTZ,
-                userId: input.userId,
+                chatId: input.chatId,
                 isActive: true,
                 createdAt: now,
                 updatedAt: now
@@ -114,7 +114,7 @@ export class ReminderManager {
             this.reminders.push(reminder);
             this.saveReminders();
 
-            logger.info(`Created reminder with ID: ${reminder.id} for user: ${reminder.userId}`);
+            logger.info(`Created reminder with ID: ${reminder.id} for user: ${reminder.chatId}`);
             return reminder;
         } catch (error: any) {
             logger.error(`Error creating reminder: ${error.message}`);
@@ -180,7 +180,7 @@ export class ReminderManager {
      * Gets all reminders for a specific user
      */
     public getRemindersByUser(userId: string): Reminder[] {
-        return this.reminders.filter(r => r.userId === userId);
+        return this.reminders.filter(r => r.chatId === userId);
     }
 
 }
