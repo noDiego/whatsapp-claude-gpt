@@ -103,7 +103,6 @@ export class ReminderManager {
                 return null;
         }
 
-        // Verificar si ha superado la fecha límite
         if (reminder.recurrenceEndDate && reminder.recurrenceEndDateTZ) {
             const endDate = fromZonedTime(reminder.recurrenceEndDate, reminder.recurrenceEndDateTZ);
             if (nextDate > endDate) {
@@ -133,13 +132,11 @@ export class ReminderManager {
                 const data = fs.readFileSync(this.filePath, 'utf8');
                 const parsedData = JSON.parse(data);
 
-                // Convert date strings back to Date objects
                 this.reminders = parsedData.map((reminder: any) => ({
                     ...reminder,
                     reminderDate: reminder.reminderDate,
                     createdAt: new Date(reminder.createdAt),
                     updatedAt: new Date(reminder.updatedAt),
-                    // Asegurar que los campos de recurrencia existan
                     recurrenceType: reminder.recurrenceType || 'none',
                     recurrenceInterval: reminder.recurrenceInterval || 1,
                     recurrenceEndDate: reminder.recurrenceEndDate || null,
@@ -219,7 +216,6 @@ export class ReminderManager {
 
             const reminder = this.reminders[reminderIndex];
 
-            // Update fields if provided
             if (updates.message !== undefined) reminder.message = updates.message;
             if (updates.reminderDate !== undefined) reminder.reminderDate = updates.reminderDate;
             if (updates.reminderDateTZ !== undefined) reminder.reminderDateTZ = updates.reminderDateTZ;
@@ -268,13 +264,6 @@ export class ReminderManager {
      */
     public getRemindersByUser(userId: string): Reminder[] {
         return this.reminders.filter(r => r.chatId === userId);
-    }
-
-    /**
-     * Gets all active reminders
-     */
-    public getActiveReminders(): Reminder[] {
-        return this.reminders.filter(r => r.isActive);
     }
 
     /**

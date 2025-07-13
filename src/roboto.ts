@@ -22,7 +22,6 @@ import { AITools } from "./config/openai-functions";
 import { ChatConfiguration } from "./interfaces/chat-configuration";
 import path from "node:path";
 import { ReminderManager } from "./services/reminder-service";
-import { Array, Record } from "openai/core";
 import * as fs from "node:fs";
 
 export interface ChatInfo {
@@ -503,7 +502,7 @@ export class RobotoClass {
 
         const chatData: Chat = await message.getChat();
         const chatId = chatData.id._serialized;
-        const chatName = await getContactName(message);
+        const chatName = chatData.name ?? await getContactName(message);
         let responseMessage = '';
         let reminder;
 
