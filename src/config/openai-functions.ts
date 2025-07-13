@@ -87,12 +87,15 @@ export const AITools: Array<Tool> = [
     {
         type: "function",
         name: "reminder_manager",
-        description: `Complete reminder management system. Use this function to:
+        description: `Complete reminder management system with recurrence support. Use this function to:
     - LIST/GET: Retrieve all pending reminders for the user or group (use action 'list')
-    - CREATE: Add new reminders with a message and date/time (use action 'create')
+    - CREATE: Add new reminders with a message, date/time, and optional recurrence (use action 'create')
     - UPDATE: Modify existing reminders by their ID (use action 'update') 
     - DELETE: Remove reminders by their ID (use action 'delete')
+    - DEACTIVATE: Temporarily disable a reminder (use action 'deactivate')
+    - REACTIVATE: Re-enable a disabled reminder (use action 'reactivate')
     
+    Recurrence types: 'none', 'daily', 'weekly', 'monthly'
     Always use 'list' first to get reminder IDs before updating or deleting.`,
         strict: false,
         parameters: {
@@ -100,27 +103,48 @@ export const AITools: Array<Tool> = [
             properties: {
                 action: {
                     type: "string",
-                    enum: ["list", "create", "update", "delete"],
-                    description: "Action to perform: 'list' to get all pending reminders, 'create' to add new reminders, 'update' to modify existing ones, 'delete' to remove reminders"
+                    enum: ["list", "create", "update", "delete", "deactivate", "reactivate"],
+                    description: "Action to perform on reminders"
                 },
                 message: {
                     type: ["string", "null"],
-                    description: "The reminder message text. REQUIRED for 'create' and 'update' actions. Not used for 'list' and 'delete'.",
+                    description: "The reminder message text. REQUIRED for 'create' and 'update' actions.",
                     nullable: true
                 },
                 reminder_date: {
                     type: ["string", "null"],
-                    description: "When the reminder should trigger, in yyyy-MM-ddTHH:mm:ss format (e.g., '2024-12-25T10:30:00'). REQUIRED for 'create' and 'update' actions. Not used for 'list' and 'delete'.",
+                    description: "When the reminder should trigger, in yyyy-MM-ddTHH:mm:ss format (e.g., '2024-12-25T10:30:00'). REQUIRED for 'create' and 'update' actions.",
                     nullable: true
                 },
                 reminder_date_timezone: {
                     type: ["string", "null"],
-                    description: `Specifies the IANA timezone (e.g., 'America/Santiago') that applies to the reminder date and time. This field is used only during creation or update of a reminder. You do not need to specify it unless the user explicitly states they are in a different timezone; by default, '${CONFIG.botConfig.botTimezone}' will be used.`,
+                    description: `Specifies the IANA timezone (e.g., 'America/Santiago') that applies to the reminder date and time. By default, '${CONFIG.botConfig.botTimezone}' will be used.`,
                     nullable: true
                 },
                 reminder_id: {
                     type: ["string", "null"],
-                    description: "The unique identifier of the reminder. REQUIRED for 'update' and 'delete' actions. Not used for 'list' and 'create'. Get IDs by using action 'list' first.",
+                    description: "The unique identifier of the reminder. REQUIRED for 'update', 'delete', 'deactivate', and 'reactivate' actions.",
+                    nullable: true
+                },
+                recurrence_type: {
+                    type: ["string", "null"],
+                    enum: ["none", "daily", "weekly", "monthly"],
+                    description: "Type of recurrence for the reminder. 'none' for one-time reminders. Optional for 'create' and 'update' actions.",
+                    nullable: true
+                },
+                recurrence_interval: {
+                    type: ["number", "null"],
+                    description: "Interval for recurrence (e.g., 2 for every 2 days/weeks/months). Default is 1. Optional for 'create' and 'update' actions.",
+                    nullable: true
+                },
+                recurrence_end_date: {
+                    type: ["string", "null"],
+                    description: "End date for recurrence in yyyy-MM-ddTHH:mm:ss format. Optional for 'create' and 'update' actions.",
+                    nullable: true
+                },
+                recurrence_end_date_timezone: {
+                    type: ["string", "null"],
+                    description: `Timezone for the recurrence end date. By default, '${CONFIG.botConfig.botTimezone}' will be used.`,
                     nullable: true
                 }
             },

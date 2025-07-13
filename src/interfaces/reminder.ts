@@ -8,12 +8,19 @@ export interface Reminder {
     isActive: boolean;
     createdAt: Date;
     updatedAt: Date;
+    recurrenceType?: 'none' | 'daily' | 'weekly' | 'monthly';
+    recurrenceInterval?: number;
+    recurrenceEndDate?: string;
+    recurrenceEndDateTZ?: string;
 }
-
 export interface ReminderCreateInput {
     message: string;
     reminderDate: string;
     reminderDateTZ: string;
     chatName?: string;
     chatId?: string;
+    recurrenceType?: 'none' | 'daily' | 'weekly' | 'monthly';
+    recurrenceInterval?: number;
+    recurrenceEndDate?: string;
+    recurrenceEndDateTZ?: string;
 }

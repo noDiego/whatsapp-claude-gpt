@@ -487,50 +487,76 @@ export class RobotoClass {
         return null;
       },
 
-      get_reminders: async (args) => {
-        const chatData: Chat = await message.getChat();
-        const chatId = chatData.id._serialized;
-        const reminders = await this.reminderManager.getRemindersByUser(chatId);
-        return JSON.stringify(reminders);
-      },
-
       reminder_manager: async (args) => {
 
-        const {action, message: reminderMessage, reminder_date, reminder_date_timezone, reminder_id} = args;
+        const {
+          action,
+          message: reminderMessage,
+          reminder_date,
+          reminder_date_timezone,
+          reminder_id,
+          recurrence_type,
+          recurrence_interval,
+          recurrence_end_date,
+          recurrence_end_date_timezone
+        } = args;
+
         const chatData: Chat = await message.getChat();
         const chatId = chatData.id._serialized;
         const chatName = await getContactName(message);
         let responseMessage = '';
         let reminder;
 
-        switch (action){
+        switch (action) {
           case 'list':
             const remindersList = await this.reminderManager.getRemindersByUser(chatId);
             responseMessage = JSON.stringify(remindersList);
             break;
+
           case 'create':
             reminder = this.reminderManager.createReminder({
               message: reminderMessage,
               reminderDate: reminder_date,
-              reminderDateTZ: reminder_date_timezone,
+              reminderDateTZ: reminder_date_timezone || CONFIG.botConfig.botTimezone,
               chatId: chatId,
-              chatName: chatName
+              chatName: chatName,
+              recurrenceType: recurrence_type || 'none',
+              recurrenceInterval: recurrence_interval || 1,
+              recurrenceEndDate: recurrence_end_date || null,
+              recurrenceEndDateTZ: recurrence_end_date_timezone || CONFIG.botConfig.botTimezone
             });
             responseMessage = `Reminder created successfully. (Data: ${JSON.stringify(reminder)})`;
             break;
+
           case 'update':
             reminder = this.reminderManager.updateReminder(reminder_id, {
               message: reminderMessage,
-              reminderDate: new reminder_date,
-              reminderDateTZ: reminder_date_timezone
+              reminderDate: reminder_date,
+              reminderDateTZ: reminder_date_timezone || CONFIG.botConfig.botTimezone,
+              recurrenceType: recurrence_type,
+              recurrenceInterval: recurrence_interval,
+              recurrenceEndDate: recurrence_end_date,
+              recurrenceEndDateTZ: recurrence_end_date_timezone || CONFIG.botConfig.botTimezone
             });
             responseMessage = `Reminder updated successfully. (Data: ${JSON.stringify(reminder)})`;
             break;
+
           case 'delete':
             this.reminderManager.deleteReminder(reminder_id);
             responseMessage = `Reminder deleted successfully`;
             break;
+
+          case 'deactivate':
+            this.reminderManager.deactivateReminder(reminder_id);
+            responseMessage = `Reminder deactivated successfully`;
+            break;
+
+          case 'reactivate':
+            this.reminderManager.reactivateReminder(reminder_id);
+            responseMessage = `Reminder reactivated successfully`;
+            break;
         }
+
 
         return responseMessage;
       },
