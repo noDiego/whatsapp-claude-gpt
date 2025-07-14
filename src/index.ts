@@ -14,7 +14,7 @@ require('dotenv').config();
 configValidation();
 logConfigInfo();
 
-const roboto: Roboto = new Roboto();
+const robotoInstance: Roboto = new Roboto();
 
 client.on('qr', qr => {
   qrcode.generate(qr, {small: true});
@@ -25,7 +25,7 @@ client.on('ready', () => {
 });
 
 client.on('message', async (message: Message) => {
-  roboto.readMessage(message, client);
+  robotoInstance.readMessage(message, client);
 });
 
 try {
@@ -33,3 +33,5 @@ try {
 }catch (e: any){
   logger.error(`ERROR: ${e.message}`);
 }
+
+export { robotoInstance as RobotoInstance } ;

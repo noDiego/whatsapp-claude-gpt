@@ -4,8 +4,8 @@ import { Readable } from 'stream';
 import { AIConfig, CONFIG } from '../config';
 import { AIAnswer } from "../interfaces/ai-interfaces";
 
-export function getFormattedDate() {
-  const now = new Date();
+export function getFormattedDate(date?: Date) {
+  const now = date || new Date();
 
   const year = now.getFullYear();
   const month = (now.getMonth() + 1).toString().padStart(2, '0');
@@ -15,13 +15,20 @@ export function getFormattedDate() {
   const minutes = now.getMinutes().toString().padStart(2, '0');
   const seconds = now.getSeconds().toString().padStart(2, '0');
 
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  const offsetMinutes = now.getTimezoneOffset();
+  const offsetSign = offsetMinutes > 0 ? '-' : '+';
+  const absOffsetMinutes = Math.abs(offsetMinutes);
+  const offsetHours = Math.floor(absOffsetMinutes / 60).toString().padStart(2, '0');
+  const offsetMins = (absOffsetMinutes % 60).toString().padStart(2, '0');
+  const offsetString = `${offsetSign}${offsetHours}:${offsetMins}`;
+
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offsetString}`;
 }
 
 export function logMessage(message: Message, chat: Chat) {
-  const actualDate = new Date();
+  const msgDate = new Date(message.timestamp * 1000);
   logger.info(
-    `{ chatUser:${chat.id.user}, isGroup:${chat.isGroup}, grId:${chat.id._serialized}, grName:${chat.name}, author:'${message.author}', date:'${actualDate.toLocaleDateString()}-${actualDate.toLocaleTimeString()}', msg:'${message.body}' }`
+      `[ReceivedMessage] {chatUser:${chat.id.user}, isGroup:${chat.isGroup}, grId:${chat.id._serialized}, grName:${chat.name}, date:'${getFormattedDate(msgDate)}', msg:'${message.body}'}`
   );
 }
 
