@@ -195,38 +195,8 @@ export async function isSuperUser(message: Message){
   return CONFIG.botConfig.superUserNumbers.includes(contactData.number);
 }
 
-export function addDays(date: Date, days: number): Date {
+export function addSeconds(date: Date, seconds: number): Date {
   const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
-}
-
-export function addWeeks(date: Date, weeks: number): Date {
-  const result = new Date(date);
-  result.setDate(result.getDate() + (weeks * 7));
-  return result;
-}
-
-export function addMonths(date: Date, months: number): Date {
-  const result = new Date(date);
-  const currentMonth = result.getMonth();
-  const currentYear = result.getFullYear();
-
-  const newMonth = currentMonth + months;
-  const yearsToAdd = Math.floor(newMonth / 12);
-  const finalMonth = newMonth % 12;
-
-  result.setFullYear(currentYear + yearsToAdd);
-  result.setMonth(finalMonth);
-
-  const originalDay = date.getDate();
-  const lastDayOfTargetMonth = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
-
-  if (originalDay > lastDayOfTargetMonth) {
-    result.setDate(lastDayOfTargetMonth);
-  } else {
-    result.setDate(originalDay);
-  }
-
+  result.setSeconds(result.getSeconds() + seconds);
   return result;
 }

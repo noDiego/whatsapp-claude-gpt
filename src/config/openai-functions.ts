@@ -95,7 +95,7 @@ export const AITools: Array<Tool> = [
     - DEACTIVATE: Temporarily disable a reminder (use action 'deactivate')
     - REACTIVATE: Re-enable a disabled reminder (use action 'reactivate')
     
-    Recurrence types: 'none', 'daily', 'weekly', 'monthly'
+    Recurrence types: 'none', 'minutes', 'daily', 'weekly', 'monthly'
     Always use 'list' first to get reminder IDs before updating or deleting.`,
         strict: false,
         parameters: {
@@ -128,7 +128,7 @@ export const AITools: Array<Tool> = [
                 },
                 recurrence_type: {
                     type: ["string", "null"],
-                    enum: ["none", "daily", "weekly", "monthly"],
+                    enum: ["none", "minutes" ,"daily", "weekly", "monthly"],
                     description: "Type of recurrence for the reminder. 'none' for one-time reminders. Optional for 'create' and 'update' actions.",
                     nullable: true
                 },

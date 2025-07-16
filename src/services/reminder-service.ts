@@ -1,4 +1,3 @@
-// src/services/reminder-service.ts
 import * as fs from 'fs';
 import * as path from 'path';
 import { Reminder, ReminderCreateInput } from '../interfaces/reminder';
@@ -8,8 +7,10 @@ import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 import Roboto from "../index";
 import { AIRole } from "../interfaces/ai-interfaces";
 import { ChatConfig } from "../config/chat-configurations";
-import { addDays, addMonths, addWeeks, extractAnswer } from "../utils";
+import { addSeconds, extractAnswer } from "../utils";
+import { addDays, addMonths, addWeeks } from 'date-fns';
 import { CONFIG } from "../config";
+import { format } from "date-fns-tz/dist/esm";
 
 export class ReminderManager {
     private filePath: string;
@@ -29,7 +30,7 @@ export class ReminderManager {
     private startReminderChecker() {
         setInterval(() => {
             this.checkReminders();
-        }, 60 * 1000); // cada minuto
+        }, 59 * 1000);
     }
 
     private async checkReminders() {
@@ -56,12 +57,11 @@ export class ReminderManager {
                 const reminderMsg = extractAnswer(aiResponse, chatCfg.botName);
                 await this.wspClient.sendMessage(reminder.chatId, reminderMsg.message);
 
-                // Manejar recurrencia
                 if (reminder.recurrenceType && reminder.recurrenceType !== 'none') {
                     const nextDate = this.calculateNextRecurrence(reminder);
                     if (nextDate) {
-                        // Actualizar la fecha del recordatorio para la próxima ocurrencia
-                        reminder.reminderDate = toZonedTime(nextDate, reminder.reminderDateTZ).toISOString().slice(0, 19);
+                        const zonedDate = toZonedTime(nextDate, reminder.reminderDateTZ);
+                        reminder.reminderDate = format(zonedDate, "yyyy-MM-dd'T'HH:mm:ss", { timeZone: reminder.reminderDateTZ });
                         reminder.updatedAt = new Date();
                         this.saveReminders();
                         logger.info(`Recurring reminder updated for next occurrence: ${reminder.id}`);
@@ -90,6 +90,9 @@ export class ReminderManager {
         let nextDate: Date;
 
         switch (reminder.recurrenceType) {
+            case 'minutes':
+                nextDate = addSeconds(currentDate, interval*60);
+                break;
             case 'daily':
                 nextDate = addDays(currentDate, interval);
                 break;
