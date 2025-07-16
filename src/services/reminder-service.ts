@@ -10,7 +10,7 @@ import { ChatConfig } from "../config/chat-configurations";
 import { addSeconds, extractAnswer } from "../utils";
 import { addDays, addMonths, addWeeks } from 'date-fns';
 import { CONFIG } from "../config";
-import { format } from "date-fns-tz/dist/esm";
+import { format } from "date-fns-tz";
 
 export class ReminderManager {
     private filePath: string;
