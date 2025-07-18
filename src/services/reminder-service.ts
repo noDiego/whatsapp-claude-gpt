@@ -7,15 +7,16 @@ import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 import Roboto from "../index";
 import { AIRole } from "../interfaces/ai-interfaces";
 import { ChatConfig } from "../config/chat-configurations";
-import { addSeconds, extractAnswer } from "../utils";
+import { addSeconds, extractAnswer, getFormattedDate } from "../utils";
 import { addDays, addMonths, addWeeks } from 'date-fns';
 import { CONFIG } from "../config";
 import { format } from "date-fns-tz";
+import { Client } from "whatsapp-web.js";
 
 export class ReminderManager {
     private filePath: string;
     private reminders: Reminder[] = [];
-    private wspClient;
+    private wspClient: Client;
     private chatConfig: ChatConfig;
 
     constructor(client, filePath: string = 'reminders.json') {
@@ -43,15 +44,18 @@ export class ReminderManager {
         for (const reminder of dueReminders) {
             try {
                 const chatCfg = this.chatConfig.getChatConfig(reminder.chatId, reminder.chatName);
-                const msg = Roboto.convertIaMessagesLang([{
+                const chatData = await this.wspClient.getChatById(reminder.chatId);
+                const previousMessages = await Roboto.generateMessageArray(chatData,chatCfg, 6);
+                previousMessages.push({
                     role: AIRole.USER,
                     name: 'SYSTEM',
                     content: [{
                         type: 'text',
-                        value: `SYSTEM: The user has a reminder, write a message to remind them of the following: "${reminder.message}". Date: "${reminder.reminderDate}"`,
-                        dateString: ''
+                        value: `SYSTEM: The user has a new reminder, write a message to remind them of the following: "${reminder.message}". RecipientName: ${reminder.chatName}. Date: "${reminder.reminderDate}"`,
+                        dateString: reminder.reminderDate
                     }]
-                }], CONFIG.getSystemPrompt(chatCfg));
+                });
+                const msg = Roboto.convertIaMessagesLang(previousMessages, CONFIG.getSystemPrompt(chatCfg));
 
                 const aiResponse = await Roboto.openAIService.sendChat(msg, 'text', chatCfg);
                 const reminderMsg = extractAnswer(aiResponse, chatCfg.botName);

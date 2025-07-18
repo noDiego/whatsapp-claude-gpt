@@ -181,7 +181,7 @@ export class RobotoClass {
    * @param chatCfg  ChatConfiguration with custom prompts, bot name, etc.
    * @returns                  Promise<AiMessage[]> array of formatted messages for AI consumption.
    */
-  private async generateMessageArray(chatData: Chat, chatCfg: ChatConfiguration): Promise<AiMessage[]> {
+  public async generateMessageArray(chatData: Chat, chatCfg: ChatConfiguration, maxMsgs?: number): Promise<AiMessage[]> {
 
     const actualDate = new Date();
 
@@ -193,7 +193,7 @@ export class RobotoClass {
     let imageCount: number = 0;
 
     // Retrieve the last 'limit' number of messages to send them in order
-    const fetchedMessages = await chatData.fetchMessages({limit: chatCfg.maxMsgsLimit});
+    const fetchedMessages = await chatData.fetchMessages({limit: maxMsgs || chatCfg.maxMsgsLimit});
     // Check for "-reset" command in chat history to potentially restart context
     const resetIndex = fetchedMessages.map(msg => msg.body).lastIndexOf("-reset");
     const messagesToProcess = resetIndex >= 0 ? fetchedMessages.slice(resetIndex + 1) : fetchedMessages;
