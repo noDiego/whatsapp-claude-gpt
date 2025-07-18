@@ -115,7 +115,7 @@ export class RobotoClass {
 
       //Generate Message Array for AI
       const aiMessages: AiMessage[] = await this.generateMessageArray(chatData, chatCfg);
-      const aiResponse: string = await this.sendToAI(message, aiMessages, chatCfg);
+      const aiResponse: string = await this.sendToAI(message, aiMessages, chatCfg, chatData.isGroup);
 
       if (!aiResponse) {
         logger.info('[ProcessMessage] Operation without response. Done.');
@@ -274,12 +274,13 @@ export class RobotoClass {
    *
    * @param messageList      Array of AiMessage representing the conversation.
    * @param message          The original Message (for context and tool callback).
-   * @param chatCfg              ChatConfiguration containing prompt info and bot name.
+   * @param chatCfg           ChatConfiguration containing prompt info and bot name.
+   * @param isGroup           Whether the conversation is in a group chat.
    * @returns                 Promise<string> the raw AI response text.
    */
-  private async sendToAI(message: Message, messageList: AiMessage[], chatCfg: ChatConfiguration) {
+  private async sendToAI(message: Message, messageList: AiMessage[], chatCfg: ChatConfiguration, isGroup: boolean) {
     const systemPrompt = CONFIG.getSystemPrompt(chatCfg);
-    const convertedMessageList: ResponseInput = this.convertIaMessagesLang(messageList.reverse(), systemPrompt) as ResponseInput;
+    const convertedMessageList: ResponseInput = this.convertIaMessagesLang(messageList.reverse(), isGroup, systemPrompt) as ResponseInput;
     return await this._openAIService.sendChatWithTools(convertedMessageList, 'text', AITools, message, chatCfg);
   }
 
@@ -329,7 +330,7 @@ export class RobotoClass {
    * @param systemPrompt  Optional system prompt to include at the start.
    * @returns             ResponseInput[] formatted for the OpenAI API.
    */
-  public convertIaMessagesLang(messageList: AiMessage[], systemPrompt?: string): ResponseInput {
+  public convertIaMessagesLang(messageList: AiMessage[], isGroup: boolean, systemPrompt?: string): ResponseInput {
     const responseAPIMessageList: ResponseInput = [];
     messageList.forEach(msg => {
       const gptContent: Array<any> = [];
@@ -344,12 +345,12 @@ export class RobotoClass {
             type: 'input_image',
             image_url: `data:${c.media_type};base64,${c.value}`
           });
-          gptContent.push({
+          if(isGroup) gptContent.push({
             type: fromBot ? 'output_text' : 'input_text',
             text: JSON.stringify({
               image_id: c.image_id,
               author: msg.name,
-              note: 'refer to this image by its image_id',
+              note: 'image_id only to be used with the "generate_image" function. Do not mention image_id in the chat',
               date: c.dateString
             })
           });
