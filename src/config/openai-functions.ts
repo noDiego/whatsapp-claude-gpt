@@ -6,10 +6,10 @@ export const AITools: Array<Tool> = [
         type: "function",
         name: "web_search",
         description: "Use this function whenever the user asks to find out, search for, or obtain updated information or internet data.",
-        strict: true,
+        strict: false,
         parameters: {
             type: "object",
-            required: [ "query", "country", "region", "city","timezone" ],
+            required: ["query"],
             properties: {
                 query: { type: "string", description: "Search term to perform the internet search" },
                 country: { type: ["string","null"], description: "Two-letter ISO country code (e.g., CL for Chile)", nullable: true },
@@ -64,12 +64,11 @@ export const AITools: Array<Tool> = [
         name: "generate_image",
         description: `Generate or edit images. Use this function to:
     - Create NEW images from scratch (when no reference images are provided)
-    - Transform or edit existing images (when reference images are provided)
-    Important: never use real person names in the prompt; always refer to subjects as "the person in the first image", etc.`,
+    - Transform or edit existing images (when reference images are provided)`,
         parameters: {
             type: "object",
             properties: {
-                prompt: { type: "string", description: "Description of the image to generate or changes to apply." },
+                prompt: { type: "string", description: "Description of the image to generate or changes to apply. Important: Never use real person names or imageIds in the prompt; always refer to subjects as \"the person in the first image\", etc." },
                 imageIds: {
                     type: ["array", "null"],
                     description: "Array of imageIds to use as reference. Leave null or empty to create from scratch. (Optional)",

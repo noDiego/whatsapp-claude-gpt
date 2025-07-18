@@ -336,23 +336,24 @@ export class RobotoClass {
       const gptContent: Array<any> = [];
       msg.content.forEach(c => {
         const fromBot = msg.role == AIRole.ASSISTANT;
-        if (['text', 'audio'].includes(c.type)) gptContent.push({
-          type: fromBot ? 'output_text' : 'input_text',
-          text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format: 'json_object', date: c.dateString}),
-        });
         if (['image'].includes(c.type)) {
+          gptContent.push({
+            type: fromBot ? 'output_text' : 'input_text',
+            text: JSON.stringify({
+              image_id: c.image_id,
+              author: 'SYSTEM',
+              sentBy: msg.name,
+              note: 'image_id only to be used with the "generate_image" function. Do not mention image_id in the chat',
+              date: c.dateString
+            })
+          });
           gptContent.push({
             type: 'input_image',
             image_url: `data:${c.media_type};base64,${c.value}`
           });
-          if(isGroup) gptContent.push({
+          if (['text', 'audio'].includes(c.type)) gptContent.push({
             type: fromBot ? 'output_text' : 'input_text',
-            text: JSON.stringify({
-              image_id: c.image_id,
-              author: msg.name,
-              note: 'image_id only to be used with the "generate_image" function. Do not mention image_id in the chat',
-              date: c.dateString
-            })
+            text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format: 'json_object', date: c.dateString}),
           });
         }
       })
