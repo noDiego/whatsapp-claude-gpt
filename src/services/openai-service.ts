@@ -6,6 +6,7 @@ import { Message } from "whatsapp-web.js";
 import { ChatConfiguration } from "../interfaces/chat-configuration";
 
 import Roboto from "../index";
+import { sanitizeLogImages } from "../utils";
 
 export class OpenaiService {
 
@@ -37,7 +38,7 @@ export class OpenaiService {
       chatCfg: ChatConfiguration,
   ): Promise<string> {
     logger.info(`[OpenAI] Sending ${messageList.length} messages`);
-    logger.debug(`[OpenAI] Sending Msg: ${JSON.stringify(messageList[messageList.length - 1])}`);
+    logger.debug(`[OpenAI] Sending Msg: ${sanitizeLogImages(JSON.stringify(messageList[messageList.length - 1]))}`);
 
     const responseResult = await this.client.responses.create({
       model: chatCfg.chatModel,
@@ -51,7 +52,7 @@ export class OpenaiService {
       store: true
     });
 
-    logger.debug('[OpenAI] Completion Response:' + JSON.stringify(responseResult.output_text));
+    logger.debug('[OpenAI] Completion Response:' + sanitizeLogImages(JSON.stringify(responseResult.output_text)));
     this.calculateCost(responseResult.usage, chatCfg.chatModel);
 
     const functionCalls = responseResult.output.filter(toolCall => toolCall.type === "function_call");

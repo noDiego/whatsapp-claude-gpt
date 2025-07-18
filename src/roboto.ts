@@ -115,7 +115,7 @@ export class RobotoClass {
 
       //Generate Message Array for AI
       const aiMessages: AiMessage[] = await this.generateMessageArray(chatData, chatCfg);
-      const aiResponse: string = await this.sendToAI(message, aiMessages, chatCfg, chatData.isGroup);
+      const aiResponse: string = await this.sendToAI(message, aiMessages, chatCfg);
 
       if (!aiResponse) {
         logger.info('[ProcessMessage] Operation without response. Done.');
@@ -278,9 +278,9 @@ export class RobotoClass {
    * @param isGroup           Whether the conversation is in a group chat.
    * @returns                 Promise<string> the raw AI response text.
    */
-  private async sendToAI(message: Message, messageList: AiMessage[], chatCfg: ChatConfiguration, isGroup: boolean) {
+  private async sendToAI(message: Message, messageList: AiMessage[], chatCfg: ChatConfiguration) {
     const systemPrompt = CONFIG.getSystemPrompt(chatCfg);
-    const convertedMessageList: ResponseInput = this.convertIaMessagesLang(messageList.reverse(), isGroup, systemPrompt) as ResponseInput;
+    const convertedMessageList: ResponseInput = this.convertIaMessagesLang(messageList.reverse(), systemPrompt) as ResponseInput;
     return await this._openAIService.sendChatWithTools(convertedMessageList, 'text', AITools, message, chatCfg);
   }
 
@@ -330,7 +330,7 @@ export class RobotoClass {
    * @param systemPrompt  Optional system prompt to include at the start.
    * @returns             ResponseInput[] formatted for the OpenAI API.
    */
-  public convertIaMessagesLang(messageList: AiMessage[], isGroup: boolean, systemPrompt?: string): ResponseInput {
+  public convertIaMessagesLang(messageList: AiMessage[], systemPrompt?: string): ResponseInput {
     const responseAPIMessageList: ResponseInput = [];
     messageList.forEach(msg => {
       const gptContent: Array<any> = [];
@@ -351,11 +351,11 @@ export class RobotoClass {
             type: 'input_image',
             image_url: `data:${c.media_type};base64,${c.value}`
           });
-          if (['text', 'audio'].includes(c.type)) gptContent.push({
-            type: fromBot ? 'output_text' : 'input_text',
-            text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format: 'json_object', date: c.dateString}),
-          });
         }
+        if (['text', 'audio'].includes(c.type)) gptContent.push({
+          type: fromBot ? 'output_text' : 'input_text',
+          text: JSON.stringify({message: c.value, author: msg.name, type: c.type, response_format: 'json_object', date: c.dateString}),
+        });
       })
       responseAPIMessageList.push({content: gptContent, role: msg.role});
     })

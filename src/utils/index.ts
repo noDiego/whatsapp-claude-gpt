@@ -200,3 +200,7 @@ export function addSeconds(date: Date, seconds: number): Date {
   result.setSeconds(result.getSeconds() + seconds);
   return result;
 }
+
+export function sanitizeLogImages(str: string) {
+  return str.replace(/(data:image\/[a-zA-Z0-9+.-]+;base64,)[A-Za-z0-9+/=]+/g, '$1...');
+}
