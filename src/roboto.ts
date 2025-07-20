@@ -246,7 +246,7 @@ export class RobotoClass {
     }
 
     // If no new messages are present, return without action
-    if (messageList.length == 0) return;
+    if (messageList.length == 0) return [];
 
     // Wait for all transcriptions to complete
     const transcriptions = await Promise.all(transcriptionPromises.map(t => t.promise));
@@ -262,7 +262,7 @@ export class RobotoClass {
       );
     });
 
-    return messageList;
+    return messageList || [];
   }
 
   /**

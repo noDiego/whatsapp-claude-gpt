@@ -44,6 +44,7 @@ export class ReminderManager {
         for (const reminder of dueReminders) {
             try {
                 const chatCfg = this.chatConfig.getChatConfig(reminder.chatId, reminder.chatName);
+                chatCfg.maxHoursLimit = 48;
                 const chatData = await this.wspClient.getChatById(reminder.chatId);
                 const previousMessages = await Roboto.generateMessageArray(chatData,chatCfg, 6);
                 previousMessages.push({
