@@ -78,6 +78,12 @@ export class RobotoClass {
 
     const chatData: Chat = await message.getChat();
     const chatInfo = this.getChatInfo(chatData.id._serialized);
+    const contactData = await message.getContact();
+
+    if(CONFIG.botConfig.restrictedNumbers.includes(contactData.number)){
+      logger.debug(`Numero ${contactData.number} en lista restringida. Se ignora mensaje`);
+      return false;
+    }
 
     try {
 

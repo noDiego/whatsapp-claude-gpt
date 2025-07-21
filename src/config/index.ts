@@ -40,7 +40,8 @@ const botConfig = {
   nodeCacheTime: parseInt(process.env.NODE_CACHE_TIME ?? '259200'), // The cache duration for stored data, specified in seconds.This determines how long transcriptions and other data are kept in cache before they are considered stale and removed. Example value is 259200, which translates to 3 days.
   promptInfo: process.env.PROMPT_INFO, // You can use this to customize the bot's personality and provide context about the group or individuals for tailored interactions.
   superUserNumbers: process.env.SUPERUSER_NUMBERS?.split('|') || [],
-  maxImageCreationRetry: 2
+  maxImageCreationRetry: 2,
+  restrictedNumbers: (<string>process.env.RESTRICTED_NUMBERS).split(','),
 };
 
 // Dynamically generate the bot's initial prompt based on configuration parameters
