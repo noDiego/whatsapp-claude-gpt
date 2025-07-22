@@ -125,7 +125,7 @@ export class OpenaiService {
     logger.info(`[OpenAI->webSearch] Searching "${searchQuery}" with options :${JSON.stringify(options)}`);
 
     const responseResult = await this.client.responses.create({
-      model: 'gpt-4.1-mini',
+      model: 'gpt-4.1',
       input: [{
         role: "user",
         content: [
