@@ -1,5 +1,6 @@
 import *  as  winston from 'winston';
 import 'winston-daily-rotate-file';
+import { getFormattedDate } from "./utils";
 
 const dailyRotateFile = new (winston.transports.DailyRotateFile)({
   filename: 'logs/application-%DATE%.log',
@@ -10,7 +11,7 @@ const dailyRotateFile = new (winston.transports.DailyRotateFile)({
 });
 
 const logFormat = winston.format.printf(function(info) {
-  return `${new Date().toISOString()}-${info.level}: ${JSON.stringify(info.message, null, 4)}`;
+  return `${getFormattedDate()}-${info.level}: ${JSON.stringify(info.message, null, 4)}`;
 });
 
 const logger = winston.createLogger({
