@@ -43,6 +43,10 @@ export class ReminderManager {
 
         for (const reminder of dueReminders) {
             try {
+                const scheduledDate = fromZonedTime(reminder.reminderDate, reminder.reminderDateTZ);
+                const diffMs = now.getTime() - scheduledDate.getTime();
+                const diffMinutes = diffMs / 60000;
+
                 const chatCfg = this.chatConfig.getChatConfig(reminder.chatId, reminder.chatName);
                 chatCfg.maxHoursLimit = 48;
                 const chatData = await this.wspClient.getChatById(reminder.chatId);
@@ -56,11 +60,15 @@ export class ReminderManager {
                         dateString: reminder.reminderDate
                     }]
                 });
-                const msg = Roboto.convertIaMessagesLang(previousMessages, CONFIG.getSystemPrompt(chatCfg));
 
-                const aiResponse = await Roboto.openAIService.sendChat(msg, 'text', chatCfg);
-                const reminderMsg = extractAnswer(aiResponse, chatCfg.botName);
-                await this.wspClient.sendMessage(reminder.chatId, reminderMsg.message);
+                if(diffMinutes <= 60) {
+                    const msg = Roboto.convertIaMessagesLang(previousMessages, CONFIG.getSystemPrompt(chatCfg));
+                    const aiResponse = await Roboto.openAIService.sendChat(msg, 'text', chatCfg);
+                    const reminderMsg = extractAnswer(aiResponse, chatCfg.botName);
+                    await this.wspClient.sendMessage(reminder.chatId, reminderMsg.message);
+                } else {
+                    logger.info(`Reminder para ${reminder.chatName} expirado. No se envia recordatorio`);
+                }
 
                 if (reminder.recurrenceType && reminder.recurrenceType !== 'none') {
                     const nextDate = this.calculateNextRecurrence(reminder);
