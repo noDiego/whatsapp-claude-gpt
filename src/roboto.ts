@@ -62,6 +62,15 @@ export class RobotoClass {
     return data;
   }
 
+  private async shouldProcessMessage(wspMessage: Message, chatData: Chat){
+    const isOldMessage = wspMessage.timestamp*1000 < (Date.now() - 900000);
+    if(isOldMessage) return false;
+
+    const fetchedMessages = await chatData.fetchMessages({limit: 1});
+    const isLastMessage = wspMessage.id._serialized == fetchedMessages[0].id._serialized;
+    return isLastMessage;
+  }
+
   /**
    * Handles an incoming WhatsApp message and determines if and how to respond.
    *
@@ -79,6 +88,8 @@ export class RobotoClass {
     const chatData: Chat = await message.getChat();
     const chatInfo = this.getChatInfo(chatData.id._serialized);
     const contactData = await message.getContact();
+
+    if(!await this.shouldProcessMessage(message, chatData)) return false;
 
     if(CONFIG.botConfig.restrictedNumbers.includes(contactData.number)){
       logger.debug(`Numero ${contactData.number} en lista restringida. Se ignora mensaje`);
