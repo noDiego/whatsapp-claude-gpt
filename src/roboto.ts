@@ -39,6 +39,7 @@ export class RobotoClass {
   private whatsappClient: Client;
   private chatConfig: ChatConfig;
   private reminderManager: ReminderManager;
+  private activado = true;
 
   public constructor(client) {
     this.whatsappClient = client;
@@ -63,6 +64,22 @@ export class RobotoClass {
   }
 
   private async shouldProcessMessage(wspMessage: Message, chatData: Chat){
+    const contactData = await wspMessage.getContact();
+
+    if(contactData.number == '56996268876' && wspMessage.body.toLowerCase() == 'desactivar'){
+      this.activado = false;
+      logger.info(`El bot ha sido desactivado por ${contactData.number}`);
+      wspMessage.reply('Bot desactivado. Para volver a activar escribe "activar"');
+      return false;
+    } else if (contactData.number == '56996268876' && wspMessage.body.toLowerCase() == 'activar'){
+      this.activado = true;
+      logger.info(`El bot ha sido activado por ${contactData.number}`);
+      wspMessage.reply('Bot activado.');
+      return false;
+    }
+
+    if(!this.activado) return false;
+
     const isOldMessage = wspMessage.timestamp*1000 < (Date.now() - 900000);
     if(isOldMessage) return false;
 
