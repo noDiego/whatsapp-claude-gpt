@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-claude-gpt",
-  "version": "1.3.2",
+  "version": "1.4.0",
   "license": "MIT",
   "author": "Diego Beltran <diego.beltran88@gmail.com>",
   "description": "WhatsApp-Claude-GPT is an advanced chatbot for WhatsApp, integrating AI language models for text conversations, image generation, and voice messages.",
@@ -10,6 +10,7 @@
     "chatgpt",
     "gpt",
     "gpt-4",
+    "gpt-5",
     "whatsapp",
     "bot",
     "typescript",
@@ -38,16 +39,22 @@
     "build": "rimraf ./build && tsc"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.56.0",
-    "axios": "^1.10.0",
+    "@anthropic-ai/sdk": "^0.60.0",
+    "@wppconnect/wa-version": "^1.5.2020",
+    "axios": "^1.11.0",
+    "better-sqlite3": "^12.2.0",
+    "date-fns-tz": "^3.2.0",
     "dotenv": "^17.2.0",
+    "drizzle-orm": "^0.44.4",
     "node-cache": "^5.1.2",
-    "openai": "5.9.0",
+    "openai": "^5.12.2",
     "qrcode-terminal": "^0.12.0",
+    "uuid": "^11.1.0",
     "whatsapp-web.js": "^1.31.0",
     "winston": "^3.17.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.0.13",
     "rimraf": "^6.0.1",
     "ts-node": "^10.9.2",

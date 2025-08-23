@@ -22,13 +22,16 @@ export function getFormattedDate(date?: Date) {
   const offsetMins = (absOffsetMinutes % 60).toString().padStart(2, '0');
   const offsetString = `${offsetSign}${offsetHours}:${offsetMins}`;
 
-  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offsetString}`;
+  const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const weekdayShort = weekdays[now.getDay()];
+
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offsetString} (${weekdayShort})`;
 }
 
 export function logMessage(message: Message, chat: Chat) {
   const msgDate = new Date(message.timestamp * 1000);
   logger.info(
-      `[ReceivedMessage] {chatUser:${chat.id.user}, isGroup:${chat.isGroup}, grId:${chat.id._serialized}, grName:${chat.name}, date:'${getFormattedDate(msgDate)}', msg:'${message.body}'}`
+      `[ReceivedMessage] {msg:'${message.body}', author:${getAuthorId(message)}, isGroup:${chat.isGroup}, chatId:${chat.id._serialized}, grName:${chat.name}, date:'${getFormattedDate(msgDate)}'}`
   );
 }
 
@@ -52,7 +55,7 @@ export function parseCommand(input: string): { command?: string, commandMessage?
   return {command: match[1].trim(), commandMessage: match[2].trim()};
 }
 
-export async function getContactName(message: Message) {
+export async function getUserName(message: Message) {
   const contactInfo = await message.getContact();
   const name = contactInfo.shortName || contactInfo.name || contactInfo.pushname || contactInfo.number;
   return removeNonAlphanumeric(name);
@@ -210,35 +213,113 @@ export function configValidation() {
 
 export function extractAnswer(input: string, botName: string): AIAnswer {
 
+  // Remove <think> tags if they exist
   const regex = /<think>[\s\S]*?<\/think>/g;
-  const inputString = input.replace(regex, '').trim();
+  let cleanedInput = input.replace(regex, '').trim();
 
-  if (!inputString || typeof inputString !== 'string') {
+  if (!cleanedInput || typeof cleanedInput !== 'string') {
     return null;
   }
 
+  const fixJsonString = (jsonStr: string): string => {
+    let fixed = '';
+    let inString = false;
+    let escapeNext = false;
+
+    for (let i = 0; i < jsonStr.length; i++) {
+      const char = jsonStr[i];
+
+      if (escapeNext) {
+        fixed += char;
+        escapeNext = false;
+        continue;
+      }
+
+      if (char === '\\') {
+        fixed += char;
+        escapeNext = true;
+        continue;
+      }
+
+      if (char === '"') {
+        inString = !inString;
+        fixed += char;
+        continue;
+      }
+
+      if (inString) {
+        switch (char) {
+          case '\n':
+            fixed += '\\n';
+            break;
+          case '\r':
+            fixed += '\\r';
+            break;
+          case '\t':
+            fixed += '\\t';
+            break;
+          case '\b':
+            fixed += '\\b';
+            break;
+          case '\f':
+            fixed += '\\f';
+            break;
+          default:
+            fixed += char;
+        }
+      } else {
+        fixed += char;
+      }
+    }
+
+    return fixed;
+  };
+
+  // Attempt 1: Parse directly as JSON with fixing
   try {
-    return JSON.parse(inputString.trim());
+    const fixed = fixJsonString(cleanedInput);
+    const parsed = JSON.parse(fixed);
+    if (parsed && typeof parsed === 'object' && parsed.message !== undefined) {
+      return parsed;
+    }
   } catch (e) {
+    logger.debug(`[extractAnswer] Direct JSON parsing failed: ${e.message}`);
   }
 
-  const startMatch = inputString.match(/[{\[]/);
+  // Attempt 2: Find JSON embedded in text
+  const jsonRegex = /\{[\s\S]*?\}/;
+  const match = cleanedInput.match(jsonRegex);
+
+  if (match) {
+    try {
+      const fixed = fixJsonString(match[0]);
+      logger.debug(`[extractAnswer] Trying to parse regex-extracted fixed JSON: ${fixed.substring(0, 200)}...`);
+      const parsed = JSON.parse(fixed);
+      if (parsed && typeof parsed === 'object' && parsed.message !== undefined) {
+        return parsed;
+      }
+    } catch (e) {
+      logger.debug(`[extractAnswer] Regex extracted JSON parsing failed: ${e.message}`);
+    }
+  }
+
+  // Attempt 3: Enhanced bracket matching with fixing
+  const startMatch = cleanedInput.match(/[{\[]/);
   if (!startMatch) {
-    logger.debug("[cleanFileName] Valid JSON start character not found");
-    return {message: inputString, author: botName, type: 'text'};
+    logger.debug("[extractAnswer] Valid JSON start character not found, returning raw text");
+    return {message: cleanedInput, author: botName, type: 'text'};
   }
 
   try {
-
     const startIndex = startMatch.index;
-    let endIndex = inputString.length;
+    let endIndex = cleanedInput.length;
     let openBraces = 0;
     let openBrackets = 0;
     let inString = false;
     let escapeNext = false;
 
-    for (let i = startIndex; i < inputString.length; i++) {
-      const char = inputString[i];
+    for (let i = startIndex; i < cleanedInput.length; i++) {
+      const char = cleanedInput[i];
 
       if (escapeNext) {
         escapeNext = false;
@@ -274,12 +355,23 @@ export function extractAnswer(input: string, botName: string): AIAnswer {
       }
     }
 
-    const jsonString = inputString.substring(startIndex, endIndex);
+    let jsonString = cleanedInput.substring(startIndex, endIndex);
+    jsonString = fixJsonString(jsonString);
 
-    return JSON.parse(jsonString);
+    logger.debug(`[extractAnswer] Attempting to parse bracket-matched fixed JSON: ${jsonString.substring(0, 200)}...`);
+
+    const parsed = JSON.parse(jsonString);
+    if (parsed && typeof parsed === 'object' && parsed.message !== undefined) {
+      return parsed;
+    }
+
   } catch (e) {
-    return {message: inputString, author: botName, type: 'text' };
+    logger.debug(`[extractAnswer] JSON parsing failed: ${e.message}`);
   }
+
+  // Fallback: return as plain text
+  logger.debug("[extractAnswer] All parsing attempts failed, returning as plain text");
+  return {message: cleanedInput, author: botName, type: 'text'};
 }
 
 export function logConfigInfo() {
@@ -287,11 +379,11 @@ export function logConfigInfo() {
 
   // Bot general information
   logger.info(`📝 BOT CONFIGURATION:`);
-  logger.info(`• Bot name: ${CONFIG.botConfig.botName}`);
-  logger.info(`• Response character limit: ${CONFIG.botConfig.maxCharacters}`);
-  logger.info(`• Maximum messages considered: ${CONFIG.botConfig.maxMsgsLimit}`);
-  logger.info(`• Maximum message age: ${CONFIG.botConfig.maxHoursLimit} hours`);
-  logger.info(`• Maximum images processed: ${CONFIG.botConfig.maxImages}`);
+  logger.info(`• Bot name: ${CONFIG.BotConfig.botName}`);
+  logger.info(`• Response character limit: ${CONFIG.BotConfig.maxCharacters}`);
+  logger.info(`• Maximum messages considered: ${CONFIG.BotConfig.maxMsgsLimit}`);
+  logger.info(`• Maximum message age: ${CONFIG.BotConfig.maxHoursLimit} hours`);
+  logger.info(`• Maximum images processed: ${CONFIG.BotConfig.maxImages}`);
 
   // Chat provider and model
   logger.info(`🤖 CHAT PROVIDER:`);
@@ -324,7 +416,7 @@ export function logConfigInfo() {
     logger.info(`TRANSCRIPTION (Speech-to-Text):`);
     logger.info(`  • Provider: ${AIConfig.TranscriptionConfig.provider}`);
     logger.info(`  • Model: ${AIConfig.TranscriptionConfig.model}`);
-    logger.info(`  • Language: ${CONFIG.botConfig.transcriptionLanguage}`);
+    logger.info(`  • Language: ${CONFIG.BotConfig.transcriptionLanguage}`);
     if (AIConfig.TranscriptionConfig.baseURL && AIConfig.TranscriptionConfig.provider !== 'OPENAI') {
       logger.info(`  • Base URL: ${AIConfig.TranscriptionConfig.baseURL}`);
     }
@@ -342,10 +434,93 @@ export function logConfigInfo() {
   }
 
   // Additional information if preferred language is set
-  if (CONFIG.botConfig.preferredLanguage) {
+  if (CONFIG.BotConfig.preferredLanguage) {
     logger.info(`🌐 LANGUAGE PREFERENCES:`);
-    logger.info(`• Preferred language: ${CONFIG.botConfig.preferredLanguage}`);
+    logger.info(`• Preferred language: ${CONFIG.BotConfig.preferredLanguage}`);
   }
 
   logger.info('===========================================');
+}
+
+export function sanitizeLogImages(str: string) {
+  return str.replace(/(data:image\/[a-zA-Z0-9+.-]+;base64,)[A-Za-z0-9+/=]+/g, '$1...');
+}
+
+export function parseIfJson(input: any) {
+  if (typeof input === 'object' && input !== null) {
+    return input;
+  }
+
+  if (typeof input === 'string') {
+    try {
+      const parsed = JSON.parse(input);
+      if (typeof parsed === 'object' && parsed !== null) {
+        return parsed;
+      }
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+}
+
+export function getAuthorId(wspMsg: Message): string{
+  return wspMsg.author || wspMsg.id?.remote || (wspMsg.id as any)?.participant;
+}
+
+export function addSeconds(date: Date, seconds: number): Date {
+  const result = new Date(date);
+  result.setSeconds(result.getSeconds() + seconds);
+  return result;
+}
+
+export function convertCompletionsToolsToResponses(tools) {
+  if (!Array.isArray(tools)) {
+    throw new TypeError("tools must be an array");
+  }
+
+  return tools.map((tool, idx) => {
+    if (!tool || typeof tool !== "object") return tool;
+
+    if (tool.type !== "function") return tool;
+
+    if (!tool.function && tool.name && tool.parameters) {
+      return tool;
+    }
+
+    const fn = tool.function || {};
+
+    const out = {
+      type: "function",
+      name: fn.name ?? tool.name,
+      description: fn.description ?? tool.description,
+      parameters: fn.parameters ?? tool.parameters
+    } as any;
+
+    if (typeof fn.strict !== "undefined") out.strict = fn.strict;
+    else if (typeof tool.strict !== "undefined") out.strict = tool.strict;
+
+    for (const k in tool) {
+      if (["type", "function", "name", "description", "parameters", "strict"].includes(k)) continue;
+      if (typeof out[k] === "undefined") out[k] = tool[k];
+    }
+
+    for (const k in fn) {
+      if (["name", "description", "parameters", "strict"].includes(k)) continue;
+      if (typeof out[k] === "undefined") out[k] = fn[k];
+    }
+
+    if (!out.name) {
+      console.warn(`Tool at index ${idx} is missing a function name after conversion.`);
+    }
+    if (!out.parameters) {
+      console.warn(`Tool "${out.name || idx}" is missing parameters schema after conversion.`);
+    }
+
+    return out;
+  });
+}
+
+export function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }

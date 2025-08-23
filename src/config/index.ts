@@ -1,12 +1,16 @@
 import { config } from 'dotenv';
 import { CVoices } from '../services/elevenlabs-service';
+import { ChatConfiguration } from "./chat-configurations";
 
 config();
+
+const systemTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 const Providers = {
   OPENAI: {
     baseURL: undefined,
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
+    catEditImages: true
   },
   CLAUDE: {
     baseURL: undefined,
@@ -39,10 +43,10 @@ const ChatConfig = {
   provider: process.env.CHAT_PROVIDER?.toUpperCase() || process.env.AI_LANGUAGE?.toUpperCase() || "OPENAI",
   models: {
     OPENAI: process.env.CHAT_COMPLETION_MODEL ?? process.env.OPENAI_COMPLETION_MODEL ?? 'gpt-4o-mini',
-    CLAUDE: process.env.CLAUDE_CHAT_MODEL ?? 'claude-3-sonnet-20240229',
+    CLAUDE: process.env.CLAUDE_CHAT_MODEL ?? 'claude-sonnet-4-20250514',
     QWEN: process.env.QWEN_COMPLETION_MODEL ?? 'qwen2.5-vl-72b-instruct',
     DEEPSEEK: process.env.DEEPSEEK_COMPLETION_MODEL ?? 'deepseek-chat',
-    DEEPINFRA: process.env.DEEPINFRA_COMPLETION_MODEL ?? 'meta-llama/Llama-3.3-70B-Instruct',
+    DEEPINFRA: process.env.DEEPINFRA_COMPLETION_MODEL ?? 'zai-org/GLM-4.5V',
     CUSTOM: process.env.CUSTOM_COMPLETION_MODEL,
   }
 };
@@ -50,7 +54,7 @@ const ChatConfig = {
 const ImageConfig = {
   provider: process.env.IMAGE_PROVIDER?.toUpperCase() || "OPENAI",
   models: {
-    OPENAI: process.env.IMAGE_CREATION_MODEL?? process.env.OPENAI_IMAGE_MODEL ?? 'dall-e-3',
+    OPENAI: process.env.IMAGE_CREATION_MODEL?? process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-1',
     DEEPINFRA: process.env.DEEPINFRA_IMAGE_MODEL ?? 'stabilityai/sd3.5',
   },
   enabled: process.env.IMAGE_CREATION_ENABLED?.toLocaleLowerCase() === 'true' ,
@@ -69,12 +73,12 @@ const TranscriptionConfig = {
 const SpeechConfig = {
   provider: process.env.SPEECH_PROVIDER?.toUpperCase() || "OPENAI",
   models: {
-    OPENAI: process.env.SPEECH_MODEL ?? process.env.OPENAI_SPEECH_MODEL ?? 'tts-1',
+    OPENAI: process.env.SPEECH_MODEL ?? process.env.OPENAI_SPEECH_MODEL ?? 'gpt-4o-mini-tts',
     ELEVENLABS: process.env.ELEVENLABS_SPEECH_MODEL ?? 'eleven_multilingual_v2'
   },
   voice: {
     OPENAI:process.env.OPENAI_SPEECH_VOICE ?? process.env.SPEECH_VOICE ?? "nova",
-    ELEVENLABS: process.env.ELEVENLABS_VOICEID || CVoices.SARAH,
+    ELEVENLABS: process.env.ELEVENLABS_VOICEID,
   },
   enabled: process.env.VOICE_MESSAGES_ENABLED?.toLocaleLowerCase() === 'true',
 };
@@ -86,13 +90,15 @@ export const AIConfig = {
     baseURL: Providers[ChatConfig.provider].baseURL,
     apiKey: Providers[ChatConfig.provider].apiKey,
     analyzeImageDisabled: Providers[ChatConfig.provider].analyzeImageDisabled,
+    reasoningEffort: process.env.REASONING_EFFORT ?? "low"
   },
   ImageConfig:{
     provider: ImageConfig.provider,
     model: ImageConfig.models[ImageConfig.provider],
     baseURL: Providers[ImageConfig.provider].baseURL,
     apiKey: Providers[ImageConfig.provider].apiKey,
-    enabled: ImageConfig.enabled
+    enabled: ImageConfig.enabled,
+    catEditImages: Providers[ChatConfig.provider].catEditImages
   },
   TranscriptionConfig: {
     provider: TranscriptionConfig.provider,
@@ -114,7 +120,7 @@ export const AIConfig = {
 }
 
 // General bot configuration parameters
-const botConfig = {
+const BotConfig = {
   preferredLanguage: process.env.PREFERRED_LANGUAGE ?? '', // The default language for the bot. If not specified, the bot will use the language of the chat it is responding to
   botName: process.env.BOT_NAME ?? 'Roboto', // The name of the bot, used to identify when the bot is being addressed in group chats
   maxCharacters: parseInt(process.env.MAX_CHARACTERS ?? '2000'), //The maximum number of characters the chat model will output in a single completion
@@ -123,60 +129,43 @@ const botConfig = {
   maxHoursLimit: parseInt(process.env.MAX_HOURS_LIMIT ?? '24'), // The maximum hours a message's age can be for the bot to consider it in generating responses
   transcriptionLanguage: process.env.TRANSCRIPTION_LANGUAGE ?? "en", //The language of the input audio for transcriptions. Supplying the input language in [ISO-639-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) format will improve accuracy and latency.
   nodeCacheTime: parseInt(process.env.NODE_CACHE_TIME ?? '259200'), // The cache duration for stored data, specified in seconds.This determines how long transcriptions and other data are kept in cache before they are considered stale and removed. Example value is 259200, which translates to 3 days.
-  promptInfo: process.env.PROMPT_INFO // You can use this to customize the bot's personality and provide context about the group or individuals for tailored interactions.
+  promptInfo: process.env.PROMPT_INFO, // You can use this to customize the bot's personality and provide context about the group or individuals for tailored interactions.
+  maxImageSizeMB: Number(process.env.MAX_IMAGE_SIZEMB ?? 10), // The maximum size of images the bot will process
+  maxDocumentSizeMB: Number(process.env.MAX_DOCUMENT_SIZEMB ?? 20), // The maximum size of documents the bot will process
+  botTimezone: process.env.BOT_TIMEZONE ?? systemTimezone ?? 'UTC',
+  memoriesEnabled: process.env.MEMORIES_ENABLED?.toLocaleLowerCase() === 'true', // Whether the bot should remember user data and use it in responses
 };
 
 // Dynamically generate the bot's initial prompt based on configuration parameters
-function getSystemPrompt(customInfo?: string, customBotName?: string){
-  return `You are an assistant operating on WhatsApp. Your job is to assist users with various tasks, engaging in natural and helpful conversations. Here’s what you need to remember:
-- You go by the name ${customBotName? customBotName : botConfig.botName}. Always introduce yourself in the first interaction with any user.
+function getSystemPrompt(chatConfig: ChatConfiguration, memoriesContext?: string){
+  return `You are an assistant operating on WhatsApp. 
+- You go by the name ${chatConfig.botName ?? CONFIG.BotConfig.botName}
+- Context: This is a ${chatConfig.isGroup ? 'group' : 'one-to-one chat'} (chatId: ${chatConfig.chatId}${chatConfig.name ? `, name: "${chatConfig.name}"` : ''}).
 - The current date is ${new Date().toLocaleDateString()}. 
-${AIConfig.ChatConfig.analyzeImageDisabled?'- You can\'t analyze images.':'You can analyze images'}
-- Keep your responses concise and informative; you should not exceed the ${botConfig.maxCharacters} character limit.
-- You have a short-term memory able to recall only the last ${botConfig.maxMsgsLimit} messages and forget anything older than ${botConfig.maxHoursLimit} hours.
-- When images are sent to you, remember that you can only consider the latest ${botConfig.maxImages} images for your tasks.
-- If users need to reset any ongoing task or context, they should use the "-reset" command. This will cause you to not remember anything that was said previously to the command.
-${botConfig.preferredLanguage ? `- Preferably you will try to speak in ${botConfig.preferredLanguage}.` : ``}
+${AIConfig.ChatConfig.analyzeImageDisabled?'- You can\'t analyze images.':''}
+- Keep your responses concise and informative; you should not exceed the ${BotConfig.maxCharacters} character limit.
+- Adjust the format of your responses for WhatsApp. Avoid Markdown, tables, and long blocks.
+- You can only see up to ${BotConfig.maxMsgsLimit} messages from the last ${BotConfig.maxHoursLimit} hours.
+${BotConfig.preferredLanguage ? `- Preferably you will try to speak in ${BotConfig.preferredLanguage}.` : ``}
 
 - **Response Format**: All your responses must be in JSON format with the following structure:
-  {
-    "message": "<your response>",
-    "author": "BotName",
-    "type": "<TEXT or AUDIO>",
-    "emojiReact": "😊"
-  }
+  { "message": "<your response>", "emojiReact": "😊" }
   
 - **Emoji Reactions**: 
-- In the "emojiReact" field, include an emoji that appropriately reacts to the user's last message.
-- For example, if the user shares good news, you might use "😊" or "🎉".
-- If no emoji reaction is appropriate for the context, you can leave this field empty.
+- In the "emojiReact" field, include an emoji that appropriately reacts to the user's last message. If no emoji reaction is appropriate for the context, you can leave this field empty.`+
+`${CONFIG.BotConfig.memoriesEnabled?`
+- **Memory Management**: Use the user_memory_manager function to remember important personal information about users (age, profession, interests, running jokes, etc.). This helps you have more personalized and contextual conversations. Update user memories naturally during conversations without explicitly announcing when you're storing or updating information, unless the user specifically asks about their stored data
+- When a user requests a transcription, do not assume the ASR text is the user's personal information or the user's property, and do not save any of it to memory.`:``}
+${memoriesContext ? `${memoriesContext}\n\n` : ''}`+
 
-${AIConfig.SpeechConfig.enabled ? `
-- **Audio Messages**: 
-  - You can send responses in audio format. Use "type": "AUDIO" when responding with audio messages. Respond in the "message" field with what you are responding to, this will later be converted into audio for the user.
-  - **Content for AUDIO**: When using "type": "AUDIO", your "message" field must contain the FULL content to be converted to speech, not just a confirmation. For example, if a user asks for a joke in audio or voice format, include the entire joke in the "message" field, not just "Here's a joke for you".
-  - **Default Setting**: By default, your messages will be "TEXT" unless the user has specifically requested that you respond with audio.
-  - **Summarize Audios**: All audio messages should be as brief and concise as possible.
-` : `
-- **Audio Messages Disabled**: 
-  - All your responses must have "type": "TEXT" as audio messages are disabled.
-`}
-
-${AIConfig.ImageConfig.enabled ? `
-- **Image Creation**: 
-  - You can create images. If a user requests an image, guide them to use the command “-image <description>”. For example, respond with, “To create an image, please use the command '-image a dancing dog'.”
-- **Command Accuracy**: 
-  - Accuracy is key. If a command is misspelled, kindly notify the user of the mistake and suggest the correct command format. For instance, “It seems like there might be a typo in your command. Did you mean '-image' for generating images?”` : ``}
-
-${botConfig.promptInfo || customInfo ? ` 
-- **Additional Instructions for Specific Context**: 
-  - Important: The following is specific information for the group or individuals you are interacting with: "${customInfo ?? botConfig.promptInfo}"` : ''}.
+`${chatConfig.promptInfo ? ` 
+- **Important**: The following is information about the chat or group you are interacting with and/or instructions for your personality:\n"${chatConfig.promptInfo}"` : ''}.
 `;
 }
 
 export const CONFIG = {
   appName: 'Whatsapp-Claude-GPT',
-  botConfig,
+  BotConfig,
   ImageConfig,
   ChatConfig,
   SpeechConfig,

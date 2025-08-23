@@ -1,37 +1,39 @@
 import logger from './logger';
-import { Message } from 'whatsapp-web.js';
-import { Roboto } from './roboto';
-import { configValidation, logConfigInfo } from './utils';
+import { Client, LocalAuth, Message } from 'whatsapp-web.js';
 import qrcode from 'qrcode-terminal';
-import { Client, LocalAuth } from 'whatsapp-web.js';
-
-const client = new Client({
-  authStrategy: new LocalAuth()
-});
+import Roboto from "./bot/roboto";
+import { fetchCurrentAlphaVersion } from "@wppconnect/wa-version";
+import WhatsappHandler from "./bot/wsp-web";
+import { configValidation, logConfigInfo } from "./utils";
 
 require('dotenv').config();
-
-configValidation();
+configValidation()
 logConfigInfo();
 
-const robotoInstance: Roboto = new Roboto();
+async function start() {
+  try {
+    const latestVersion = await fetchCurrentAlphaVersion();
 
-client.on('qr', qr => {
-  qrcode.generate(qr, {small: true});
-});
+    const wspClient = new Client({
+      authStrategy: new LocalAuth({ dataPath: "sessions" }),
+      webVersionCache: {
+        type: 'remote',
+        remotePath: `https://raw.githubusercontent.com/wppconnect-team/wa-version/refs/heads/main/html/${latestVersion}.html`,
+      }
+    });
 
-client.on('ready', () => {
-  logger.info('Client is ready!');
-});
+    wspClient.on('qr', qr => qrcode.generate(qr, { small: true }));
+    wspClient.on('ready', () => {
+      return logger.info('Client is ready!');
+    });
+    wspClient.on('message', async (message: Message) => Roboto.readWspMessage(message));
 
-client.on('message', async (message: Message) => {
-  robotoInstance.readMessage(message, client);
-});
+    await wspClient.initialize();
 
-try {
-  client.initialize();
-}catch (e: any){
-  logger.error(`ERROR: ${e.message}`);
+    WhatsappHandler.setWspClient(wspClient);
+  } catch (e: any) {
+    logger.error(`ERROR: ${e.message}`);
+  }
 }
 
-export { robotoInstance as RobotoInstance } ;
+start();

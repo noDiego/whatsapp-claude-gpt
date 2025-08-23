@@ -7,13 +7,17 @@ export interface AiMessage {
 export enum AIRole {
   USER='user',
   ASSISTANT='assistant',
-  SYSTEM='system',
+  SYSTEM='system'
 }
 
 export interface AIContent {
+  msg_id?: string;
   value?: string;
-  type: 'text' | 'image' | 'audio';
-  media_type?: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' | string;
+  type: 'text' | 'image' | 'ASR' | 'file';
+  mimetype?: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' | string;
+  filename?: string,
+  author_id: string,
+  dateString: string;
 }
 
 export enum AIProvider {
@@ -31,4 +35,9 @@ export interface AIAnswer {
   type: 'text' | 'audio';
   author: string;
   emojiReact?: string;
+}
+
+export interface OperationResult {
+  success: boolean;
+  result: any;
 }
