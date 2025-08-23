@@ -18,23 +18,26 @@ import MemoryService from "../services/user-memory-service";
 class RobotoClass {
 
   private busyChats = new Set<string>();
+  private botEnabled = true;
 
   constructor() {
   }
 
   public async readWspMessage(wspMessage: Message) {
-
     const chatData: Chat = await wspMessage.getChat();
     const chatId = chatData.id._serialized;
-    const chatConfig = await chatConfigurationManager.getChatConfig(chatData.id._serialized, chatData.name);
-    const botName = chatConfig.botName;
-
-    if(this.isCommand(wspMessage.body)) return this.commandSelect(wspMessage, chatId)
-
-    const shouldProcess = await this.shouldProcessMessage(wspMessage, chatData, botName);
-    if (!shouldProcess) return false;
 
     try {
+
+      const contactData = await wspMessage.getContact();
+      const chatConfig = await chatConfigurationManager.getChatConfig(chatData.id._serialized, chatData.name);
+      const botName = chatConfig.botName;
+      const isAdmin = CONFIG.BotConfig.adminNumbers.includes(contactData.number);
+
+      if (this.isCommand(wspMessage, isAdmin)) return this.commandSelect(wspMessage, chatId, isAdmin);
+
+      const shouldProcess = await this.shouldProcessMessage(wspMessage, chatData, botName);
+      if (!shouldProcess) return false;
 
       while (this.busyChats.has(chatId)) {
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -52,14 +55,14 @@ class RobotoClass {
       if (!chatResponse || !chatResponse.message) return false;
 
       // If the response includes emoji reaction, react to the message
-      if(chatResponse.emojiReact)
+      if (chatResponse.emojiReact)
         wspMessage.react(chatResponse.emojiReact);
 
       return WspWeb.returnResponse(wspMessage, chatResponse.message, chatData.isGroup);
 
     } catch (e) {
       //TODO Handle Error
-      logger.error('[readWspMessage] ErrorMessage:'+e.message);
+      logger.error('[readWspMessage] ErrorMessage:' + e.message);
       logger.error('[readWspMessage] Chat context is being reset due to errors');
       this.deleteChatCache(chatId);
       return false;
@@ -119,9 +122,16 @@ class RobotoClass {
 
   private async shouldProcessMessage(wspMessage: Message, chatData: Chat, botName: string){
 
+    if(!this.botEnabled) return false;
+
+    const contactData = await wspMessage.getContact();
+
     if(process.env.DEBUG == "1") {
-      const contactData = await wspMessage.getContact();
-      if (process.env.ADMIN_NUMBER != contactData.number) return false;
+      if (!CONFIG.BotConfig.adminNumbers.includes(contactData.number)) return false;
+    }
+    if(CONFIG.BotConfig.restrictedNumbers.includes(contactData.number)){
+      logger.debug(`Number ${contactData.number} is in the restricted list. Message ignored`);
+      return false;
     }
 
     const isSelfMention = wspMessage.hasQuotedMsg ? (await wspMessage.getQuotedMessage()).fromMe : false;
@@ -147,10 +157,15 @@ class RobotoClass {
    * and executes the corresponding functionality.
    *
    * @param message - The Message object containing the command
+   * @param chatId
+   * @param isAdmin
    * @returns A promise resolving when the command processing is complete
    */
-  private async commandSelect(message: Message, chatId: string) {
+  private async commandSelect(message: Message, chatId: string, isAdmin = false) {
     const {command, commandMessage} = parseCommand(message.body);
+
+    if(!isAdmin && !this.botEnabled) return false;
+
     switch (command) {
       case "chatconfig":
         return await this.handleChatConfigCommand(message, commandMessage!);
@@ -159,14 +174,23 @@ class RobotoClass {
         return await message.react('👍');
       case "memory":
         return await this.handleMemoryCommand(message, commandMessage!);
+      case "enable":
+        if(!isAdmin) return false;
+        this.botEnabled = true;
+        return message.reply('Bot enabled.')
+      case "disable":
+        if(!isAdmin) return false;
+        this.botEnabled = false;
+        return message.reply('Bot disabled. No message will be answered')
       default:
         return true;
     }
   }
 
-  private isCommand(msgbody: string){
+  private isCommand(wspMessage: Message, isAdmin: boolean = false){
     const commands = ['-chatconfig', '-reset'];
-    return commands.includes(msgbody.split(' ')[0]);
+    if(isAdmin) commands.push('-enable','-disable');
+    return commands.includes(wspMessage.body.split(' ')[0]);
   }
 
   /**

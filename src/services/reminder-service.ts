@@ -161,7 +161,7 @@ class ReminderManager {
                 break;
 
             case 'create':
-                reminder = this.createReminder({
+                reminder = await this.createReminder({
                     message: reminderMessage,
                     reminderDate: reminder_date,
                     reminderDateTZ: reminder_date_timezone || CONFIG.BotConfig.botTimezone,
@@ -176,7 +176,7 @@ class ReminderManager {
                 break;
 
             case 'update':
-                reminder = this.updateReminder(reminder_id, {
+                reminder = await this.updateReminder(reminder_id, {
                     message: reminderMessage,
                     reminderDate: reminder_date,
                     reminderDateTZ: reminder_date_timezone || CONFIG.BotConfig.botTimezone,
@@ -189,17 +189,17 @@ class ReminderManager {
                 break;
 
             case 'delete':
-                this.deleteReminder(reminder_id);
+                await this.deleteReminder(reminder_id);
                 responseMessage = `Reminder deleted successfully`;
                 break;
 
             case 'deactivate':
-                this.deactivateReminder(reminder_id);
+                await this.deactivateReminder(reminder_id);
                 responseMessage = `Reminder deactivated successfully`;
                 break;
 
             case 'reactivate':
-                this.reactivateReminder(reminder_id);
+                await this.reactivateReminder(reminder_id);
                 responseMessage = `Reminder reactivated successfully`;
                 break;
         }
