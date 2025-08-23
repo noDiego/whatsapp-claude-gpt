@@ -57,7 +57,8 @@ export function parseCommand(input: string): { command?: string, commandMessage?
 
 export async function getUserName(message: Message) {
   const contactInfo = await message.getContact();
-  const name = contactInfo.shortName || contactInfo.name || contactInfo.pushname || contactInfo.number;
+  const name = CONFIG.BotConfig.useContactNames? contactInfo.shortName || contactInfo.name || contactInfo.pushname || contactInfo.number :
+      contactInfo.pushname || contactInfo.number;
   return removeNonAlphanumeric(name);
 }
 

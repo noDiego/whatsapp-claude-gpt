@@ -135,7 +135,8 @@ const BotConfig = {
   botTimezone: process.env.BOT_TIMEZONE ?? systemTimezone ?? 'UTC',
   memoriesEnabled: process.env.MEMORIES_ENABLED?.toLocaleLowerCase() === 'true', // Whether the bot should remember user data and use it in responses
   restrictedNumbers: process.env.RESTRICTED_NUMBERS? (<string>process.env.RESTRICTED_NUMBERS).split(','):[],
-  adminNumbers: process.env.ADMIN_NUMBERS? (<string>process.env.ADMIN_NUMBERS).split(','):[]
+  adminNumbers: process.env.ADMIN_NUMBERS? (<string>process.env.ADMIN_NUMBERS).split(','):[],
+  useContactNames: process.env.USE_CONTACT_NAMES == 'true'
 };
 
 // Dynamically generate the bot's initial prompt based on configuration parameters

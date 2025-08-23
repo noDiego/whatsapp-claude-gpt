@@ -1,6 +1,13 @@
 import { Chat, Client, Message, MessageMedia, MessageTypes } from "whatsapp-web.js";
 import { AIContent, AiMessage, AIRole } from "../interfaces/ai-interfaces";
-import { bufferToStream, getAuthorId, getFormattedDate, getUnsupportedMessage, removeNonAlphanumeric } from "../utils";
+import {
+  bufferToStream,
+  getAuthorId,
+  getFormattedDate,
+  getUnsupportedMessage,
+  getUserName,
+  removeNonAlphanumeric
+} from "../utils";
 import logger from "../logger";
 import NodeCache from "node-cache";
 import OpenAISvc from "../services/openai-service";
@@ -95,7 +102,7 @@ class WspWeb {
     const isOther = (!isImage && !isAudio && wspMsg.type != 'chat') || errorMedia == 'type';
 
     const role = (!wspMsg.fromMe || isImage) ? AIRole.USER : AIRole.ASSISTANT;
-    const name = wspMsg.fromMe ? botName : (await this.getContactName(wspMsg));
+    const name = wspMsg.fromMe ? botName : (await getUserName(wspMsg));
 
     const content: Array<AIContent> = [];
 
@@ -199,12 +206,6 @@ class WspWeb {
       logger.error(`Error transcribing voice message: ${error.message}`);
       return '<Error transcribing voice message>';
     }
-  }
-
-  private async getContactName(wspMessage: Message) {
-    const contactInfo = await wspMessage.getContact();
-    const name = contactInfo.pushname || contactInfo.shortName || contactInfo.name || contactInfo.number;
-    return removeNonAlphanumeric(name);
   }
 
   public returnResponse(message: Message, responseMsg: string, isGroup: boolean) {
