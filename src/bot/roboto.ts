@@ -119,6 +119,11 @@ class RobotoClass {
 
   private async shouldProcessMessage(wspMessage: Message, chatData: Chat, botName: string){
 
+    if(process.env.DEBUG == "1") {
+      const contactData = await wspMessage.getContact();
+      if (process.env.ADMIN_NUMBER != contactData.number) return false;
+    }
+
     const isSelfMention = wspMessage.hasQuotedMsg ? (await wspMessage.getQuotedMessage()).fromMe : false;
     const isMentioned = includeName(wspMessage.body, botName);
 
