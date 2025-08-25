@@ -13,10 +13,10 @@ configValidation();
 logConfigInfo();
 
 const SESSION_DIR = path.join(process.cwd(), 'sessions');
-const READY_TIMEOUT_MS = parseInt(process.env.READY_TIMEOUT_MS || '120000', 10); // 2 minutos por default
+const READY_TIMEOUT_MS = 2 * 60000; //2 minutes
 
 let retryCount = 0;
-const MAX_RETRIES = 3; // Opcional para evitar bucle infinito
+const MAX_RETRIES = 3;
 
 async function removeSessionDir() {
   logger.warn('Removing session directory to restart login...');

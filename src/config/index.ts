@@ -153,7 +153,7 @@ ${BotConfig.preferredLanguage ? `- Preferably you will try to speak in ${BotConf
 
 - **Response Format**: All your responses must be in JSON format with the following structure:
   { "message": "<your response>", "emojiReact": "😊" }
-  
+
 - **Emoji Reactions**: 
 - In the "emojiReact" field, include an emoji that appropriately reacts to the user's last message. If no emoji reaction is appropriate for the context, you can leave this field empty.`+
 
