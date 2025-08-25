@@ -373,6 +373,7 @@ export function logConfigInfo() {
   logger.info(`• Maximum messages considered: ${CONFIG.BotConfig.maxMsgsLimit}`);
   logger.info(`• Maximum message age: ${CONFIG.BotConfig.maxHoursLimit} hours`);
   logger.info(`• Maximum images processed: ${CONFIG.BotConfig.maxImages}`);
+  logger.info(`• Memory: ${CONFIG.BotConfig.memoriesEnabled}`);
 
   // Chat provider and model
   logger.info(`🤖 CHAT PROVIDER:`);

@@ -374,7 +374,24 @@ const memory_manager = {
         - Store and retrieve personal user information in any chat context
         - Store and retrieve group-specific information in group chats only
         - Perform granular updates without overwriting entire fields
-        - Maintain conversation context and personalization`,
+        - Maintain conversation context and personalization
+
+        AVAILABLE FIELDS BY SCOPE:
+        
+        USER FIELDS:
+        • Basic: age(number), profession(string), location(string)
+        • Arrays: interests, likes, dislikes, runningJokes, nicknames, personalNotes
+        • Objects: relationships(object), jargon(object)
+        
+        GROUP FIELDS:
+        • Arrays: groupInterests, recurringTopics, groupLikes, groupDislikes, groupRunningJokes, groupTraditions, groupNotes
+        • Objects: groupJargon(object)
+        
+        OPERATIONS:
+        • set: Replace field values completely
+        • add: Add items to arrays (with deduplication)
+        • remove: Remove specific items from arrays
+        • delete_fields: Delete entire fields (cannot delete required fields)`,
         parameters: {
             type: "object",
             properties: {
@@ -390,7 +407,7 @@ const memory_manager = {
                 },
                 target: {
                     type: "object",
-                    strict:false,
+                    strict: false,
                     properties: {
                         chat_id: { type: "string", description: "Chat identifier" },
                         author_id: {
@@ -414,27 +431,30 @@ const memory_manager = {
                 },
                 ops: {
                     type: ["object", "null"],
-                    description: "Operations for upsert/patch actions",
+                    description: "Operations for upsert/patch actions. See main description for available fields by scope.",
                     properties: {
                         set: {
                             type: ["object", "null"],
-                            description: "Set/replace scalar values or objects",
-                            nullable: true
+                            description: "Set/replace field values. Use any available field from the scope section above.",
+                            nullable: true,
+                            additionalProperties: true
                         },
                         add: {
                             type: ["object", "null"],
-                            description: "Add items to arrays (with deduplication)",
-                            nullable: true
+                            description: "Add items to array fields. Only works with array fields listed above.",
+                            nullable: true,
+                            additionalProperties: true
                         },
                         remove: {
                             type: ["object", "null"],
-                            description: "Remove items from arrays",
-                            nullable: true
+                            description: "Remove items from array fields. Only works with array fields listed above.",
+                            nullable: true,
+                            additionalProperties: true
                         },
                         delete_fields: {
                             type: ["array", "null"],
                             items: { type: "string" },
-                            description: "Delete entire fields",
+                            description: "Delete entire fields. Cannot delete required fields (chatId, authorId, authorName, isGroup for users; chatId, chatName for groups)",
                             nullable: true
                         }
                     },

@@ -40,7 +40,6 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.60.0",
-    "@wppconnect/wa-version": "^1.5.2020",
     "axios": "^1.11.0",
     "better-sqlite3": "^12.2.0",
     "date-fns-tz": "^3.2.0",

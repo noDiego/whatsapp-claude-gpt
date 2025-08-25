@@ -50,8 +50,8 @@ interface MemoryOperationResult {
     success: boolean;
     data?: any;
     message: string;
-    operation: string;
-    scope: string;
+    operation?: string;
+    scope?: string;
 }
 
 class MemoryServiceClass {
@@ -199,11 +199,12 @@ class MemoryServiceClass {
             case 'get':
                 if (author_id) {
                     const memory = await this.getUserMemory(chat_id, author_id);
+                    if(!memory) return {success: true, message: 'No memory found for this user'};
                     const { lastInteractionAt, ...memoryFiltered } = memory
                     return {
                         success: true,
                         data: memoryFiltered,
-                        message: memory ? 'User memory retrieved' : 'No memory found for this user',
+                        message: 'User memory retrieved',
                         operation: 'get',
                         scope: 'user'
                     };
@@ -250,6 +251,7 @@ class MemoryServiceClass {
         switch (action) {
             case 'get':
                 const memory = await this.getGroupMemory(chat_id);
+                if(!memory) return {success: true, message: 'No memory found for this group'};
                 const { lastInteractionAt, ...memoryFiltered } = memory;
                 return {
                     success: true,
@@ -316,13 +318,16 @@ class MemoryServiceClass {
                 isGroup: chat.isGroup
             } as UserMemoryData, ops);
 
+            const nowIso = new Date().toISOString();
+
             const serialized = {
                 id: uuidv4(),
                 ...this.serializeUserMemory(newMemory),
-                createdAt: now,
-                updatedAt: now,
-                lastInteractionAt: now
+                createdAt: nowIso,
+                updatedAt: nowIso,
+                lastInteractionAt: nowIso
             };
+
 
             await db.insert(userMemories).values(serialized).run();
             const result = await this.getUserMemory(chatId, authorId);
@@ -399,12 +404,14 @@ class MemoryServiceClass {
                 chatName
             } as GroupMemoryData, ops);
 
+            const nowIso = new Date().toISOString();
+
             const serialized = {
                 id: uuidv4(),
                 ...this.serializeGroupMemory(newMemory),
-                createdAt: now,
-                updatedAt: now,
-                lastInteractionAt: now
+                createdAt: nowIso,
+                updatedAt: nowIso,
+                lastInteractionAt: nowIso
             };
 
             await db.insert(groupMemories).values(serialized).run();

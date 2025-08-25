@@ -299,6 +299,7 @@ MAX_MSGS_LIMIT=30                            # Maximum number of messages to kee
 MAX_HOURS_LIMIT=24                           # Maximum time window for message context
 NODE_CACHE_TIME=259200                       # Cache time in seconds for message data
 TRANSCRIPTION_LANGUAGE=en                    # Default language for voice transcription
+USE_CONTACT_NAMES=true                       # Determines whether the name of stored contacts will be used to identify each user
 MEMORIES_ENABLED=true                        # Enable memory feature
 
 # Additional prompt info to tailor the bot's personality (optional)
