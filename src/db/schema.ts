@@ -1,5 +1,5 @@
 // src/db/schema.ts
-import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
+import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const reminders = sqliteTable('reminders', {
     id: text('id').primaryKey(),

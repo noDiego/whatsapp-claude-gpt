@@ -1,5 +1,5 @@
 import logger from '../logger';
-import { OpenAI, toFile } from 'openai';
+import { OpenAI } from 'openai';
 import { ChatCompletionMessageParam } from 'openai/resources';
 import { AIConfig, CONFIG } from '../config';
 import { ChatCompletion } from 'openai/src/resources/chat/completions';

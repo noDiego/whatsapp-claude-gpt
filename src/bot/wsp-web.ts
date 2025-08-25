@@ -1,13 +1,6 @@
 import { Chat, Client, Message, MessageMedia, MessageTypes } from "whatsapp-web.js";
 import { AIContent, AiMessage, AIRole } from "../interfaces/ai-interfaces";
-import {
-  bufferToStream,
-  getAuthorId,
-  getFormattedDate,
-  getUnsupportedMessage,
-  getUserName,
-  removeNonAlphanumeric
-} from "../utils";
+import { bufferToStream, getAuthorId, getFormattedDate, getUnsupportedMessage, getUserName } from "../utils";
 import logger from "../logger";
 import NodeCache from "node-cache";
 import OpenAISvc from "../services/openai-service";
@@ -44,8 +37,8 @@ class WspWeb {
         const msgDate = new Date(msg.timestamp * 1000);
 
         if ((actualDate.getTime() - msgDate.getTime()) / (1000 * 60 * 60) > chatCfg.maxHoursLimit) break;
+        if (lastChatMsgProcessed == msg.id._serialized ) break;
         if (wspMessage.timestamp < msg.timestamp) continue;
-        if (msg.fromMe || lastChatMsgProcessed == msg.id._serialized ) break;
 
         const aiMessage = await this.convertWspMsgToAiMsg(msg, chatCfg.botName);
 

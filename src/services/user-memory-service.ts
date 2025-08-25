@@ -1,6 +1,6 @@
 import { db } from '../db';
-import { userMemories, groupMemories } from '../db/schema';
-import { eq, and } from 'drizzle-orm';
+import { groupMemories, userMemories } from '../db/schema';
+import { and, eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '../logger';
 import { OperationResult } from '../interfaces/ai-interfaces';
@@ -109,15 +109,14 @@ class MemoryServiceClass {
         if (!CONFIG.BotConfig.memoriesEnabled) return null;
 
         const chat = await WspWeb.getWspClient().getChatById(chatId);
-        const userMemories = await this.getChatMemories(chatId);
-
         let formattedMemories = '';
 
         if (chat.isGroup) {
             const groupMemory = await this.getGroupMemory(chatId);
-            formattedMemories = this.formatMemoriesForPrompt(userMemories, groupMemory);
+            formattedMemories = this.formatMemoriesForPrompt([], groupMemory); // Only group information will be sent for group chats
         } else {
-            formattedMemories = this.formatMemoriesForPrompt(userMemories);
+            const userMemories = await this.getChatMemories(chatId);
+            formattedMemories = this.formatMemoriesForPrompt(userMemories); // Only user information will be sent for private chats
         }
 
         return formattedMemories;

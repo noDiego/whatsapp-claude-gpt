@@ -189,6 +189,7 @@ class RobotoClass {
 
   private isCommand(wspMessage: Message, isAdmin: boolean = false){
     const commands = ['-chatconfig', '-reset'];
+    if(CONFIG.BotConfig.memoriesEnabled) commands.push('-memory');
     if(isAdmin) commands.push('-enable','-disable');
     return commands.includes(wspMessage.body.split(' ')[0]);
   }

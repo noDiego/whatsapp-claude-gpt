@@ -7,7 +7,6 @@ import { sanitizeLogImages } from "../utils";
 import { AIRole } from "../interfaces/ai-interfaces";
 import NodeCache from "node-cache";
 import Roboto from "../bot/roboto";
-import { ChatConfiguration } from "../config/chat-configurations";
 
 class OpenaiService {
 

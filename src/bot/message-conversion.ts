@@ -17,11 +17,12 @@ const toDataUri = (mimetype: string, value: string) =>
 
 type BaseMeta = {
     message: string;
-    msg_id: string | number | undefined;
-    type: string;
+    msg_id?: string | number | undefined;
+    type?: string;
     author_id?: string | number;
     author_name?: string | null;
     date?: string | undefined;
+    emojiReact?: string;
 };
 
 // Builds the common metadata payload for text-like messages
@@ -30,6 +31,14 @@ function buildMeta(
     c: any,
     overrides?: Partial<Pick<BaseMeta, "message" | "type">>
 ): BaseMeta {
+
+    if(aiMessage.role == AIRole.ASSISTANT){
+        return {
+            message: overrides?.message ?? c.value,
+            emojiReact: ""
+        }
+    }
+
     return {
         message: overrides?.message ?? c.value,
         msg_id: c.msg_id,
@@ -122,10 +131,7 @@ function toDeepSeek(messageList: AiMessage[]): any[] {
         if (aiMessage.role === AIRole.ASSISTANT) {
             // Roboto: single text item as stringified wrapper
             const textContent = aiMessage.content.find(c => isTextLike(c.type))!;
-            const content = JSON.stringify({
-                type: "text",
-                text: JSON.stringify(buildMeta(aiMessage, textContent))
-            });
+            const content = JSON.stringify(buildMeta(aiMessage, textContent));
             deepSeekMsgList.push({
                 content,
                 name: aiMessage.name!,
@@ -133,10 +139,10 @@ function toDeepSeek(messageList: AiMessage[]): any[] {
             });
         } else {
             // User: array of text blocks, images are not supported (send unsupported text)
-            const gptContent: Array<any> = [];
+            const content: Array<any> = [];
             for (const c of aiMessage.content) {
                 if (c.type === "image" || c.type === "file") {
-                    gptContent.push({
+                    content.push({
                         type: "text",
                         text: JSON.stringify(
                             buildMeta(aiMessage, c, {
@@ -146,14 +152,14 @@ function toDeepSeek(messageList: AiMessage[]): any[] {
                     });
                 }
                 if (isTextLike(c.type)) {
-                    gptContent.push({
+                    content.push({
                         type: "text",
                         text: JSON.stringify(buildMeta(aiMessage, c))
                     });
                 }
             }
             deepSeekMsgList.push({
-                content: gptContent,
+                content: content,
                 name: aiMessage.name!,
                 role: aiMessage.role
             });

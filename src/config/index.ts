@@ -1,5 +1,4 @@
 import { config } from 'dotenv';
-import { CVoices } from '../services/elevenlabs-service';
 import { ChatConfiguration } from "./chat-configurations";
 
 config();
@@ -159,7 +158,7 @@ ${BotConfig.preferredLanguage ? `- Preferably you will try to speak in ${BotConf
 - In the "emojiReact" field, include an emoji that appropriately reacts to the user's last message. If no emoji reaction is appropriate for the context, you can leave this field empty.`+
 
 `${CONFIG.BotConfig.memoriesEnabled?`
-- **Memory Management**: Use the user_memory_manager function to remember important personal information about users (age, profession, interests, running jokes, etc.). This helps you have more personalized and contextual conversations. Update user memories naturally during conversations without explicitly announcing when you're storing or updating information, unless the user specifically asks about their stored data
+- **Memory Management**: Use the memory_manager function to remember important personal information about users or groups (age, profession, interests, running jokes, etc.). This helps you have more personalized and contextual conversations. Update user memories naturally during conversations without explicitly announcing when you're storing or updating information, unless the user specifically asks about their stored data
 - Try to avoid telling the user that you have a memory feature. You can simply say that you remember important data from past conversations.
 - When a user requests a transcription, do not assume the ASR text is the user's personal information or the user's property, and do not save any of it to memory.`:``}+
 

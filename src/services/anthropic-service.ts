@@ -2,8 +2,6 @@ import logger from '../logger';
 import Anthropic from '@anthropic-ai/sdk';
 import { AIConfig, CONFIG } from '../config';
 import { MessageParam, TextBlock } from '@anthropic-ai/sdk/resources';
-import { ChatCompletionMessageParam } from "openai/resources";
-import { OpenAI } from "openai";
 import Roboto from "../bot/roboto";
 import NodeCache from "node-cache";
 import { AIRole } from "../interfaces/ai-interfaces";

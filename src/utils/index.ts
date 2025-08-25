@@ -213,15 +213,14 @@ export function configValidation() {
 }
 
 export function extractAnswer(input: string, botName: string): AIAnswer {
-
   // Remove <think> tags if they exist
-  const regex = /<think>[\s\S]*?<\/think>/g;
-  let cleanedInput = input.replace(regex, '').trim();
+  const cleanedInput = input?.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 
   if (!cleanedInput || typeof cleanedInput !== 'string') {
     return null;
   }
 
+  // Helper to fix common JSON string issues
   const fixJsonString = (jsonStr: string): string => {
     let fixed = '';
     let inString = false;
@@ -249,24 +248,14 @@ export function extractAnswer(input: string, botName: string): AIAnswer {
       }
 
       if (inString) {
+        // Escape problematic characters inside strings
         switch (char) {
-          case '\n':
-            fixed += '\\n';
-            break;
-          case '\r':
-            fixed += '\\r';
-            break;
-          case '\t':
-            fixed += '\\t';
-            break;
-          case '\b':
-            fixed += '\\b';
-            break;
-          case '\f':
-            fixed += '\\f';
-            break;
-          default:
-            fixed += char;
+          case '\n': fixed += '\\n'; break;
+          case '\r': fixed += '\\r'; break;
+          case '\t': fixed += '\\t'; break;
+          case '\b': fixed += '\\b'; break;
+          case '\f': fixed += '\\f'; break;
+          default: fixed += char;
         }
       } else {
         fixed += char;
@@ -276,103 +265,102 @@ export function extractAnswer(input: string, botName: string): AIAnswer {
     return fixed;
   };
 
-  // Attempt 1: Parse directly as JSON with fixing
+  // Helper to safely unescape nested JSON strings (for DeepSeek style responses)
+  const unescapeNestedJson = (str: string): any => {
+    try {
+      // Handle multiple levels of JSON string escaping
+      let unescaped = str;
+      let attempts = 0;
+      const maxAttempts = 3; // Prevent infinite loops
+
+      while (attempts < maxAttempts) {
+        try {
+          const temp = JSON.parse(unescaped);
+          if (typeof temp === 'string' && temp !== unescaped) {
+            unescaped = temp;
+            attempts++;
+          } else {
+            return temp; // Successfully parsed object
+          }
+        } catch {
+          break;
+        }
+      }
+
+      return JSON.parse(unescaped);
+    } catch {
+      return null;
+    }
+  };
+
+  // Attempt 1: Direct JSON parsing
   try {
-    const fixed = fixJsonString(cleanedInput);
-    const parsed = JSON.parse(fixed);
-    if (parsed && typeof parsed === 'object' && parsed.message !== undefined) {
+    const parsed = JSON.parse(fixJsonString(cleanedInput));
+    if (parsed?.message !== undefined) {
       return parsed;
     }
   } catch (e) {
     logger.debug(`[extractAnswer] Direct JSON parsing failed: ${e.message}`);
   }
 
-  // Attempt 2: Find JSON embedded in text
-  const jsonRegex = /\{[\s\S]*?\}/;
-  const match = cleanedInput.match(jsonRegex);
-
-  if (match) {
-    try {
-      const fixed = fixJsonString(match[0]);
-      logger.debug(`[extractAnswer] Trying to parse regex-extracted fixed JSON: ${fixed.substring(0, 200)}...`);
-      const parsed = JSON.parse(fixed);
-      if (parsed && typeof parsed === 'object' && parsed.message !== undefined) {
-        return parsed;
-      }
-    } catch (e) {
-      logger.debug(`[extractAnswer] Regex extracted JSON parsing failed: ${e.message}`);
-    }
-  }
-
-  // Attempt 3: Enhanced bracket matching with fixing
-  const startMatch = cleanedInput.match(/[{\[]/);
-  if (!startMatch) {
-    logger.debug("[extractAnswer] Valid JSON start character not found, returning raw text");
-    return {message: cleanedInput, author: botName, type: 'text'};
-  }
-
+  // Attempt 2: Handle nested structure (DeepSeek style)
   try {
-    const startIndex = startMatch.index;
-    let endIndex = cleanedInput.length;
-    let openBraces = 0;
-    let openBrackets = 0;
-    let inString = false;
-    let escapeNext = false;
+    const parsed = JSON.parse(fixJsonString(cleanedInput));
 
-    for (let i = startIndex; i < cleanedInput.length; i++) {
-      const char = cleanedInput[i];
+    // Check for nested structure like {content: {text: "escaped_json"}} or {content: "escaped_json"}
+    if (parsed?.content) {
+      const contentText = typeof parsed.content === 'string' ? parsed.content : parsed.content.text;
 
-      if (escapeNext) {
-        escapeNext = false;
-        continue;
-      }
-
-      if (char === '\\') {
-        escapeNext = true;
-        continue;
-      }
-
-      if (char === '"' && !escapeNext) {
-        inString = !inString;
-        continue;
-      }
-
-      if (inString) continue;
-
-      if (char === '{') openBraces++;
-      if (char === '}') openBraces--;
-      if (char === '[') openBrackets++;
-      if (char === ']') openBrackets--;
-
-      if (i >= startIndex && openBraces === 0 && openBrackets === 0) {
-        if (startMatch[0] === '{' && char === '}') {
-          endIndex = i + 1;
-          break;
-        }
-        if (startMatch[0] === '[' && char === ']') {
-          endIndex = i + 1;
-          break;
+      if (typeof contentText === 'string') {
+        const nestedResult = unescapeNestedJson(contentText);
+        if (nestedResult?.message !== undefined) {
+          logger.debug("[extractAnswer] Successfully parsed nested JSON structure");
+          return nestedResult;
         }
       }
     }
-
-    let jsonString = cleanedInput.substring(startIndex, endIndex);
-    jsonString = fixJsonString(jsonString);
-
-    logger.debug(`[extractAnswer] Attempting to parse bracket-matched fixed JSON: ${jsonString.substring(0, 200)}...`);
-
-    const parsed = JSON.parse(jsonString);
-    if (parsed && typeof parsed === 'object' && parsed.message !== undefined) {
-      return parsed;
-    }
-
   } catch (e) {
-    logger.debug(`[extractAnswer] JSON parsing failed: ${e.message}`);
+    logger.debug(`[extractAnswer] Nested structure parsing failed: ${e.message}`);
   }
 
-  // Fallback: return as plain text
+  // Attempt 3: Extract JSON from mixed content using regex
+  const jsonMatches = cleanedInput.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g);
+
+  if (jsonMatches) {
+    for (const match of jsonMatches) {
+      try {
+        const parsed = JSON.parse(fixJsonString(match));
+        if (parsed?.message !== undefined) {
+          logger.debug("[extractAnswer] Successfully parsed regex-extracted JSON");
+          return parsed;
+        }
+      } catch {
+        continue; // Try next match
+      }
+    }
+  }
+
+  // Attempt 4: Look for escaped JSON patterns
+  const escapedJsonMatch = cleanedInput.match(/"([^"]*(?:\\.[^"]*)*)"/);
+  if (escapedJsonMatch?.[1]) {
+    try {
+      const nestedResult = unescapeNestedJson(`"${escapedJsonMatch[1]}"`);
+      if (nestedResult?.message !== undefined) {
+        logger.debug("[extractAnswer] Successfully parsed escaped JSON pattern");
+        return nestedResult;
+      }
+    } catch {
+      // Continue to fallback
+    }
+  }
+
+  // Fallback: Return as plain text
   logger.debug("[extractAnswer] All parsing attempts failed, returning as plain text");
-  return {message: cleanedInput, author: botName, type: 'text'};
+  return {
+    message: cleanedInput,
+    author: botName,
+    type: 'text'
+  };
 }
 
 export function logConfigInfo() {
