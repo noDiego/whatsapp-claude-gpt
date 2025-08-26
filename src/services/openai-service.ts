@@ -25,6 +25,10 @@ class OpenaiService {
     this.messagesCache.set(chatId, openAiMessages, CONFIG.BotConfig.nodeCacheTime);
   }
 
+  public hasChatCache(chatId: string): boolean {
+      return this.messagesCache.has(chatId);
+  }
+
   public async sendMessage(openAiMessageInputList: ResponseInputItem[], systemPrompt: string, chatId: string, tools: Tool[]): Promise<string> {
     let cycleCount = 0;
     const maxCycles = 6;

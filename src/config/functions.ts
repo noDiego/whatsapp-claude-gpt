@@ -365,110 +365,91 @@ const reminder_manager = {
 //     }
 // }
 
-const memory_manager = {
-    type: "function",
-    strict: false,
-    function: {
-        name: "memory_manager",
-        description: `Unified memory management system for both user and group memories. Use this to:
-        - Store and retrieve personal user information in any chat context
-        - Store and retrieve group-specific information in group chats only
-        - Perform granular updates without overwriting entire fields
-        - Maintain conversation context and personalization
-
-        AVAILABLE FIELDS BY SCOPE:
-        
-        USER FIELDS:
-        • Basic: age(number), profession(string), location(string)
-        • Arrays: interests, likes, dislikes, runningJokes, nicknames, personalNotes
-        • Objects: relationships(object), jargon(object)
-        
-        GROUP FIELDS:
-        • Arrays: groupInterests, recurringTopics, groupLikes, groupDislikes, groupRunningJokes, groupTraditions, groupNotes
-        • Objects: groupJargon(object)
-        
-        OPERATIONS:
-        • set: Replace field values completely
-        • add: Add items to arrays (with deduplication)
-        • remove: Remove specific items from arrays
-        • delete_fields: Delete entire fields (cannot delete required fields)`,
-        parameters: {
-            type: "object",
-            properties: {
-                scope: {
-                    type: "string",
-                    enum: ["user", "group"],
-                    description: "Memory scope: 'user' for personal memories, 'group' for group memories (group chats only)"
+const user_memory_manager = {
+    "type": "function",
+    "strict": false,
+    "function": {
+        "name": "user_memory_manager",
+        "description": "Call this function whenever you learn new or updated user details (name, age, interests, etc.)—no need to wait for a request. " +
+            "Always keep memory accurate for better, personalized responses.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["get", "save", "clear"],
+                    "description": "'get' to retrieve user memory, 'save' to update it, 'clear' to delete user memory."
                 },
-                action: {
-                    type: "string",
-                    enum: ["get", "upsert", "patch", "delete"],
-                    description: "Action: 'get' retrieves, 'upsert' creates/updates, 'patch' modifies existing, 'delete' removes"
+                "chat_id": {
+                    "type": "string",
+                    "description": "Chat identifier (context of the user)."
                 },
-                target: {
-                    type: "object",
-                    strict: false,
-                    properties: {
-                        chat_id: { type: "string", description: "Chat identifier" },
-                        author_id: {
-                            type: ["string", "null"],
-                            description: "User ID (required for user scope)",
-                            nullable: true
-                        },
-                        author_name: {
-                            type: ["string", "null"],
-                            description: "User display name (required for user upsert/patch)",
-                            nullable: true
-                        },
-                        chat_name: {
-                            type: ["string", "null"],
-                            description: "Group name (required for group upsert/patch)",
-                            nullable: true
-                        }
+                "author_id": {
+                    "type": "string",
+                    "description": "Author ID (required)."
+                },
+                "memory_data": {
+                    "type": ["object", "null"],
+                    "description": "Full object to store as user memory. Provide all fields when saving; replaces existing memory.",
+                    "properties": {
+                        "real_name": { "type": ["string", "null"], "nullable": true },
+                        "nicknames": { "type": ["array", "null"], "items": { "type": "string" }, "nullable": true },
+                        "age": { "type": ["number", "null"], "nullable": true },
+                        "profession": { "type": ["string", "null"], "nullable": true },
+                        "location": { "type": ["string", "null"], "nullable": true },
+                        "interests": { "type": ["array", "null"], "items": { "type": "string" }, "nullable": true },
+                        "likes": { "type": ["array", "null"], "items": { "type": "string" }, "nullable": true },
+                        "dislikes": { "type": ["array", "null"], "items": { "type": "string" }, "nullable": true },
+                        "relationships": { "type": ["object", "null"], "nullable": true },
+                        "running_jokes": { "type": ["array", "null"], "items": { "type": "string" }, "nullable": true },
+                        "jargon": { "type": ["object", "null"], "nullable": true },
+                        "notes": { "type": ["array", "null"], "items": { "type": "string" }, "nullable": true }
                     },
-                    required: ["chat_id"],
-                    additionalProperties: false
-                },
-                ops: {
-                    type: ["object", "null"],
-                    description: "Operations for upsert/patch actions. See main description for available fields by scope.",
-                    properties: {
-                        set: {
-                            type: ["object", "null"],
-                            description: "Set/replace field values. Use any available field from the scope section above.",
-                            nullable: true,
-                            additionalProperties: true
-                        },
-                        add: {
-                            type: ["object", "null"],
-                            description: "Add items to array fields. Only works with array fields listed above.",
-                            nullable: true,
-                            additionalProperties: true
-                        },
-                        remove: {
-                            type: ["object", "null"],
-                            description: "Remove items from array fields. Only works with array fields listed above.",
-                            nullable: true,
-                            additionalProperties: true
-                        },
-                        delete_fields: {
-                            type: ["array", "null"],
-                            items: { type: "string" },
-                            description: "Delete entire fields. Cannot delete required fields (chatId, authorId, authorName, isGroup for users; chatId, chatName for groups)",
-                            nullable: true
-                        }
-                    },
-                    nullable: true,
-                    additionalProperties: false
-                },
-                source_msg_id: {
-                    type: ["string", "null"],
-                    description: "Source message ID for provenance tracking",
-                    nullable: true
+                    "nullable": true,
+                    "additionalProperties": false
                 }
             },
-            required: ["scope", "action", "target"],
-            additionalProperties: false
+            "required": ["action", "chat_id", "author_id"],
+            "additionalProperties": false
+        }
+    }
+}
+const group_memory_manager = {
+    "type": "function",
+    "strict": false,
+    "function": {
+        "name": "group_memory_manager",
+        "description": "Call this function when you learn new group info (interests, topics, jokes, etc.). Update memory without waiting for a request.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["get", "save", "clear"],
+                    "description": "'get' to retrieve group memory, 'save' to update it, 'clear' to delete group memory."
+                },
+                "chat_id": {
+                    "type": "string",
+                    "description": "Unique identifier for the chat/group."
+                },
+                "memory_data": {
+                    "type": ["object", "null"],
+                    "description": "Group memory object to save. Replaces existing group memory.",
+                    "properties": {
+                        "group_interests": { "type": ["array", "null"], "items": { "type": "string" }, "nullable": true },
+                        "recurring_topics": { "type": ["array", "null"], "items": { "type": "string" }, "nullable": true },
+                        "group_likes": { "type": ["array", "null"], "items": { "type": "string" }, "nullable": true },
+                        "group_dislikes": { "type": ["array", "null"], "items": { "type": "string" }, "nullable": true },
+                        "group_jargon": { "type": ["object", "null"], "nullable": true },
+                        "group_running_jokes": { "type": ["array", "null"], "items": { "type": "string" }, "nullable": true },
+                        "group_notes": { "type": ["array", "null"], "items": { "type": "string" }, "nullable": true }
+                    },
+                    "nullable": true,
+                    "additionalProperties": false
+                }
+            },
+            "required": ["action", "chat_id"],
+            "additionalProperties": false
         }
     }
 }
@@ -480,8 +461,8 @@ export function getTools(chatData: Chat) {
     tools.push(reminder_manager);
     if(AIConfig.TranscriptionConfig.enabled) tools.push(generate_speech);
     if(CONFIG.BotConfig.memoriesEnabled) {
-        tools.push(memory_manager);
-        // if(chatData.isGroup) tools.push(group_memory_manager);
+        tools.push(user_memory_manager);
+         if(chatData.isGroup) tools.push(group_memory_manager);
     }
 
     switch (AIConfig.ChatConfig.provider) {

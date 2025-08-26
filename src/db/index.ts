@@ -8,5 +8,3 @@ ensureTablesExist();
 
 const sqliteDB: Database = sqlite('roboto.sqlite');
 export const db = drizzle(sqliteDB, { schema });
-
-const a = new Date();

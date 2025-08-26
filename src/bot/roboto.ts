@@ -13,7 +13,8 @@ import OpenaiCustomService from "../services/openai-custom-service";
 import AnthropicSvc from "../services/anthropic-service";
 import { CVoices, elevenTTS } from "../services/elevenlabs-service";
 import Reminders from "../services/reminder-service";
-import MemoryService from "../services/user-memory-service";
+import MemoryService from "../services/memory-service";
+import wspWeb from "./wsp-web";
 
 class RobotoClass {
 
@@ -45,10 +46,10 @@ class RobotoClass {
       this.busyChats.add(chatId);
       this.sendStateTyping(chatData);
 
-      const memoriesContext = await MemoryService.getFormattedMemorias(chatId);
+      const memoriesContext = await MemoryService.getMemoryContext(chatId, !chatData.isGroup? getAuthorId(wspMessage): null);
       const systemPrompt = CONFIG.getSystemPrompt(chatConfig, memoriesContext);
 
-      const aiMessages: AiMessage[] = await WspWeb.generateMessageArray(wspMessage, chatData, chatConfig);
+      const aiMessages: AiMessage[] = await WspWeb.generateMessageArray(wspMessage, chatData, chatConfig, this.hasChatCache(chatId));
       const aiResponse = await this.sendMessageToAi(aiMessages, systemPrompt, chatId);
 
       let chatResponse: AIAnswer = extractAnswer(aiResponse, botName);
@@ -75,15 +76,15 @@ class RobotoClass {
 
   public async sendMessageToAi(aiMessages: AiMessage[], systemPrompt, chatId){
     const messagesList = convertIaMessagesLang(aiMessages) as any;
-    const chatData = await WspWeb.getWspClient().getChatById(chatId);
+    const chat = await wspWeb.getWspClient().getChatById(chatId);
 
     switch (AIConfig.ChatConfig.provider){
       case AIProvider.OPENAI:
-        return await OpenAISvc.sendMessage(messagesList, systemPrompt, chatId, getTools(chatData));
+        return await OpenAISvc.sendMessage(messagesList, systemPrompt, chatId, getTools(chat));
       case AIProvider.CLAUDE:
-        return await AnthropicSvc.sendMessage(messagesList, systemPrompt, chatId, getTools(chatData));
+        return await AnthropicSvc.sendMessage(messagesList, systemPrompt, chatId, getTools(chat));
       default:
-        return await CustomOpenAISvc.sendMessage(messagesList, systemPrompt, chatId, getTools(chatData));
+        return await CustomOpenAISvc.sendMessage(messagesList, systemPrompt, chatId, getTools(chat));
     }
   }
 
@@ -102,12 +103,15 @@ class RobotoClass {
         generate_speech: async (args: any) => {
           const {input, instructions, msg_id, voice_gender} = args;
           await this.sendAudioResponse(msg_id, {instructions, messageToSay: input, voiceGender: voice_gender});
-          return {success: true, result: 'The audio has been generated and sent to the user. You should respond with { "message" : null }'};
+          return {success: true, result: 'The audio has been generated and sent to the user. You should respond with { "message" : null } to avoid duplicate messages'};
         },
         reminder_manager: async (args) => {
           return await Reminders.processFunctionCall(args);
         },
-        memory_manager: async (args) => {
+        user_memory_manager: async (args) => {
+          return await MemoryService.processFunctionCall(args);
+        },
+        group_memory_manager: async (args) => {
           return await MemoryService.processFunctionCall(args);
         }
       };
@@ -173,7 +177,8 @@ class RobotoClass {
         this.deleteChatCache(chatId);
         return await message.react('👍');
       case "memory":
-        return await this.handleMemoryCommand(message, commandMessage!);
+        // return await this.handleMemoryCommand(message, commandMessage!);
+            return null;
       case "enable":
         if(!isAdmin) return false;
         this.botEnabled = true;
@@ -362,96 +367,92 @@ class RobotoClass {
     }
   }
 
-  private async handleMemoryCommand(message: Message, commandText: string) {
-    const chat = await message.getChat();
-    const authorId = getAuthorId(message);
-
-    const parts = commandText.split(' ');
-    const subCommand = parts[0]?.toLowerCase();
-
-    switch (subCommand) {
-      case 'show':
-        const memory = await MemoryService.getUserMemory(chat.id._serialized, authorId);
-        if (!memory) {
-          return message.reply("I don't have any information saved about you.");
-        }
-
-        let response = `📋 *Information I have saved about you:*\n`;
-        if (memory.age) response += `👤 Age: ${memory.age}\n`;
-        if (memory.profession) response += `💼 Profession: ${memory.profession}\n`;
-        if (memory.location) response += `📍 Location: ${memory.location}\n`;
-        if (memory.interests?.length) response += `🎯 Interests: ${memory.interests.join(', ')}\n`;
-        if (memory.likes?.length) response += `👍 Likes: ${memory.likes.join(', ')}\n`;
-        if (memory.dislikes?.length) response += `👎 Dislikes: ${memory.dislikes.join(', ')}\n`;
-        if (memory.runningJokes?.length) response += `😄 Running jokes: ${memory.runningJokes.join(', ')}\n`;
-        if (memory.nicknames?.length) response += `🏷️ Nicknames: ${memory.nicknames.join(', ')}\n`;
-        if (memory.personalNotes?.length) response += `📝 Notes: ${memory.personalNotes.join(', ')}\n`;
-        if (memory.jargon && Object.keys(memory.jargon).length > 0) {
-          const jargonText = Object.entries(memory.jargon).map(([term, meaning]) => `${term}: ${meaning}`).join(', ');
-          response += `🗣️ Your jargon: ${jargonText}\n`;
-        }
-
-        return message.reply(response);
-
-      case 'group':
-        if (!chat.isGroup) {
-          return message.reply("This command is only available in group chats.");
-        }
-
-        const groupMemory = await MemoryService.getGroupMemory(chat.id._serialized);
-        if (!groupMemory) {
-          return message.reply("I don't have any group information saved yet.");
-        }
-
-        let groupResponse = `📋 *Group Memory for ${groupMemory.chatName}:*\n`;
-        if (groupMemory.groupInterests?.length) groupResponse += `🎯 Group interests: ${groupMemory.groupInterests.join(', ')}\n`;
-        if (groupMemory.recurringTopics?.length) groupResponse += `💬 Recurring topics: ${groupMemory.recurringTopics.join(', ')}\n`;
-        if (groupMemory.groupLikes?.length) groupResponse += `👍 Group likes: ${groupMemory.groupLikes.join(', ')}\n`;
-        if (groupMemory.groupDislikes?.length) groupResponse += `👎 Group dislikes: ${groupMemory.groupDislikes.join(', ')}\n`;
-        if (groupMemory.groupRunningJokes?.length) groupResponse += `😄 Group jokes: ${groupMemory.groupRunningJokes.join(', ')}\n`;
-        if (groupMemory.groupTraditions?.length) groupResponse += `🎭 Group traditions: ${groupMemory.groupTraditions.join(', ')}\n`;
-        if (groupMemory.groupNotes?.length) groupResponse += `📝 Group notes: ${groupMemory.groupNotes.join(', ')}\n`;
-        if (groupMemory.groupJargon && Object.keys(groupMemory.groupJargon).length > 0) {
-          const jargonText = Object.entries(groupMemory.groupJargon).map(([term, meaning]) => `${term}: ${meaning}`).join(', ');
-          groupResponse += `🗣️ Group jargon: ${jargonText}\n`;
-        }
-
-        return message.reply(groupResponse);
-
-      case 'clear':
-        await MemoryService.processFunctionCall({
-          action: 'delete',
-          chat_id: chat.id._serialized,
-          author_id: authorId
-        });
-        return message.reply("✅ Your personal information has been removed from my memory.");
-
-      case 'cleargroup':
-        if (!chat.isGroup) {
-          return message.reply("This command is only available in group chats.");
-        }
-
-        await MemoryService.processFunctionCall({
-          action: 'delete',
-          chat_id: chat.id._serialized
-        });
-        return message.reply("✅ Group memory has been cleared.");
-
-      default:
-        const commands = [
-          "Available memory commands:",
-          "• *-memory show*: Shows your personal information",
-          "• *-memory clear*: Clears your personal information"
-        ];
-
-        if (chat.isGroup) {
-          commands.push("• *-memory group*: Shows group memory");
-          commands.push("• *-memory cleargroup*: Clears group memory");
-        }
-
-        return message.reply(commands.join('\n'));
-    }
-  }
+  // private async handleMemoryCommand(message: Message, commandText: string) {
+  //   const chat = await message.getChat();
+  //   const authorId = getAuthorId(message);
+  //
+  //   const parts = commandText.split(' ');
+  //   const subCommand = parts[0]?.toLowerCase();
+  //
+  //   switch (subCommand) {
+  //     case 'show':
+  //       const memory = await MemoryService.getMemory(chat.id._serialized, authorId);
+  //       if (!memory) {
+  //         return message.reply("I don't have any information saved about you.");
+  //       }
+  //
+  //       let response = `📋 *Information I have saved about you:*\n`;
+  //       if (memory.age) response += `👤 Age: ${memory.age}\n`;
+  //       if (memory.profession) response += `💼 Profession: ${memory.profession}\n`;
+  //       if (memory.location) response += `📍 Location: ${memory.location}\n`;
+  //       if (memory.interests?.length) response += `🎯 Interests: ${memory.interests.join(', ')}\n`;
+  //       if (memory.likes?.length) response += `👍 Likes: ${memory.likes.join(', ')}\n`;
+  //       if (memory.dislikes?.length) response += `👎 Dislikes: ${memory.dislikes.join(', ')}\n`;
+  //       if (memory.running_jokes?.length) response += `😄 Running jokes: ${memory.running_jokes.join(', ')}\n`;
+  //       if (memory.nicknames?.length) response += `🏷️ Nicknames: ${memory.nicknames.join(', ')}\n`;
+  //       if (memory.notes?.length) response += `📝 Notes: ${memory.notes.join(', ')}\n`;
+  //
+  //       return message.reply(response);
+  //
+  //     case 'group':
+  //       if (!chat.isGroup) {
+  //         return message.reply("This command is only available in group chats.");
+  //       }
+  //
+  //       const groupMemory = await MemoryService.getMemory(chat.id._serialized);
+  //       if (!groupMemory) {
+  //         return message.reply("I don't have any group information saved yet.");
+  //       }
+  //
+  //       let groupResponse = `📋 *Group Memory for ${groupMemory.chatName}:*\n`;
+  //       if (groupMemory.groupInterests?.length) groupResponse += `🎯 Group interests: ${groupMemory.groupInterests.join(', ')}\n`;
+  //       if (groupMemory.recurringTopics?.length) groupResponse += `💬 Recurring topics: ${groupMemory.recurringTopics.join(', ')}\n`;
+  //       if (groupMemory.groupLikes?.length) groupResponse += `👍 Group likes: ${groupMemory.groupLikes.join(', ')}\n`;
+  //       if (groupMemory.groupDislikes?.length) groupResponse += `👎 Group dislikes: ${groupMemory.groupDislikes.join(', ')}\n`;
+  //       if (groupMemory.groupRunningJokes?.length) groupResponse += `😄 Group jokes: ${groupMemory.groupRunningJokes.join(', ')}\n`;
+  //       if (groupMemory.groupTraditions?.length) groupResponse += `🎭 Group traditions: ${groupMemory.groupTraditions.join(', ')}\n`;
+  //       if (groupMemory.groupNotes?.length) groupResponse += `📝 Group notes: ${groupMemory.groupNotes.join(', ')}\n`;
+  //       if (groupMemory.groupJargon && Object.keys(groupMemory.groupJargon).length > 0) {
+  //         const jargonText = Object.entries(groupMemory.groupJargon).map(([term, meaning]) => `${term}: ${meaning}`).join(', ');
+  //         groupResponse += `🗣️ Group jargon: ${jargonText}\n`;
+  //       }
+  //
+  //       return message.reply(groupResponse);
+  //
+  //     case 'clear':
+  //       await MemoryService.processFunctionCall({
+  //         action: 'delete',
+  //         chat_id: chat.id._serialized,
+  //         author_id: authorId
+  //       });
+  //       return message.reply("✅ Your personal information has been removed from my memory.");
+  //
+  //     case 'cleargroup':
+  //       if (!chat.isGroup) {
+  //         return message.reply("This command is only available in group chats.");
+  //       }
+  //
+  //       await MemoryService.processFunctionCall({
+  //         action: 'delete',
+  //         chat_id: chat.id._serialized
+  //       });
+  //       return message.reply("✅ Group memory has been cleared.");
+  //
+  //     default:
+  //       const commands = [
+  //         "Available memory commands:",
+  //         "• *-memory show*: Shows your personal information",
+  //         "• *-memory clear*: Clears your personal information"
+  //       ];
+  //
+  //       if (chat.isGroup) {
+  //         commands.push("• *-memory group*: Shows group memory");
+  //         commands.push("• *-memory cleargroup*: Clears group memory");
+  //       }
+  //
+  //       return message.reply(commands.join('\n'));
+  //   }
+  // }
 
   private async addMessageToCache(wspMessage: Message, chatId: string) {
     try {
@@ -483,6 +484,19 @@ class RobotoClass {
         return AnthropicSvc.deleteChatCache(chatId);
       default:
         return OpenaiCustomService.deleteChatCache(chatId);
+    }
+  }
+
+  private hasChatCache(chatId: string){
+    switch (AIConfig.ChatConfig.provider){
+      case AIProvider.OPENAI:
+        return OpenAISvc.hasChatCache(chatId);
+      case AIProvider.DEEPSEEK:
+        return CustomOpenAISvc.hasChatCache(chatId);
+      case AIProvider.CLAUDE:
+        return AnthropicSvc.hasChatCache(chatId);
+      default:
+        return OpenaiCustomService.hasChatCache(chatId);
     }
   }
 

@@ -39,8 +39,8 @@ db.prepare(`
      id TEXT PRIMARY KEY,
      chat_id TEXT NOT NULL,
      author_id TEXT NOT NULL,
-     author_name TEXT NOT NULL,
-     is_group BOOLEAN NOT NULL,
+     real_name TEXT NOT NULL,
+     nicknames TEXT,
      age INTEGER,
      profession TEXT,
      location TEXT,
@@ -49,12 +49,10 @@ db.prepare(`
      dislikes TEXT,
      relationships TEXT,
      running_jokes TEXT,
-     nicknames TEXT,
-     personal_notes TEXT,
      jargon TEXT,
+     personal_notes TEXT,
      created_at TEXT NOT NULL,
      updated_at TEXT NOT NULL,
-     last_interaction_at TEXT NOT NULL,
      UNIQUE(chat_id, author_id)
         )
     `).run();
@@ -63,18 +61,16 @@ db.prepare(`
     CREATE TABLE IF NOT EXISTS group_memories (
         id TEXT PRIMARY KEY,
         chat_id TEXT NOT NULL UNIQUE,
-        chat_name TEXT NOT NULL,
         group_interests TEXT,
         recurring_topics TEXT,
         group_likes TEXT,
         group_dislikes TEXT,
         group_jargon TEXT,
         group_running_jokes TEXT,
-        group_traditions TEXT,
         group_notes TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
-        last_interaction_at TEXT NOT NULL
+        UNIQUE(chat_id)
     )
     `).run();
 

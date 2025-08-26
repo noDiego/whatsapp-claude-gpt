@@ -17,7 +17,7 @@ class WspWeb {
   constructor() {
   }
 
-  public async generateMessageArray(wspMessage: Message, chatData: Chat, chatCfg: ChatConfiguration): Promise<AiMessage[]> {
+  public async generateMessageArray(wspMessage: Message, chatData: Chat, chatCfg: ChatConfiguration, chatCached: boolean): Promise<AiMessage[]> {
 
     const messageList: AiMessage[] = [];
     const lastChatMsgProcessed = this.lastProcessed.get(chatData.id._serialized);
@@ -31,6 +31,12 @@ class WspWeb {
     const startIndex = wspMessageIndex !== -1 ? wspMessageIndex : 0;
     const messagesToProcessFiltered = messagesToProcess.slice(0, startIndex + 1);
 
+    if(chatCached && !chatData.isGroup) {
+      const aiMessage = await this.convertWspMsgToAiMsg(wspMessage, chatCfg.botName);
+      this.lastProcessed.set(chatData.id._serialized, wspMessage.id._serialized);
+      return [aiMessage];
+    }
+
     for (const msg of messagesToProcessFiltered.reverse()) {
       try {
         const actualDate = new Date();
@@ -38,6 +44,7 @@ class WspWeb {
 
         if ((actualDate.getTime() - msgDate.getTime()) / (1000 * 60 * 60) > chatCfg.maxHoursLimit) break;
         if (lastChatMsgProcessed == msg.id._serialized ) break;
+        if (chatCached && msg.fromMe) break;
         if (wspMessage.timestamp < msg.timestamp) continue;
 
         const aiMessage = await this.convertWspMsgToAiMsg(msg, chatCfg.botName);

@@ -1,5 +1,5 @@
 import { Reminder, ReminderCreateInput } from '../interfaces/reminder';
-import { reminders as remindersTable } from '../db/schema';
+import { remindersTable as remindersTable } from '../db/schema';
 import logger from '../logger';
 import { v4 as uuidv4 } from 'uuid';
 import { format, fromZonedTime, toZonedTime } from 'date-fns-tz';
