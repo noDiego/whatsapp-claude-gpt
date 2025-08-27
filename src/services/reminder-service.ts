@@ -172,7 +172,7 @@ class ReminderManager {
                     recurrenceEndDate: recurrence_end_date || null,
                     recurrenceEndDateTZ: recurrence_end_date_timezone || CONFIG.BotConfig.botTimezone
                 });
-                responseMessage = `Reminder created successfully. (Data: ${JSON.stringify(reminder)})`;
+                responseMessage = `Reminder created successfully. Data: ${JSON.stringify(reminder)}. (Do not mention the reminder id to the user)`;
                 break;
 
             case 'update':
@@ -185,7 +185,7 @@ class ReminderManager {
                     recurrenceEndDate: recurrence_end_date,
                     recurrenceEndDateTZ: recurrence_end_date_timezone || CONFIG.BotConfig.botTimezone
                 });
-                responseMessage = `Reminder updated successfully. (Data: ${JSON.stringify(reminder)})`;
+                responseMessage = `Reminder updated successfully. Data: ${JSON.stringify(reminder)}. (Do not mention the reminder id to the user)`;
                 break;
 
             case 'delete':

@@ -93,7 +93,7 @@ const generate_image_withedit = {
                 prompt: { type: "string", description: 'Description of the image to generate or changes to apply. Important: Never use real person names or msg_id in the prompt; always refer to subjects as "the person in the first image", etc.' },
                 image_msg_ids: {
                     type: ["array", "null"],
-                    description: "Array de msg_ids of images to use as a reference. Leave null or empty to create from scratch. (Optional)",
+                    description: "Array of image msg_ids to use as references. Leave null or empty to create from scratch. (Optional)",
                     items: { type: "string" },
                     nullable: true
                 },
@@ -105,89 +105,6 @@ const generate_image_withedit = {
     },
     strict: false
 }
-// const group_memory_manager = {
-//     type: "function",
-//     strict: false,
-//     function: {
-//         name: "group_memory_manager",
-//         description: `Group memory management system. Use this ONLY in group chats to remember and recall information about the group as a whole. This includes:
-//         - Group interests and common preferences
-//         - Recurring topics of discussion
-//         - Group culture, traditions, and habits
-//         - Group-specific jargon and inside jokes
-//         - General group dynamics and characteristics
-//
-//         IMPORTANT: Only use this function when in a group chat and only store information that is clearly about the group collectively, not individual members.`,
-//         parameters: {
-//             type: "object",
-//             properties: {
-//                 action: {
-//                     type: "string",
-//                     enum: ["get", "update", "delete"],
-//                     description: "Action to perform: 'get' to retrieve group memory, 'update' to add/modify group information, 'delete' to remove group memory"
-//                 },
-//                 chat_id: {
-//                     type: "string",
-//                     description: "The group chat ID"
-//                 },
-//                 chat_name: {
-//                     type: ["string", "null"],
-//                     description: "Group chat name. Required for 'update' action.",
-//                     nullable: true
-//                 },
-//                 group_interests: {
-//                     type: ["array", "null"],
-//                     items: { type: "string" },
-//                     description: "Common interests of the group members",
-//                     nullable: true
-//                 },
-//                 recurring_topics: {
-//                     type: ["array", "null"],
-//                     items: { type: "string" },
-//                     description: "Topics frequently discussed in the group",
-//                     nullable: true
-//                 },
-//                 group_likes: {
-//                     type: ["array", "null"],
-//                     items: { type: "string" },
-//                     description: "Things the group generally likes or enjoys",
-//                     nullable: true
-//                 },
-//                 group_dislikes: {
-//                     type: ["array", "null"],
-//                     items: { type: "string" },
-//                     description: "Things the group generally dislikes or avoids",
-//                     nullable: true
-//                 },
-//                 group_jargon: {
-//                     type: ["object", "null"],
-//                     description: "Group-specific slang/jargon terms with their meanings as key-value pairs",
-//                     nullable: true
-//                 },
-//                 group_running_jokes: {
-//                     type: ["array", "null"],
-//                     items: { type: "string" },
-//                     description: "Inside jokes or recurring references specific to this group",
-//                     nullable: true
-//                 },
-//                 group_traditions: {
-//                     type: ["array", "null"],
-//                     items: { type: "string" },
-//                     description: "Group habits, traditions, or regular activities",
-//                     nullable: true
-//                 },
-//                 group_notes: {
-//                     type: ["array", "null"],
-//                     items: { type: "string" },
-//                     description: "General notes about the group dynamics, culture, or characteristics",
-//                     nullable: true
-//                 }
-//             },
-//             required: ["action", "chat_id"],
-//             additionalProperties: false
-//         }
-//     }
-// }
 const reminder_manager = {
     type: "function",
     strict: false,
@@ -262,108 +179,6 @@ const reminder_manager = {
         }
     }
 }
-// const user_memory_manager = {
-//     type: "function",
-//     strict: false,
-//     function: {
-//         name: "user_memory_manager",
-//         description: `User memory management system. Use this to remember and recall personal information about individual users for more personalized conversations. This includes:
-//         - Personal details (age, profession, location)
-//         - Interests, likes, and dislikes
-//         - Relationships and family info
-//         - Running jokes and nicknames
-//         - Personal notes and jargon
-//
-//         IMPORTANT: Only store information that users explicitly mention or that is clearly evident from the conversation.`,
-//         parameters: {
-//             type: "object",
-//             properties: {
-//                 action: {
-//                     type: "string",
-//                     enum: ["get", "update", "delete"],
-//                     description: "Action to perform: 'get' to retrieve memories, 'update' to add/modify information, 'delete' to remove a user's memory"
-//                 },
-//                 chat_id: {
-//                     type: "string",
-//                     description: "The chat/group ID"
-//                 },
-//                 author_id: {
-//                     type: ["string", "null"],
-//                     description: "User's unique ID. Required for 'update' and 'delete'. If not provided for 'get', returns all user memories in the chat.",
-//                     nullable: true
-//                 },
-//                 author_name: {
-//                     type: ["string", "null"],
-//                     description: "User's display name. Required for 'update' action.",
-//                     nullable: true
-//                 },
-//                 age: {
-//                     type: ["integer", "null"],
-//                     description: "User's age",
-//                     nullable: true
-//                 },
-//                 profession: {
-//                     type: ["string", "null"],
-//                     description: "User's job or profession",
-//                     nullable: true
-//                 },
-//                 location: {
-//                     type: ["string", "null"],
-//                     description: "User's location (city, country, etc.)",
-//                     nullable: true
-//                 },
-//                 interests: {
-//                     type: ["array", "null"],
-//                     items: { type: "string" },
-//                     description: "User's hobbies and interests",
-//                     nullable: true
-//                 },
-//                 likes: {
-//                     type: ["array", "null"],
-//                     items: { type: "string" },
-//                     description: "Things the user likes",
-//                     nullable: true
-//                 },
-//                 dislikes: {
-//                     type: ["array", "null"],
-//                     items: { type: "string" },
-//                     description: "Things the user dislikes",
-//                     nullable: true
-//                 },
-//                 relationships: {
-//                     type: ["object", "null"],
-//                     description: "Information about user's family, partner, friends, etc.",
-//                     nullable: true
-//                 },
-//                 running_jokes: {
-//                     type: ["array", "null"],
-//                     items: { type: "string" },
-//                     description: "Recurring jokes or references with this user",
-//                     nullable: true
-//                 },
-//                 nicknames: {
-//                     type: ["array", "null"],
-//                     items: { type: "string" },
-//                     description: "User's nicknames or alternate names",
-//                     nullable: true
-//                 },
-//                 personal_notes: {
-//                     type: ["array", "null"],
-//                     items: { type: "string" },
-//                     description: "Array of relevant personal information about the user",
-//                     nullable: true
-//                 },
-//                 jargon: {
-//                     type: ["object", "null"],
-//                     description: "User's personal slang/jargon terms with their meanings as key-value pairs (e.g., {'bro': 'friend', 'lit': 'amazing'})",
-//                     nullable: true
-//                 }
-//             },
-//             required: ["action", "chat_id"],
-//             additionalProperties: false
-//         }
-//     }
-// }
 
 const user_memory_manager = {
     "type": "function",

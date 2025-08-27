@@ -65,7 +65,6 @@ export const userMemoriesTable = sqliteTable('user_memories', {
     updatedAt: text('updated_at').notNull()
 });
 
-// NUEVA TABLA: Memoria de grupos
 export const groupMemoriesTable = sqliteTable('group_memories', {
     id: text('id').primaryKey(),
     chatId: text('chat_id').notNull().unique(),

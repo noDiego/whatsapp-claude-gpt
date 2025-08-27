@@ -420,7 +420,7 @@ class RobotoClass {
 
       case 'clear':
         await MemoryService.processFunctionCall({
-          action: 'delete',
+          action: 'clear',
           chat_id: chat.id._serialized,
           author_id: authorId
         });
