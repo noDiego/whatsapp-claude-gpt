@@ -10,11 +10,11 @@ export enum CVoices {
   ARIA = '9BWtsMINqrJLrRacOk9x'
 }
 
-export async function elevenTTS(msg: string): Promise<string | undefined> {
+export async function elevenTTS(msg: string, voice: CVoices = CVoices.LILY): Promise<string | undefined> {
 
   logger.debug(`[${AIConfig.SpeechConfig.provider}->speech] Creating speech audio for: "${msg}"`);
 
-  const url = `https://api.elevenlabs.io/v1/text-to-speech/${AIConfig.SpeechConfig.voice}?output_format=mp3_44100_128`;
+  const url = `https://api.elevenlabs.io/v1/text-to-speech/${voice ?? AIConfig.SpeechConfig.voice}?output_format=mp3_44100_128`;
   const body = {
     text: msg,
     model_id: AIConfig.SpeechConfig.model,

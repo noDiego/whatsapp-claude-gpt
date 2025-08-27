@@ -4,8 +4,8 @@ import { Readable } from 'stream';
 import { AIConfig, CONFIG } from '../config';
 import { AIAnswer } from "../interfaces/ai-interfaces";
 
-export function getFormattedDate() {
-  const now = new Date();
+export function getFormattedDate(date?: Date) {
+  const now = date || new Date();
 
   const year = now.getFullYear();
   const month = (now.getMonth() + 1).toString().padStart(2, '0');
@@ -15,13 +15,23 @@ export function getFormattedDate() {
   const minutes = now.getMinutes().toString().padStart(2, '0');
   const seconds = now.getSeconds().toString().padStart(2, '0');
 
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  const offsetMinutes = now.getTimezoneOffset();
+  const offsetSign = offsetMinutes > 0 ? '-' : '+';
+  const absOffsetMinutes = Math.abs(offsetMinutes);
+  const offsetHours = Math.floor(absOffsetMinutes / 60).toString().padStart(2, '0');
+  const offsetMins = (absOffsetMinutes % 60).toString().padStart(2, '0');
+  const offsetString = `${offsetSign}${offsetHours}:${offsetMins}`;
+
+  const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const weekdayShort = weekdays[now.getDay()];
+
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offsetString} (${weekdayShort})`;
 }
 
 export function logMessage(message: Message, chat: Chat) {
-  const actualDate = new Date();
+  const msgDate = new Date(message.timestamp * 1000);
   logger.info(
-    `{ chatUser:${chat.id.user}, isGroup:${chat.isGroup}, grId:${chat.id._serialized}, grName:${chat.name}, author:'${message.author}', date:'${actualDate.toLocaleDateString()}-${actualDate.toLocaleTimeString()}', msg:'${message.body}' }`
+      `[ReceivedMessage] {msg:'${message.body}', author:${getAuthorId(message)}, isGroup:${chat.isGroup}, chatId:${chat.id._serialized}, grName:${chat.name}, date:'${getFormattedDate(msgDate)}'}`
   );
 }
 
@@ -45,9 +55,10 @@ export function parseCommand(input: string): { command?: string, commandMessage?
   return {command: match[1].trim(), commandMessage: match[2].trim()};
 }
 
-export async function getContactName(message: Message) {
+export async function getUserName(message: Message) {
   const contactInfo = await message.getContact();
-  const name = contactInfo.shortName || contactInfo.name || contactInfo.pushname || contactInfo.number;
+  const name = CONFIG.BotConfig.useContactNames? contactInfo.shortName || contactInfo.name || contactInfo.pushname || contactInfo.number :
+      contactInfo.pushname || contactInfo.number;
   return removeNonAlphanumeric(name);
 }
 
@@ -202,77 +213,154 @@ export function configValidation() {
 }
 
 export function extractAnswer(input: string, botName: string): AIAnswer {
+  // Remove <think> tags if they exist
+  const cleanedInput = input?.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 
-  const regex = /<think>[\s\S]*?<\/think>/g;
-  const inputString = input.replace(regex, '').trim();
-
-  if (!inputString || typeof inputString !== 'string') {
+  if (!cleanedInput || typeof cleanedInput !== 'string') {
     return null;
   }
 
-  try {
-    return JSON.parse(inputString.trim());
-  } catch (e) {
-  }
-
-  const startMatch = inputString.match(/[{\[]/);
-  if (!startMatch) {
-    logger.debug("[cleanFileName] Valid JSON start character not found");
-    return {message: inputString, author: botName, type: 'text'};
-  }
-
-  try {
-
-    const startIndex = startMatch.index;
-    let endIndex = inputString.length;
-    let openBraces = 0;
-    let openBrackets = 0;
+  // Helper to fix common JSON string issues
+  const fixJsonString = (jsonStr: string): string => {
+    let fixed = '';
     let inString = false;
     let escapeNext = false;
 
-    for (let i = startIndex; i < inputString.length; i++) {
-      const char = inputString[i];
+    for (let i = 0; i < jsonStr.length; i++) {
+      const char = jsonStr[i];
 
       if (escapeNext) {
+        fixed += char;
         escapeNext = false;
         continue;
       }
 
       if (char === '\\') {
+        fixed += char;
         escapeNext = true;
         continue;
       }
 
-      if (char === '"' && !escapeNext) {
+      if (char === '"') {
         inString = !inString;
+        fixed += char;
         continue;
       }
 
-      if (inString) continue;
-
-      if (char === '{') openBraces++;
-      if (char === '}') openBraces--;
-      if (char === '[') openBrackets++;
-      if (char === ']') openBrackets--;
-
-      if (i >= startIndex && openBraces === 0 && openBrackets === 0) {
-        if (startMatch[0] === '{' && char === '}') {
-          endIndex = i + 1;
-          break;
+      if (inString) {
+        // Escape problematic characters inside strings
+        switch (char) {
+          case '\n': fixed += '\\n'; break;
+          case '\r': fixed += '\\r'; break;
+          case '\t': fixed += '\\t'; break;
+          case '\b': fixed += '\\b'; break;
+          case '\f': fixed += '\\f'; break;
+          default: fixed += char;
         }
-        if (startMatch[0] === '[' && char === ']') {
-          endIndex = i + 1;
-          break;
-        }
+      } else {
+        fixed += char;
       }
     }
 
-    const jsonString = inputString.substring(startIndex, endIndex);
+    return fixed;
+  };
 
-    return JSON.parse(jsonString);
+  // Helper to safely unescape nested JSON strings (for DeepSeek style responses)
+  const unescapeNestedJson = (str: string): any => {
+    try {
+      // Handle multiple levels of JSON string escaping
+      let unescaped = str;
+      let attempts = 0;
+      const maxAttempts = 3; // Prevent infinite loops
+
+      while (attempts < maxAttempts) {
+        try {
+          const temp = JSON.parse(unescaped);
+          if (typeof temp === 'string' && temp !== unescaped) {
+            unescaped = temp;
+            attempts++;
+          } else {
+            return temp; // Successfully parsed object
+          }
+        } catch {
+          break;
+        }
+      }
+
+      return JSON.parse(unescaped);
+    } catch {
+      return null;
+    }
+  };
+
+  // Attempt 1: Direct JSON parsing
+  try {
+    const parsed = JSON.parse(fixJsonString(cleanedInput));
+    if (parsed?.message !== undefined) {
+      return parsed;
+    }
   } catch (e) {
-    return {message: inputString, author: botName, type: 'text' };
+    logger.debug(`[extractAnswer] Direct JSON parsing failed: ${e.message}`);
   }
+
+  // Attempt 2: Handle nested structure (DeepSeek style)
+  try {
+    const parsed = JSON.parse(fixJsonString(cleanedInput));
+
+    // Check for nested structure like {content: {text: "escaped_json"}} or {content: "escaped_json"}
+    if (parsed?.content) {
+      const contentText = typeof parsed.content === 'string' ? parsed.content : parsed.content.text;
+
+      if (typeof contentText === 'string') {
+        const nestedResult = unescapeNestedJson(contentText);
+        if (nestedResult?.message !== undefined) {
+          logger.debug("[extractAnswer] Successfully parsed nested JSON structure");
+          return nestedResult;
+        }
+      }
+    }
+  } catch (e) {
+    logger.debug(`[extractAnswer] Nested structure parsing failed: ${e.message}`);
+  }
+
+  // Attempt 3: Extract JSON from mixed content using regex
+  const jsonMatches = cleanedInput.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g);
+
+  if (jsonMatches) {
+    for (const match of jsonMatches) {
+      try {
+        const parsed = JSON.parse(fixJsonString(match));
+        if (parsed?.message !== undefined) {
+          logger.debug("[extractAnswer] Successfully parsed regex-extracted JSON");
+          return parsed;
+        }
+      } catch {
+        continue; // Try next match
+      }
+    }
+  }
+
+  // Attempt 4: Look for escaped JSON patterns
+  const escapedJsonMatch = cleanedInput.match(/"([^"]*(?:\\.[^"]*)*)"/);
+  if (escapedJsonMatch?.[1]) {
+    try {
+      const nestedResult = unescapeNestedJson(`"${escapedJsonMatch[1]}"`);
+      if (nestedResult?.message !== undefined) {
+        logger.debug("[extractAnswer] Successfully parsed escaped JSON pattern");
+        return nestedResult;
+      }
+    } catch {
+      // Continue to fallback
+    }
+  }
+
+  // Fallback: Return as plain text
+  logger.debug("[extractAnswer] All parsing attempts failed, returning as plain text");
+  return {
+    message: cleanedInput,
+    author: botName,
+    type: 'text'
+  };
 }
 
 export function logConfigInfo() {
@@ -280,11 +368,12 @@ export function logConfigInfo() {
 
   // Bot general information
   logger.info(`📝 BOT CONFIGURATION:`);
-  logger.info(`• Bot name: ${CONFIG.botConfig.botName}`);
-  logger.info(`• Response character limit: ${CONFIG.botConfig.maxCharacters}`);
-  logger.info(`• Maximum messages considered: ${CONFIG.botConfig.maxMsgsLimit}`);
-  logger.info(`• Maximum message age: ${CONFIG.botConfig.maxHoursLimit} hours`);
-  logger.info(`• Maximum images processed: ${CONFIG.botConfig.maxImages}`);
+  logger.info(`• Bot name: ${CONFIG.BotConfig.botName}`);
+  logger.info(`• Response character limit: ${CONFIG.BotConfig.maxCharacters}`);
+  logger.info(`• Maximum messages considered: ${CONFIG.BotConfig.maxMsgsLimit}`);
+  logger.info(`• Maximum message age: ${CONFIG.BotConfig.maxHoursLimit} hours`);
+  logger.info(`• Maximum images processed: ${CONFIG.BotConfig.maxImages}`);
+  logger.info(`• Memory: ${CONFIG.BotConfig.memoriesEnabled}`);
 
   // Chat provider and model
   logger.info(`🤖 CHAT PROVIDER:`);
@@ -317,7 +406,7 @@ export function logConfigInfo() {
     logger.info(`TRANSCRIPTION (Speech-to-Text):`);
     logger.info(`  • Provider: ${AIConfig.TranscriptionConfig.provider}`);
     logger.info(`  • Model: ${AIConfig.TranscriptionConfig.model}`);
-    logger.info(`  • Language: ${CONFIG.botConfig.transcriptionLanguage}`);
+    logger.info(`  • Language: ${CONFIG.BotConfig.transcriptionLanguage}`);
     if (AIConfig.TranscriptionConfig.baseURL && AIConfig.TranscriptionConfig.provider !== 'OPENAI') {
       logger.info(`  • Base URL: ${AIConfig.TranscriptionConfig.baseURL}`);
     }
@@ -335,10 +424,93 @@ export function logConfigInfo() {
   }
 
   // Additional information if preferred language is set
-  if (CONFIG.botConfig.preferredLanguage) {
+  if (CONFIG.BotConfig.preferredLanguage) {
     logger.info(`🌐 LANGUAGE PREFERENCES:`);
-    logger.info(`• Preferred language: ${CONFIG.botConfig.preferredLanguage}`);
+    logger.info(`• Preferred language: ${CONFIG.BotConfig.preferredLanguage}`);
   }
 
   logger.info('===========================================');
+}
+
+export function sanitizeLogImages(str: string) {
+  return str.replace(/(data:image\/[a-zA-Z0-9+.-]+;base64,)[A-Za-z0-9+/=]+/g, '$1...');
+}
+
+export function parseIfJson(input: any) {
+  if (typeof input === 'object' && input !== null) {
+    return input;
+  }
+
+  if (typeof input === 'string') {
+    try {
+      const parsed = JSON.parse(input);
+      if (typeof parsed === 'object' && parsed !== null) {
+        return parsed;
+      }
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+}
+
+export function getAuthorId(wspMsg: Message): string{
+  return wspMsg.author || wspMsg.id?.remote || (wspMsg.id as any)?.participant;
+}
+
+export function addSeconds(date: Date, seconds: number): Date {
+  const result = new Date(date);
+  result.setSeconds(result.getSeconds() + seconds);
+  return result;
+}
+
+export function convertCompletionsToolsToResponses(tools) {
+  if (!Array.isArray(tools)) {
+    throw new TypeError("tools must be an array");
+  }
+
+  return tools.map((tool, idx) => {
+    if (!tool || typeof tool !== "object") return tool;
+
+    if (tool.type !== "function") return tool;
+
+    if (!tool.function && tool.name && tool.parameters) {
+      return tool;
+    }
+
+    const fn = tool.function || {};
+
+    const out = {
+      type: "function",
+      name: fn.name ?? tool.name,
+      description: fn.description ?? tool.description,
+      parameters: fn.parameters ?? tool.parameters
+    } as any;
+
+    if (typeof fn.strict !== "undefined") out.strict = fn.strict;
+    else if (typeof tool.strict !== "undefined") out.strict = tool.strict;
+
+    for (const k in tool) {
+      if (["type", "function", "name", "description", "parameters", "strict"].includes(k)) continue;
+      if (typeof out[k] === "undefined") out[k] = tool[k];
+    }
+
+    for (const k in fn) {
+      if (["name", "description", "parameters", "strict"].includes(k)) continue;
+      if (typeof out[k] === "undefined") out[k] = fn[k];
+    }
+
+    if (!out.name) {
+      console.warn(`Tool at index ${idx} is missing a function name after conversion.`);
+    }
+    if (!out.parameters) {
+      console.warn(`Tool "${out.name || idx}" is missing parameters schema after conversion.`);
+    }
+
+    return out;
+  });
+}
+
+export function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }

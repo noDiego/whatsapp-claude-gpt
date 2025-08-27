@@ -1,6 +1,6 @@
 # WhatsApp-Claude-GPT
 
-WhatsApp-Claude-GPT is a chatbot application designed for seamless interaction on WhatsApp. It integrates flexible AI language models for text chat and, optionally, OpenAI’s image-creation and voice features. Currently, it fully supports:
+WhatsApp-Claude-GPT is a WhatsApp chatbot that supports multiple AI providers for chat, optional image generation/editing, and voice (speech-to-text and text-to-speech). It’s built for natural, contextual conversations and can now also handle reminders and personalized memory.
 
 ## Supported AI Providers
 
@@ -11,10 +11,23 @@ WhatsApp-Claude-GPT is a chatbot application designed for seamless interaction o
 - **QWEN**: Chat
 - **ElevenLabs**: Text-to-Speech
 
+
+## What’s New in 1.4.0
+
+- **Reminders**: Ask the bot to schedule reminders (one-time or recurring) in natural language. The bot will send a WhatsApp message at the scheduled time.
+- **Unified Memory**: The bot can remember personal and group details to make conversations more personalized. This can be disabled to save tokens (see “Memory & Token Usage”).
+- **GPT‑5 Support**: Works with OpenAI’s gpt-5 for chat.
+- **Image Edition**: Edit/transform images using references (OpenAI-only)
+- Per-chat configuration and quality-of-life improvements.
+
 ## Key Features
 
 - **Automatic Responses**: Generates coherent and contextual responses to messages
-- **Image Creation**: Creates images from text descriptions using the `-image` command
+- **Image Creation**:
+  - Generate images from text (OpenAI/Deepinfra).
+  - Edit/transform images using references (OpenAI-only).
+- **Reminders**: Create, list, update, delete, deactivate, and reactivate reminders (including recurring reminders).
+- **Memory** (optional): Remembers user/group info for more personalized replies. Can be turned off to reduce token usage.
 - **Voice Interaction**: Understands voice messages and can respond with voice messages
 - **Group Interaction**: Responds in groups when its name is mentioned (e.g., "Hi Roboto, how are you?")
 - **Context Management**: Tracks recent messages for context with customizable limits
@@ -45,8 +58,9 @@ Before initializing the bot, make sure you have [Node.js](https://nodejs.org/en/
    cp .env.example .env
    ```
 
-4. Edit the `.env` file with your API keys and preferences. (See [API Key Resources](#api-key-resources) or [Configuration with .env File](#configuration-with-env-file) )
+4. Edit the `.env` file with your API keys and preferences. At a minimum, the OpenAI API key must be set.
 
+OPENAI_API_KEY=your_openai_api_key
 
 5. Start the bot:
    ```
@@ -68,7 +82,10 @@ OPENAI_API_KEY=your_api_key
 BOT_NAME=Roboto
 IMAGE_CREATION_ENABLED=true
 VOICE_MESSAGES_ENABLED=true
+MEMORIES_ENABLED=true
 ```
+
+- You can get your OpenAI APIKey here: [OpenAI API Keys](https://platform.openai.com/account/api-keys)
 
 ## Using the Bot
 
@@ -76,6 +93,38 @@ VOICE_MESSAGES_ENABLED=true
 
 - **Direct chat**: Simply send a message to the bot
 - **Group chat**: Mention the bot's name (e.g., "Hey Roboto, what's the weather today?")
+
+
+### Reminders (natural language)
+Ask the bot to:
+- “Remind me tomorrow at 9am to pay the bills.”
+- “Set a reminder in 2 hours to stretch.”
+- “Every Monday at 8am remind me about the team standup.”
+- “List my reminders.”
+- “Deactivate that reminder.” / “Reactivate the meeting reminder.”
+
+It supports:
+- One-time reminders
+- Recurrence: minutes, daily, weekly, monthly
+- Listing, updating, deleting, deactivating/reactivating
+
+The bot manages IDs behind the scenes. If needed, it will list reminders to identify the right one to update or delete.
+
+### Memory & Token Usage
+The bot can remember personal and group details (e.g., age, job, interests, running jokes) to make conversations more helpful over time.
+
+- To reduce token usage, disable memory:
+  - MEMORIES_ENABLED=false in your .env
+- With memory disabled:
+  - The model won’t autonomously store or fetch memories.
+  - Manual memory commands still work to show or clear what’s stored.
+- The bot avoids saving raw voice transcription content as personal memory.
+
+Memory commands you can type:
+- -memory show
+- -memory clear
+- -memory group (in group chats)
+- -memory cleargroup (in group chats)
 
 ### Using `-chatconfig` Command
 
@@ -111,28 +160,19 @@ In groups, only administrators can use the `-chatconfig` command.
 
 Example use case: You can have the bot respond to "Roboto" in your personal chat, but respond to "Teacher" in an educational group with a more formal personality.
 
-### Creating Images with `-image`
+### Images
+- Generation: Ask naturally (“Create a logo with a minimalist fox in orange and black”).
+- Editing/Transformations (OpenAI-only): Send an image and ask the bot to modify it (“Make the background transparent,” “Replace the sky with a sunset,” etc.). The bot will use the reference image(s) you sent most recently.
 
-To generate an image based on text, use the `-image` command followed by a description of the item you want to create. For example:
-```
--image a nighttime landscape with stars
-```
+Example (OpenAI-only image editing):
 
-Example:
+<img src="https://i.imgur.com/ANIoWue.jpeg" width="650">
 
-<img src="https://i.imgur.com/mAlBnl9.jpg" width="650">
-
-### Requesting Audio Responses
-The bot can now respond with audio messages as well as understand voice messages from users. To request an audio response from the bot, you can include a specific request in your message. For example:
-```bash
-Please respond with an audio message.
-```
-Or:
-```bash
-Can you say this as an audio?
-```
-
-Additionally, the bot is capable of processing and understanding voice messages sent by users. It will transcribe and consider the content of these voice messages when generating its responses, ensuring a seamless voice interaction.
+### Voice
+- Ask the bot to respond with audio:
+  - “Please respond with an audio message.”
+  - “Can you say this as an audio?”
+- The bot also understands voice notes you send and will include them in context.
 
 Example:
 <img src="https://i.imgur.com/hvmd9z5.jpg" width="650">
@@ -173,6 +213,7 @@ MAX_MSGS_LIMIT=30                     # Maximum number of messages to keep in co
 MAX_HOURS_LIMIT=24                    # Maximum time window for message context
 NODE_CACHE_TIME=259200                # Caching time in seconds for transcribed message data
 TRANSCRIPTION_LANGUAGE=en             # Default language for voice transcription
+MEMORIES_ENABLED=true                 # Enable memory feature
 
 ## FEATURES
 IMAGE_CREATION_ENABLED=true           # Enable image creation
@@ -184,7 +225,22 @@ PROMPT_INFO="You should use a casual tone with plenty of emojis."
 
 This basic configuration is all you need to get started. The bot will use OpenAI for all services.
 
-## Advanced Configuration Options
+## Advanced Provider Configuration (optional)
+
+You can mix different providers per capability (chat, images, speech, transcription). Set these in .env if you need them:
+
+- CHAT_PROVIDER=[OPENAI|CLAUDE|DEEPSEEK|DEEPINFRA|QWEN|CUSTOM]
+- IMAGE_PROVIDER=[OPENAI|DEEPINFRA]
+- SPEECH_PROVIDER=[OPENAI|ELEVENLABS]
+- TRANSCRIPTION_PROVIDER=[OPENAI|DEEPINFRA]
+
+Provide the corresponding API keys and model names per provider. See .env.full-example for a comprehensive template.
+
+Notes:
+- Web Search and Image Editing are OpenAI-only features.
+- If an API key for a non-essential capability is missing, that capability is disabled automatically.
+
+## Advanced Configuration .env Options
 
 For advanced users, you can customize which provider handles each type of service. Set these variables in your `.env` file:
 
@@ -243,6 +299,8 @@ MAX_MSGS_LIMIT=30                            # Maximum number of messages to kee
 MAX_HOURS_LIMIT=24                           # Maximum time window for message context
 NODE_CACHE_TIME=259200                       # Cache time in seconds for message data
 TRANSCRIPTION_LANGUAGE=en                    # Default language for voice transcription
+USE_CONTACT_NAMES=true                       # Determines whether the name of stored contacts will be used to identify each user
+MEMORIES_ENABLED=true                        # Enable memory feature
 
 # Additional prompt info to tailor the bot's personality (optional)
 PROMPT_INFO="You should adopt a friendly and informal tone, often using emojis in responses"  # Custom instructions for bot personality
@@ -303,9 +361,11 @@ With this update, users can enhance the bot's interactivity by defining how it s
 
 
 ----------
-• Enjoy experimenting with your WhatsApp-Claude-GPT Bot!
 
 ## License
 
 [MIT](https://choosealicense.com/licenses/mit/)
 
+----------
+
+Enjoy experimenting with your WhatsApp-Claude-GPT Bot!

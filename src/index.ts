@@ -1,35 +1,59 @@
 import logger from './logger';
-import { Message } from 'whatsapp-web.js';
-import { Roboto } from './roboto';
-import { configValidation, logConfigInfo } from './utils';
+import { Client, LocalAuth, Message } from 'whatsapp-web.js';
 import qrcode from 'qrcode-terminal';
-import { Client, LocalAuth } from 'whatsapp-web.js';
-
-const client = new Client({
-  authStrategy: new LocalAuth()
-});
+import Roboto from "./bot/roboto";
+import WhatsappHandler from "./bot/wsp-web";
+import { configValidation, logConfigInfo } from "./utils";
 
 require('dotenv').config();
-
-configValidation();
+configValidation()
 logConfigInfo();
 
-const roboto: Roboto = new Roboto();
+async function start() {
+  try {
 
-client.on('qr', qr => {
-  qrcode.generate(qr, {small: true});
-});
+    const wspClient = new Client({
+      authStrategy: new LocalAuth(),
+      puppeteer: {
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--disable-gpu'
+        ],
+      }
+    });
 
-client.on('ready', () => {
-  logger.info('Client is ready!');
-});
+    logger.info('Starting WhatsApp client...');
 
-client.on('message', async (message: Message) => {
-  roboto.readMessage(message, client);
-});
+    wspClient.on('qr', qr => {
+      logger.info('QR Code received, scan please');
+      qrcode.generate(qr, { small: true });
+    });
 
-try {
-  client.initialize();
-}catch (e: any){
-  logger.error(`ERROR: ${e.message}`);
+    wspClient.on('authenticated', () => {
+      logger.info('Client authenticated');
+    });
+
+    wspClient.on('auth_failure', async (msg) => {
+      logger.error(`Authentication failure: ${msg}`);
+    });
+
+    wspClient.on('ready', () => {
+      return logger.info('Client is ready!');
+    });
+
+    wspClient.on('message', async (message: Message) => Roboto.readWspMessage(message));
+
+    await wspClient.initialize();
+
+    WhatsappHandler.setWspClient(wspClient);
+  } catch (e: any) {
+    logger.error(`ERROR: ${e.message}`);
+  }
 }
+
+start();

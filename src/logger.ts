@@ -1,4 +1,4 @@
-import *  as  winston from 'winston';
+import * as winston from 'winston';
 import { getFormattedDate } from './utils';
 
 const logFormat = winston.format.printf(function(info) {
@@ -6,7 +6,7 @@ const logFormat = winston.format.printf(function(info) {
 });
 
 const logger = winston.createLogger({
-  level: 'debug',
+  level: process.env.LOG_LEVEL ?? 'debug',
   transports: [
     new winston.transports.Console({
       format: winston.format.combine(winston.format.colorize(), logFormat)
