@@ -361,8 +361,11 @@ With this update, users can enhance the bot's interactivity by defining how it s
 
 
 ----------
-• Enjoy experimenting with your WhatsApp-Claude-GPT Bot!
 
 ## License
 
 [MIT](https://choosealicense.com/licenses/mit/)
+
+----------
+
+Enjoy experimenting with your WhatsApp-Claude-GPT Bot!
