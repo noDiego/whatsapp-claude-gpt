@@ -4,7 +4,7 @@
   "license": "MIT",
   "author": "Diego Beltran <diego.beltran88@gmail.com>",
   "description": "WhatsApp-Claude-GPT is a WhatsApp chatbot that supports multiple AI providers for chat, optional image generation/editing, and voice (speech-to-text and text-to-speech). It’s built for natural, contextual conversations and can now also handle reminders and personalized memory.",
-  "repository": "noDiego/whatsapp-claude-gpt",
+  "repository": "https://github.com/noDiego/whatsapp-claude-gpt.git",
   "keywords": [
     "openai",
     "chatgpt",
@@ -28,7 +28,7 @@
     "deepinfra",
     "elevenlabs"
   ],
-  "main": "index.js",
+  "main": "build/index.js",
   "files": [
     "src",
     "README.md"
@@ -50,7 +50,8 @@
     "qrcode-terminal": "^0.12.0",
     "uuid": "^11.1.0",
     "whatsapp-web.js": "^1.31.0",
-    "winston": "^3.17.0"
+    "winston": "^3.17.0",
+    "winston-daily-rotate-file": "^5.0.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
