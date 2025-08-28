@@ -1,5 +1,5 @@
 import * as winston from 'winston';
-import DailyRotateFile from 'winston-daily-rotate-file';
+import 'winston-daily-rotate-file';
 import { getFormattedDate } from './utils';
 
 const fileLogFormat = winston.format.printf((info) => {
