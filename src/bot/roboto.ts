@@ -230,8 +230,8 @@ class RobotoClass {
 
             if (imgMsgId.startsWith("LOCAL-")) {
               const filename = imgMsgId.replace("LOCAL-", "") + ".jpg";
-              const filePath = path.join(__dirname, '/../assets/images/', filename);
-              if (!fs.existsSync(filePath)) throw new Error(`No se encontró ningún archivo local con id=${imgMsgId}`);
+              const filePath = path.join(__dirname, '/../../assets/images/', filename);
+              if (!fs.existsSync(filePath)) throw new Error(`No se encontró ningún archivo local con filename=${filename}`);
               return fs.createReadStream(filePath);
             }
 
