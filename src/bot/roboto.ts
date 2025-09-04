@@ -238,7 +238,11 @@ class RobotoClass {
               return fs.createReadStream(filePath);
             }
 
-            const imgMsg = await wspClient.getMessageById(imgMsgId);
+            let imgMsg = await wspClient.getMessageById(imgMsgId);
+            if(!imgMsg){
+              await sleep(3000);
+              imgMsg = await wspClient.getMessageById(imgMsgId);
+            }
 
             logger.debug(`[createImage] imgMsg=${imgMsg} imgMsg.id=${imgMsg?.id}`);
 
