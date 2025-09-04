@@ -228,14 +228,20 @@ class RobotoClass {
       imageStreams = await Promise.all(
           args.image_msg_ids.map(async (imgMsgId: string) => {
 
+            logger.debug(`[createImage] imgMsgId=${imgMsgId}`);
+
             if (imgMsgId.startsWith("LOCAL-")) {
               const filename = imgMsgId.replace("LOCAL-", "") + ".jpg";
               const filePath = path.join(__dirname, '/../../assets/images/', filename);
+              logger.debug(`[createImage] filePath=${filePath}`);
               if (!fs.existsSync(filePath)) throw new Error(`No se encontró ningún archivo local con filename=${filename}`);
               return fs.createReadStream(filePath);
             }
 
             const imgMsg = await wspClient.getMessageById(imgMsgId);
+
+            logger.debug(`[createImage] imgMsg=${imgMsg} imgMsg.id=${imgMsg?.id}`);
+
             const media = await WspWeb.extractMedia(imgMsg);
             if (media.errorMedia) throw new Error(media.errorMedia);
 
