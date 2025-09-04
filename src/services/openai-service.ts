@@ -186,7 +186,7 @@ class OpenaiService {
       apiKey: AIConfig.ImageConfig.apiKey,
     });
 
-    logger.debug(`[${AIConfig.ImageConfig.provider}->generateImage] Creating image with params: ${JSON.stringify(params)}`);
+    logger.debug(`[${AIConfig.ImageConfig.provider}->generateImage] Creating image with params: ${JSON.stringify({prompt: params.prompt, imageStreamLength: params.imageStreams? params.imageStreams.length : [] })}`);
 
     const baseParams: any = {
       model: AIConfig.ImageConfig.model,

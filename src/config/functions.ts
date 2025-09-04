@@ -93,7 +93,7 @@ const generate_image_withedit = {
                 prompt: { type: "string", description: 'Description of the image to generate or changes to apply. Important: Never use real person names or msg_id in the prompt; always refer to subjects as "the person in the first image", etc.' },
                 image_msg_ids: {
                     type: ["array", "null"],
-                    description: "Array of image msg_ids to use as references. Leave null or empty to create from scratch. (Optional)",
+                    description: "Array of image msg_ids to use as references. Required if the user explicitly requests a modified or edited version of one or more images in the chat. Leave null or empty to create from scratch. (Optional)",
                     items: { type: "string" },
                     nullable: true
                 },
