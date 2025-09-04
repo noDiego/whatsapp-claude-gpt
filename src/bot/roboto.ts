@@ -15,6 +15,8 @@ import { CVoices, elevenTTS } from "../services/elevenlabs-service";
 import Reminders from "../services/reminder-service";
 import MemoryService from "../services/memory-service";
 import wspWeb from "./wsp-web";
+import path from "node:path";
+import fs from "node:fs";
 
 class RobotoClass {
 
@@ -225,6 +227,14 @@ class RobotoClass {
     if (args.image_msg_ids?.length > 0) {
       imageStreams = await Promise.all(
           args.image_msg_ids.map(async (imgMsgId: string) => {
+
+            if (imgMsgId.startsWith("LOCAL-")) {
+              const filename = imgMsgId.replace("LOCAL-", "") + ".jpg";
+              const filePath = path.join(__dirname, '/../assets/images/', filename);
+              if (!fs.existsSync(filePath)) throw new Error(`No se encontró ningún archivo local con id=${imgMsgId}`);
+              return fs.createReadStream(filePath);
+            }
+
             const imgMsg = await wspClient.getMessageById(imgMsgId);
             const media = await WspWeb.extractMedia(imgMsg);
             if (media.errorMedia) throw new Error(media.errorMedia);
