@@ -88,7 +88,8 @@ function toClaude(messageList: AiMessage[]): MessageParam[] {
                         buildMeta(aiMessage, c, { type: c.type }) // keep original behavior: "type":"text"
                     )
                 });
-            } else if (c.type === "image") {
+            }
+            if (c.type === "image") {
                 block.push({
                     type: "image",
                     source: {
@@ -214,7 +215,8 @@ function toOpenAI(messageList: AiMessage[]): ResponseInputItem[] {
                         )
                     });
                 }
-            } else if (isTextLike(c.type)) {
+            }
+            if (isTextLike(c.type)) {
                 gptContent.push({
                     type: textType,
                     text: JSON.stringify(buildMeta(aiMessage, c))
