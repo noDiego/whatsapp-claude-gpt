@@ -267,7 +267,11 @@ class RobotoClass {
     }
 
     const media = new MessageMedia("image/png", images[0].b64_json, "image.png");
-    const message = await wspMsg.reply(media);
+    let message;
+    if(wspMsg)
+      message = await wspMsg.reply(media);
+    else
+      message = await WspWeb.getWspClient().sendMessage(args.chatId, media);
 
     this.addMessageToCache(message, args.chatId);
   }
