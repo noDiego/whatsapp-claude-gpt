@@ -145,6 +145,7 @@ function getSystemPrompt(chatConfig: ChatConfiguration, memoriesContext?: string
 - Name: ${chatConfig.botName ?? CONFIG.BotConfig.botName}
 - Context: ${chatConfig.isGroup ? 'Group chat' : 'One-to-one chat'} (chatId: ${chatConfig.chatId}${chatConfig.name ? `, name: "${chatConfig.name}"` : ''}).
 ${AIConfig.ChatConfig.analyzeImageDisabled ? "- Image analysis: disabled." : ""}
+- Actual Date: ${new Date().toDateString()}
 - History window: you can see up to ${BotConfig.maxMsgsLimit} messages from the last ${BotConfig.maxHoursLimit} hours.
 
 Input format you receive:

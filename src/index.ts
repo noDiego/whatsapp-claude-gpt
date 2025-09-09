@@ -13,7 +13,7 @@ async function start() {
   try {
 
     const wspClient = new Client({
-      authStrategy: new LocalAuth(),
+      authStrategy: new LocalAuth({dataPath: 'session'}),
       puppeteer: {
         args: [
           '--no-sandbox',
