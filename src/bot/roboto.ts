@@ -21,6 +21,7 @@ import fs from "node:fs";
 class RobotoClass {
 
   private busyChats = new Set<string>();
+  private chatImageRetry = new Map();
   private botEnabled = true;
 
   constructor() {
@@ -99,8 +100,22 @@ class RobotoClass {
       const handlers: Record<string, (args: any) => Promise<OperationResult>> = {
 
         generate_image: async (args: any) => {
-          this.createImage(args);
-          return {success: true, result: 'The image is being generated. It may take a few seconds'};
+          const imageRetryCount = this.chatImageRetry.get(args.chatId);
+          try {
+            await this.createImage(args);
+            this.chatImageRetry.set(args.chatId, 0);
+            return { success: true, result: 'The image has been generated and sent to the chat.'};
+          } catch (e){
+            logger.error(`[${e.code}]: ${e.message}`);
+            if (imageRetryCount >= 3 || e.code == '400' || !e.message.toLowerCase().includes('safety system')) {
+              this.chatImageRetry.set(args.chatId, 0);
+              return {success: false, result: `Error generating image: ${e.message}.`};
+            }
+            this.chatImageRetry.set(args.chatId, imageRetryCount ? imageRetryCount + 1 : 1);
+            const match = e.message.match(/safety_violations=\[([^\]]*)\]/);
+            const safety_violations = match ? match[1] : null;
+            return { success: false, result: `OpenAI's safety filters blocked the request (safety_violations:${safety_violations}). Please call generate_image again with a different phrasing. Rephrase the prompt to avoid sensitive content.`};
+          }
         },
         generate_speech: async (args: any) => {
           const {input, instructions, msg_id, voice_gender} = args;
@@ -268,12 +283,10 @@ class RobotoClass {
 
     const media = new MessageMedia("image/png", images[0].b64_json, "image.png");
     let message;
-    if(wspMsg)
-      message = await wspMsg.reply(media);
-    else
-      message = await WspWeb.getWspClient().sendMessage(args.chatId, media);
+    if(wspMsg) message = await wspMsg.reply(media);
+    else message = await WspWeb.getWspClient().sendMessage(args.chatId, media);
 
-    this.addMessageToCache(message, args.chatId);
+    return await this.addMessageToCache(message, args.chatId);
   }
 
   private async sendAudioResponse(msg_id: string, params: {messageToSay: string, instructions?: string, responseFormat?: string, voiceGender?: string}): Promise<void> {
