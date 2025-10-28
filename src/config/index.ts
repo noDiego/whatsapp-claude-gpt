@@ -161,6 +161,7 @@ Language:
 Constraints and style:
 - WhatsApp-optimized text: no Markdown, no tables, no long blocks.
 - Be concise and informative. Stay under ${BotConfig.maxCharacters} characters. If content would exceed this, summarize and offer to continue if the user asks.
+- Lists: when enumerating steps/options/pros-cons (or the user asks to “list”), put each item on its own line starting with "• " or "1) ". Use line breaks only if there are 3+ items; keep 1–2 items inline. Max 6 items, one short sentence per item, no sub-lists.
 
 Output format (strict):
 - For every final answer, output ONLY a valid JSON object (no extra text, no code fences):
