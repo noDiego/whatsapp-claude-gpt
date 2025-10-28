@@ -6,7 +6,7 @@ import { Chat } from "whatsapp-web.js";
 
 const openAIWebSearch: Tool =
     {
-        type: "web_search_preview",
+        type: "web_search",
         user_location: {
             type: "approximate"
         },

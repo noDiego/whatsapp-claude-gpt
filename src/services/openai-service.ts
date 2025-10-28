@@ -79,6 +79,8 @@ class OpenaiService {
     logger.info(`[OpenAI] Sending ${messageList.length} messages`);
     logger.debug(`[OpenAI] Sending Msg: ${sanitizeLogImages(JSON.stringify(messageList[messageList.length - 1]))}`);
 
+    const isGpt4 = AIConfig.ChatConfig.model.toLowerCase().includes('gpt-4');
+
     const client = new OpenAI({
       baseURL: AIConfig.ChatConfig.baseURL,
       apiKey: AIConfig.ChatConfig.apiKey,
@@ -93,8 +95,8 @@ class OpenaiService {
     const responseResult = await client.responses.create({
       model: AIConfig.ChatConfig.model,
       input: messageList,
-      text: { format: { type: responseType } },
-      reasoning: { summary: null },
+      text: { format: { type: responseType }, verbosity: isGpt4? undefined : "low" },
+      reasoning: { summary: null, effort: isGpt4? undefined : 'low' },
       tools: tools,
       // max_output_tokens: 4096,
       store: true
