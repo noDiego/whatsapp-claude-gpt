@@ -274,8 +274,7 @@ class RobotoClass {
       images = await OpenAISvc.generateImage({
         prompt: args.prompt,
         imageStreams: imageStreams,
-        background: args.background as any,
-        quality: 'medium'
+        background: args.background as any
       });
     } else {
       images = await OpenaiCustomService.generateImage(args.prompt);
