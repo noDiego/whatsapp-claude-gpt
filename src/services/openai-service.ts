@@ -195,7 +195,7 @@ class OpenaiService {
       prompt: params.prompt,
       n: params.n ?? 1,
       size: params.size ?? "auto",
-      quality: params.quality ?? "medium",
+      quality: params.quality ?? "high",
       background: params.background ?? "auto",
       output_format: "jpeg",
       moderation: 'low'
