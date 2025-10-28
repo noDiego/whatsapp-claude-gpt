@@ -78,7 +78,8 @@ const generate_image_withedit = {
         description:
             `Generate or edit images. Use this function to:
     - Create NEW images from scratch (when no reference images are provided)
-    - Transform or edit existing images (when reference images are provided)`,
+    - Transform or edit existing images (when reference images are provided),
+    - Auto-reference policy: If the user’s request mentions a known person from the group by name or alias, the assistant MUST automatically map that name to its image_msg_id and include it in image_msg_ids. The user does not need to ask explicitly. If multiple people are mentioned, include all corresponding image_msg_ids in the mentioned order. If there is ambiguity, ask for clarification. Never place real names or msg_ids inside the prompt text; always refer to subjects as 'the person in the first image', 'the person in the second image', etc.`,
         parameters: {
             type: "object",
             properties: {
@@ -93,7 +94,7 @@ const generate_image_withedit = {
                 prompt: { type: "string", description: 'Description of the image to generate or changes to apply. Important: Never use real person names or msg_id in the prompt; always refer to subjects as "the person in the first image", etc.' },
                 image_msg_ids: {
                     type: ["array", "null"],
-                    description: "Array of image msg_ids to use as references. Required when: (a) the user explicitly asks to modify or edit one or more existing images in the chat; or (b) the request refers to a specific person (e.g., 'edit my friend', 'make a version of me'), in which case include the msg_id(s) of that person's photo(s) as reference. " +
+                    description: "Array of image msg_ids to use as references. Required when: (a) the user asks to modify or edit one or more existing images in the chat; or (b) the request refers to a specific person (e.g., 'edit my friend', 'make a version of me'), in which case include the msg_id(s) of that person's photo(s) as reference. " +
                         "Leave null or empty only when generating from scratch, without editing existing images, without mentioning a specific person, or if you don't have an image_id for the person mentioned.",
                     items: { type: "string" },
                     nullable: true
