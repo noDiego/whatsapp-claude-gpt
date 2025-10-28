@@ -188,14 +188,15 @@ class OpenaiService {
       apiKey: AIConfig.ImageConfig.apiKey,
     });
 
-    logger.debug(`[${AIConfig.ImageConfig.provider}->generateImage] Creating image with params: ${JSON.stringify({prompt: params.prompt, imageStreamLength: params.imageStreams? params.imageStreams.length : [] })}`);
+    logger.debug(`[${AIConfig.ImageConfig.provider}->generateImage] Creating image with params: ${JSON.stringify({prompt: params.prompt, imageStreamLength: params.imageStreams? params.imageStreams.length : [], 
+      quality: params.quality ?? AIConfig.ImageConfig.quality })}`);
 
     const baseParams: any = {
       model: AIConfig.ImageConfig.model,
       prompt: params.prompt,
       n: params.n ?? 1,
       size: params.size ?? "auto",
-      quality: params.quality ?? "high",
+      quality: params.quality ?? AIConfig.ImageConfig.quality,
       background: params.background ?? "auto",
       output_format: "jpeg",
       moderation: 'low'

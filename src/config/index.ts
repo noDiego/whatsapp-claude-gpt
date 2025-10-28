@@ -98,7 +98,8 @@ export const AIConfig = {
     baseURL: Providers[ImageConfig.provider].baseURL,
     apiKey: Providers[ImageConfig.provider].apiKey,
     enabled: ImageConfig.enabled,
-    catEditImages: Providers[ChatConfig.provider].catEditImages
+    catEditImages: Providers[ChatConfig.provider].catEditImages,
+    quality: process.env.IMAGE_QUALITY ?? 'auto'
   },
   TranscriptionConfig: {
     provider: TranscriptionConfig.provider,
