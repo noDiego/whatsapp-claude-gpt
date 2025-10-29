@@ -175,13 +175,15 @@ class OpenaiService {
   }
 
   async generateImage(params: {
-    prompt: string;
+    background?: "opaque" | "transparent" | "auto";
     imageStreams?: Array<NodeJS.ReadableStream | Blob>;
     maskStream?: NodeJS.ReadableStream | Blob;
     n?: number;
-    size?: "1024x1024" | "1536x1024" | "1024x1536" | "auto";
+    output_format?: "png" | "jpg" | "webp";
+    prompt: string;
     quality?: "low" | "medium" | "high" | "auto";
-    background?: "opaque" | "transparent" | "auto";
+    size?: "1024x1024" | "1536x1024" | "1024x1536" | "auto";
+    style?: "vivid" | "natural";
   }) {
     const client = new OpenAI({
       baseURL: AIConfig.ImageConfig.baseURL,
@@ -198,8 +200,9 @@ class OpenaiService {
       size: params.size ?? "auto",
       quality: params.quality ?? AIConfig.ImageConfig.quality,
       background: params.background ?? "auto",
-      output_format: "jpeg",
-      moderation: 'low'
+      output_format: params.output_format ?? "jpeg",
+      moderation: 'low',
+      style: params.style ?? "natural",
     };
 
     if (params.imageStreams && params.imageStreams.length > 0) {

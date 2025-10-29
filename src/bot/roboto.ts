@@ -230,7 +230,12 @@ class RobotoClass {
     msg_id: string,
     chatId: string,
     background: string,
-    image_msg_ids: string[]
+    image_msg_ids: string[],
+    output_format: "png" | "jpg" | "webp",
+    quality: "medium" | "high" | "auto",
+    send_as: "image"| "sticker",
+    size: any,
+    style: "vivid" | "natural",
   }) {
 
     const wspClient = WspWeb.getWspClient();
@@ -274,7 +279,11 @@ class RobotoClass {
       images = await OpenAISvc.generateImage({
         prompt: args.prompt,
         imageStreams: imageStreams,
-        background: args.background as any
+        background: args.background as any,
+        output_format: args.output_format,
+        quality: args.quality,
+        size: args.size,
+        style: args.style,
       });
     } else {
       images = await OpenaiCustomService.generateImage(args.prompt);
@@ -282,8 +291,8 @@ class RobotoClass {
 
     const media = new MessageMedia("image/png", images[0].b64_json, "image.png");
     let message;
-    if(wspMsg) message = await wspMsg.reply(media);
-    else message = await WspWeb.getWspClient().sendMessage(args.chatId, media);
+    if(wspMsg) message = await wspMsg.reply(media, args.chatId, {sendMediaAsSticker: args.send_as == 'sticker'});
+    else message = await WspWeb.getWspClient().sendMessage(args.chatId, media, {sendMediaAsSticker: args.send_as == 'sticker'});
 
     return await this.addMessageToCache(message, args.chatId);
   }

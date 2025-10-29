@@ -63,7 +63,18 @@ const generate_image = {
                     description: "chatId of the actual chat."
                 },
                 prompt: { type: "string", description: 'Description of the image to generate' },
-                background: { type: ["string","null"], enum: ["opaque","transparent","auto"], description: "Transparent or opaque background. OPTIONAL", nullable: true }
+                background: { type: ["string","null"], enum: ["opaque","transparent","auto"], description: "Transparent or opaque background. OPTIONAL", nullable: true },
+                output_format: { type: ["string","null"], enum: ["png","jpg","webp"], description: "Default png. OPTIONAL", nullable: true },
+                quality: { type: ["string","null"], enum: ["medium","high" ,"auto"], description: "The quality of the image that will be generated. Default \"auto\". OPTIONAL", nullable: true },
+                send_as: {
+                    type: ["string", "null"],
+                    enum: ["image", "sticker"],
+                    description: "Determines whether the generated media will be sent as an image or as a sticker. OPTIONAL. Default: \"image\".",
+                    nullable: true,
+                    default: "image"
+                },
+                size: { type: ["string","null"], enum: ["1024x1024", "1536x1024", "1024x1536", "256x256", "512x512", "1792x1024", "1024x1792", "auto"], description: "The size of the generated images. Default \"auto\". OPTIONAL", nullable: true },
+                style: { type: ["string","null"], enum: ["vivid","natural"], description: "Vivid causes the model to lean * towards generating hyper-real and dramatic images. Natural causes the model to * produce more natural, less hyper-real looking images. OPTIONAL", nullable: true },
             },
             required: ["msg_id","chatId","prompt"],
             additionalProperties: false
@@ -99,7 +110,18 @@ const generate_image_withedit = {
                     items: { type: "string" },
                     nullable: true
                 },
-                background: { type: ["string","null"], enum: ["opaque","transparent","auto"], description: "Transparent or opaque background. OPTIONAL", nullable: true }
+                background: { type: ["string","null"], enum: ["opaque","transparent","auto"], description: "Transparent or opaque background. OPTIONAL", nullable: true },
+                output_format: { type: ["string","null"], enum: ["png","jpg","webp"], description: "Default png. OPTIONAL", nullable: true },
+                quality: { type: ["string","null"], enum: ["medium","high" ,"auto"], description: "The quality of the image that will be generated. Default \"auto\". OPTIONAL", nullable: true },
+                send_as: {
+                    type: ["string", "null"],
+                    enum: ["image", "sticker"],
+                    description: "Determines whether the generated media will be sent as an image or as a sticker. OPTIONAL. Default: \"image\".",
+                    nullable: true,
+                    default: "image"
+                },
+                size: { type: ["string","null"], enum: ["1024x1024", "1536x1024", "1024x1536", "256x256", "512x512", "1792x1024", "1024x1792", "auto"], description: "The size of the generated images. Default \"auto\". OPTIONAL", nullable: true },
+                style: { type: ["string","null"], enum: ["vivid","natural"], description: "Vivid causes the model to lean * towards generating hyper-real and dramatic images. Natural causes the model to * produce more natural, less hyper-real looking images. OPTIONAL", nullable: true },
             },
             required: ["msg_id","chatId","prompt"],
             additionalProperties: false

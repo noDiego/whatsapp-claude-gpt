@@ -24,7 +24,10 @@ async function start() {
           '--no-zygote',
           '--disable-gpu'
         ],
-      }
+      },
+      takeoverTimeoutMs: 40000,
+      qrMaxRetries:5,
+      restartOnAuthFail: true
     });
 
     logger.info('Starting WhatsApp client...');
