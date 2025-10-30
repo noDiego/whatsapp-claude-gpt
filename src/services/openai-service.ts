@@ -193,7 +193,10 @@ class OpenaiService {
     logger.debug(`[${AIConfig.ImageConfig.provider}->generateImage] Creating image with params: ${JSON.stringify({prompt: params.prompt, imageStreamLength: params.imageStreams? params.imageStreams.length : [], 
       quality: params.quality ?? AIConfig.ImageConfig.quality })}`);
 
+    const isEdit = params.imageStreams && params.imageStreams.length > 0;
+
     const baseParams: any = {
+      input_fidelity: 'high',
       model: AIConfig.ImageConfig.model,
       prompt: params.prompt,
       n: params.n ?? 1,
@@ -202,10 +205,10 @@ class OpenaiService {
       background: params.background ?? "auto",
       output_format: params.output_format ?? "jpeg",
       moderation: 'low',
-      style: params.style ?? "natural",
+      style: isEdit? undefined: params.style ?? "natural",
     };
 
-    if (params.imageStreams && params.imageStreams.length > 0) {
+    if (isEdit) {
       const imageFiles = await Promise.all(
           params.imageStreams.map((stream, idx) => toFile(stream, `image_${idx}.png`, { type: "image/png" }))
       );
