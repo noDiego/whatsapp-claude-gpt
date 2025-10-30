@@ -65,17 +65,14 @@ const generate_image = {
                 prompt: { type: "string", description: 'Description of the image to generate' },
                 background: { type: ["string","null"], enum: ["opaque","transparent","auto"], description: "Transparent or opaque background. OPTIONAL", nullable: true },
                 output_format: { type: ["string","null"], enum: ["png","jpeg","webp"], description: "Default png. OPTIONAL", nullable: true },
-                quality: { type: ["string","null"], enum: ["medium","high" ,"auto"], description: "The quality of the image that will be generated. Default \"auto\". OPTIONAL", nullable: true },
                 send_as: {
                     type: ["string", "null"],
                     enum: ["image", "sticker"],
-                    description: "Determines whether the generated media will be sent as an image or as a sticker. OPTIONAL. Default: \"image\".",
-                    nullable: true,
-                    default: "image"
+                    description: "Determines whether the generated media will be sent as an image or as a sticker.",
                 },
                 size: { type: ["string","null"], enum: ["1024x1024", "1536x1024", "1024x1536", "auto"], description: "The size of the generated images. Default \"auto\". OPTIONAL", nullable: true }
             },
-            required: ["msg_id","chatId","prompt"],
+            required: ["msg_id","chatId","prompt","send_as"],
             additionalProperties: false
         }
     },
@@ -111,17 +108,14 @@ const generate_image_withedit = {
                 },
                 background: { type: ["string","null"], enum: ["opaque","transparent","auto"], description: "Transparent or opaque background. OPTIONAL", nullable: true },
                 output_format: { type: ["string","null"], enum: ["png","jpeg","webp"], description: "Default png. OPTIONAL", nullable: true },
-                quality: { type: ["string","null"], enum: ["medium","high" ,"auto"], description: "The quality of the image that will be generated. Default \"auto\". OPTIONAL", nullable: true },
                 send_as: {
                     type: ["string", "null"],
                     enum: ["image", "sticker"],
-                    description: "Determines whether the generated media will be sent as an image or as a sticker. OPTIONAL. Default: \"image\".",
-                    nullable: true,
-                    default: "image"
+                    description: "Determines whether the generated media will be sent as an image or as a sticker."
                 },
                 size: { type: ["string","null"], enum: ["1024x1024", "1536x1024", "1024x1536", "auto"], description: "The size of the generated images. Default \"auto\". OPTIONAL", nullable: true }
             },
-            required: ["msg_id","chatId","prompt"],
+            required: ["msg_id","chatId","prompt","send_as"],
             additionalProperties: false
         }
     },

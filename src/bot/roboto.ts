@@ -233,7 +233,6 @@ class RobotoClass {
     background: string,
     image_msg_ids: string[],
     output_format: "png" | "jpg" | "webp",
-    quality: "medium" | "high" | "auto",
     send_as: "image"| "sticker",
     size: any
   }) {
@@ -281,7 +280,7 @@ class RobotoClass {
         imageStreams: imageStreams,
         background: args.background as any,
         output_format: args.output_format,
-        quality: args.quality,
+        quality: 'auto',
         size: args.size
       });
     } else {
@@ -292,7 +291,8 @@ class RobotoClass {
     let message;
     // if(wspMsg) message = await wspMsg.reply(media, args.chatId, {sendMediaAsSticker: args.send_as == 'sticker'});
     // else message = await WspWeb.getWspClient().sendMessage(args.chatId, media, {sendMediaAsSticker: args.send_as == 'sticker'});
-    message = await WspWeb.getWspClient().sendMessage(args.chatId, media, {sendMediaAsSticker: args.send_as == 'sticker'});
+    const isSticker = args.send_as == 'sticker' || wspMsg?.body.toLowerCase().includes('sticker');
+    message = await WspWeb.getWspClient().sendMessage(args.chatId, media, {sendMediaAsSticker: isSticker});
 
     return await this.addMessageToCache(message, args.chatId);
   }
