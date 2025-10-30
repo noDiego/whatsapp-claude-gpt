@@ -77,17 +77,18 @@ class RobotoClass {
 
   }
 
-  public async sendMessageToAi(aiMessages: AiMessage[], systemPrompt, chatId){
+  public async sendMessageToAi(aiMessages: AiMessage[], systemPrompt, chatId, withTools = true){
     const messagesList = convertIaMessagesLang(aiMessages) as any;
     const chat = await wspWeb.getWspClient().getChatById(chatId);
+    const tools = withTools ? getTools(chat) : undefined;
 
     switch (AIConfig.ChatConfig.provider){
       case AIProvider.OPENAI:
-        return await OpenAISvc.sendMessage(messagesList, systemPrompt, chatId, getTools(chat));
+        return await OpenAISvc.sendMessage(messagesList, systemPrompt, chatId, tools);
       case AIProvider.CLAUDE:
-        return await AnthropicSvc.sendMessage(messagesList, systemPrompt, chatId, getTools(chat));
+        return await AnthropicSvc.sendMessage(messagesList, systemPrompt, chatId, tools);
       default:
-        return await CustomOpenAISvc.sendMessage(messagesList, systemPrompt, chatId, getTools(chat));
+        return await CustomOpenAISvc.sendMessage(messagesList, systemPrompt, chatId, tools);
     }
   }
 
