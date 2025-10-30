@@ -193,6 +193,8 @@ class OpenaiService {
       quality: params.quality ?? AIConfig.ImageConfig.quality })}`);
 
     const isEdit = params.imageStreams && params.imageStreams.length > 0;
+    const quality = params.quality ?? AIConfig.ImageConfig.quality;
+    const isMini = AIConfig.ImageConfig.model.includes("mini");
 
     const baseParams: any = {
       input_fidelity: isEdit? 'high': undefined,
@@ -200,7 +202,7 @@ class OpenaiService {
       prompt: params.prompt,
       n: params.n ?? 1,
       size: params.size ?? "auto",
-      quality: params.quality ?? AIConfig.ImageConfig.quality,
+      quality: quality == 'high' && isMini? 'auto': quality,
       background: params.background ?? "auto",
       output_format: params.output_format ?? "jpeg",
       moderation: 'low'
