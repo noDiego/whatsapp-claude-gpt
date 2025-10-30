@@ -73,8 +73,7 @@ const generate_image = {
                     nullable: true,
                     default: "image"
                 },
-                size: { type: ["string","null"], enum: ["1024x1024", "1536x1024", "1024x1536", "auto"], description: "The size of the generated images. Default \"auto\". OPTIONAL", nullable: true },
-                style: { type: ["string","null"], enum: ["vivid","natural"], description: "Vivid causes the model to lean * towards generating hyper-real and dramatic images. Natural causes the model to * produce more natural, less hyper-real looking images. OPTIONAL", nullable: true },
+                size: { type: ["string","null"], enum: ["1024x1024", "1536x1024", "1024x1536", "auto"], description: "The size of the generated images. Default \"auto\". OPTIONAL", nullable: true }
             },
             required: ["msg_id","chatId","prompt"],
             additionalProperties: false

@@ -234,8 +234,7 @@ class RobotoClass {
     output_format: "png" | "jpg" | "webp",
     quality: "medium" | "high" | "auto",
     send_as: "image"| "sticker",
-    size: any,
-    style: "vivid" | "natural",
+    size: any
   }) {
 
     const wspClient = WspWeb.getWspClient();
@@ -282,8 +281,7 @@ class RobotoClass {
         background: args.background as any,
         output_format: args.output_format,
         quality: args.quality,
-        size: args.size,
-        style: args.style,
+        size: args.size
       });
     } else {
       images = await OpenaiCustomService.generateImage(args.prompt);

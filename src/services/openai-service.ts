@@ -183,7 +183,6 @@ class OpenaiService {
     prompt: string;
     quality?: "low" | "medium" | "high" | "auto";
     size?: "1024x1024" | "1536x1024" | "1024x1536" | "auto";
-    style?: "vivid" | "natural";
   }) {
     const client = new OpenAI({
       baseURL: AIConfig.ImageConfig.baseURL,
@@ -204,8 +203,7 @@ class OpenaiService {
       quality: params.quality ?? AIConfig.ImageConfig.quality,
       background: params.background ?? "auto",
       output_format: params.output_format ?? "jpeg",
-      moderation: 'low',
-      style: isEdit? undefined: params.style ?? "natural",
+      moderation: 'low'
     };
 
     if (isEdit) {
