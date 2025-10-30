@@ -291,8 +291,9 @@ class RobotoClass {
 
     const media = new MessageMedia("image/png", images[0].b64_json, "image.png");
     let message;
-    if(wspMsg) message = await wspMsg.reply(media, args.chatId, {sendMediaAsSticker: args.send_as == 'sticker'});
-    else message = await WspWeb.getWspClient().sendMessage(args.chatId, media, {sendMediaAsSticker: args.send_as == 'sticker'});
+    // if(wspMsg) message = await wspMsg.reply(media, args.chatId, {sendMediaAsSticker: args.send_as == 'sticker'});
+    // else message = await WspWeb.getWspClient().sendMessage(args.chatId, media, {sendMediaAsSticker: args.send_as == 'sticker'});
+    message = await WspWeb.getWspClient().sendMessage(args.chatId, media, {sendMediaAsSticker: args.send_as == 'sticker'});
 
     return await this.addMessageToCache(message, args.chatId);
   }
