@@ -196,7 +196,7 @@ class OpenaiService {
     const isEdit = params.imageStreams && params.imageStreams.length > 0;
 
     const baseParams: any = {
-      input_fidelity: 'high',
+      input_fidelity: isEdit? 'high': undefined,
       model: AIConfig.ImageConfig.model,
       prompt: params.prompt,
       n: params.n ?? 1,
