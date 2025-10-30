@@ -197,7 +197,7 @@ class OpenaiService {
     const isMini = AIConfig.ImageConfig.model.includes("mini");
 
     const baseParams: any = {
-      input_fidelity: isEdit? 'high': undefined,
+      input_fidelity: isEdit && !isMini? 'high': undefined,
       model: AIConfig.ImageConfig.model,
       prompt: params.prompt,
       n: params.n ?? 1,
