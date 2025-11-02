@@ -7,6 +7,7 @@ import { sanitizeLogImages, trimCachePreserveMessageStart } from "../utils";
 import { AIRole } from "../interfaces/ai-interfaces";
 import NodeCache from "node-cache";
 import Roboto from "../bot/roboto";
+import { ChatConfiguration } from "../config/chat-configurations";
 
 class OpenaiService {
 
@@ -22,19 +23,17 @@ class OpenaiService {
   public addMessageToCache(item: ResponseInputItem, chatId: string){
     const openAiMessages: ResponseInput = this.messagesCache.get(chatId) || [];
     openAiMessages.push(item);
-
-    const max = CONFIG.BotConfig.maxMsgsLimit ?? 50;
-    const sanitized = openAiMessages.length + 20 > max ? trimCachePreserveMessageStart(openAiMessages, max): openAiMessages;
-    this.messagesCache.set(chatId, sanitized, CONFIG.BotConfig.nodeCacheTime);
+    this.messagesCache.set(chatId, openAiMessages, CONFIG.BotConfig.nodeCacheTime);
   }
 
   public hasChatCache(chatId: string): boolean {
       return this.messagesCache.has(chatId);
   }
 
-  public async sendMessage(openAiMessageInputList: ResponseInputItem[], systemPrompt: string, chatId: string, tools: Tool[]): Promise<string> {
+  public async sendMessage(openAiMessageInputList: ResponseInputItem[], systemPrompt: string, chatConfig: ChatConfiguration, tools: Tool[]): Promise<string> {
     let cycleCount = 0;
     const maxCycles = 6;
+    const chatId = chatConfig.chatId;
 
     const openAiMessages: ResponseInput = this.messagesCache.get(chatId) || [];
     openAiMessages.push(...openAiMessageInputList)
@@ -65,7 +64,11 @@ class OpenaiService {
       cycleCount += 1;
 
       if (!hasFunctionCall) {
-        this.messagesCache.set(chatId, openAiMessages, CONFIG.BotConfig.nodeCacheTime);
+
+        const max = chatConfig.maxMsgsLimit ?? 30;
+        const sanitized = openAiMessages.length > max + 10 ? trimCachePreserveMessageStart(openAiMessages, max): openAiMessages;
+
+        this.messagesCache.set(chatId, sanitized, CONFIG.BotConfig.nodeCacheTime);
         return aiResponse.output_text;
       }
     }

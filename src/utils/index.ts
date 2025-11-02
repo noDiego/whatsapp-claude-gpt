@@ -2,7 +2,7 @@ import logger from '../logger';
 import { Chat, Message } from 'whatsapp-web.js';
 import { Readable } from 'stream';
 import { AIConfig, CONFIG } from '../config';
-import { AIAnswer } from "../interfaces/ai-interfaces";
+import { AIAnswer, AIRole } from "../interfaces/ai-interfaces";
 
 export function getFormattedDate(date?: Date) {
   const now = date || new Date();
@@ -520,17 +520,18 @@ export function trimCachePreserveMessageStart(messages: any[], maxItems: number)
   if (messages.length > maxItems) {
     messages.splice(0, messages.length - maxItems);
   }
-  const isValidStart = (el: any) => {
-    if (!el) return false;
-    if (el.role) return true;
-    if (el.type && el.type === 'message') return true;
-    if (el.type && (el.type === 'input_text' || el.type === 'output_text')) return true;
-    return false;
-  };
 
-  // eliminar encabezados inválidos hasta que el primero sea válido
-  while (messages.length > 0 && !isValidStart(messages[0])) {
+  while (messages.length > 0 && messages[0].role != AIRole.USER) {
     messages.shift();
   }
   return messages;
+}
+
+export function cleanChatCompletionMessage(aiResponse: any){
+  for (let key in aiResponse) {
+    if (aiResponse[key] === null || (Array.isArray(aiResponse[key]) && aiResponse[key].length === 0)) {
+      delete aiResponse[key];
+    }
+  }
+  return aiResponse;
 }

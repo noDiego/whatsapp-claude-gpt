@@ -6,6 +6,7 @@ import Roboto from "../bot/roboto";
 import NodeCache from "node-cache";
 import { AIRole } from "../interfaces/ai-interfaces";
 import { trimCachePreserveMessageStart } from "../utils";
+import { ChatConfiguration } from "../config/chat-configurations";
 
 class AnthropicService {
 
@@ -25,18 +26,16 @@ class AnthropicService {
   public addMessageToCache(item: MessageParam, chatId: string){
     const aiMessages: any[] = this.messagesCache.get(chatId) || [];
     aiMessages.push(item);
-
-    const max = CONFIG.BotConfig.maxMsgsLimit ?? 50;
-    const sanitized = aiMessages.length + 20 > max ? trimCachePreserveMessageStart(aiMessages, max): aiMessages;
-    this.messagesCache.set(chatId, sanitized, CONFIG.BotConfig.nodeCacheTime);
+    this.messagesCache.set(chatId, aiMessages, CONFIG.BotConfig.nodeCacheTime);
   }
   public hasChatCache(chatId: string): boolean {
     return this.messagesCache.has(chatId);
   }
 
-  public async sendMessage(aiMessagesInputList: MessageParam[], systemPrompt: string, chatId: string, tools: any): Promise<string> {
+  public async sendMessage(aiMessagesInputList: MessageParam[], systemPrompt: string, chatConfig: ChatConfiguration, tools: any): Promise<string> {
     let cycleCount = 0;
     const maxCycles = 5;
+    const chatId = chatConfig.chatId;
 
     const aiMessages: any[]  = this.messagesCache.get(chatId) || [];
     aiMessages.push(...aiMessagesInputList)
@@ -76,7 +75,11 @@ class AnthropicService {
       cycleCount += 1;
 
       if (!hasFunctionCall) {
-        this.messagesCache.set(chatId, aiMessages, CONFIG.BotConfig.nodeCacheTime);
+
+        const max = chatConfig.maxMsgsLimit ?? 30;
+        const sanitized = aiMessages.length > max + 10 ? trimCachePreserveMessageStart(aiMessages, max): aiMessages;
+
+        this.messagesCache.set(chatId, sanitized, CONFIG.BotConfig.nodeCacheTime);
         const content = aiResponse.content[0];
         return (content as TextBlock)?.text || "";
       }

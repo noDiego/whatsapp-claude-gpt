@@ -5,7 +5,7 @@ import WspWeb from "./wsp-web";
 import OpenAISvc from "../services/openai-service";
 import logger from "../logger";
 import { bufferToStream, extractAnswer, getAuthorId, includeName, parseCommand, parseIfJson, sleep } from "../utils";
-import { chatConfigurationManager } from "../config/chat-configurations";
+import { ChatConfiguration, chatConfigurationManager } from "../config/chat-configurations";
 import { getTools } from "../config/functions";
 import { convertIaMessagesLang } from "./message-conversion";
 import CustomOpenAISvc from "../services/openai-custom-service";
@@ -53,7 +53,7 @@ class RobotoClass {
       const systemPrompt = CONFIG.getSystemPrompt(chatConfig, memoriesContext);
 
       const aiMessages: AiMessage[] = await WspWeb.generateMessageArray(wspMessage, chatData, chatConfig, this.hasChatCache(chatId));
-      const aiResponse = await this.sendMessageToAi(aiMessages, systemPrompt, chatId);
+      const aiResponse = await this.sendMessageToAi(aiMessages, systemPrompt, chatConfig);
 
       let chatResponse: AIAnswer = extractAnswer(aiResponse, botName);
       if (!chatResponse || !chatResponse.message) return false;
@@ -77,18 +77,18 @@ class RobotoClass {
 
   }
 
-  public async sendMessageToAi(aiMessages: AiMessage[], systemPrompt, chatId, withTools = true){
+  public async sendMessageToAi(aiMessages: AiMessage[], systemPrompt, chatConfig: ChatConfiguration, withTools = true){
     const messagesList = convertIaMessagesLang(aiMessages) as any;
-    const chat = await wspWeb.getWspClient().getChatById(chatId);
+    const chat = await wspWeb.getWspClient().getChatById(chatConfig.chatId);
     const tools = withTools ? getTools(chat) : undefined;
 
     switch (AIConfig.ChatConfig.provider){
       case AIProvider.OPENAI:
-        return await OpenAISvc.sendMessage(messagesList, systemPrompt, chatId, tools);
+        return await OpenAISvc.sendMessage(messagesList, systemPrompt, chatConfig, tools);
       case AIProvider.CLAUDE:
-        return await AnthropicSvc.sendMessage(messagesList, systemPrompt, chatId, tools);
+        return await AnthropicSvc.sendMessage(messagesList, systemPrompt, chatConfig, tools);
       default:
-        return await CustomOpenAISvc.sendMessage(messagesList, systemPrompt, chatId, tools);
+        return await CustomOpenAISvc.sendMessage(messagesList, systemPrompt, chatConfig, tools);
     }
   }
 

@@ -91,7 +91,7 @@ class ReminderManager {
                 author_id: 'SYSTEM'
             }]
         };
-        const aiResponse = await Roboto.sendMessageToAi([aiMessage], systemPrompt, reminder.chatId, false);
+        const aiResponse = await Roboto.sendMessageToAi([aiMessage], systemPrompt, chatConfig, false);
         const reminderMsg = extractAnswer(aiResponse, chatConfig.botName);
         if (!reminderMsg || !reminderMsg.message) return false;
         return WspWeb.getWspClient().sendMessage(reminder.chatId, reminderMsg.message);

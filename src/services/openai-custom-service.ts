@@ -6,8 +6,9 @@ import { ChatCompletion } from 'openai/src/resources/chat/completions';
 import { Tool } from "openai/resources/responses/responses";
 import NodeCache from "node-cache";
 import { AIRole } from "../interfaces/ai-interfaces";
-import { sanitizeLogImages, trimCachePreserveMessageStart } from "../utils";
+import { cleanChatCompletionMessage, sanitizeLogImages, trimCachePreserveMessageStart } from "../utils";
 import Roboto from "../bot/roboto";
+import { ChatConfiguration } from "../config/chat-configurations";
 
 class CustomOpenAIService {
 
@@ -23,19 +24,17 @@ class CustomOpenAIService {
   public addMessageToCache(item: ChatCompletionMessageParam, chatId: string){
     const aiMessages: ChatCompletionMessageParam[] = this.messagesCache.get(chatId) || [];
     aiMessages.push(item);
-
-    const max = CONFIG.BotConfig.maxMsgsLimit ?? 50;
-    const sanitized = aiMessages.length + 20 > max ? trimCachePreserveMessageStart(aiMessages, max): aiMessages;
-    this.messagesCache.set(chatId, sanitized, CONFIG.BotConfig.nodeCacheTime);
+    this.messagesCache.set(chatId, aiMessages, CONFIG.BotConfig.nodeCacheTime);
   }
 
   public hasChatCache(chatId: string): boolean {
     return this.messagesCache.has(chatId);
   }
 
-  public async sendMessage(aiMessagesInputList: ChatCompletionMessageParam[], systemPrompt: string, chatId: string, tools: any): Promise<string> {
+  public async sendMessage(aiMessagesInputList: ChatCompletionMessageParam[], systemPrompt: string, chatConfig: ChatConfiguration, tools: any): Promise<string> {
     let cycleCount = 0;
     const maxCycles = 5;
+    const chatId = chatConfig.chatId;
 
     const aiMessages: any[]  = this.messagesCache.get(chatId) || [];
     aiMessages.push(...aiMessagesInputList)
@@ -50,7 +49,7 @@ class CustomOpenAIService {
       for (const output of tool_calls) {
 
         if (output.type == 'function') {
-          aiMessages.push(aiResponse);
+          aiMessages.push(cleanChatCompletionMessage(aiResponse));
 
           hasFunctionCall = true;
           const functionResult = await Roboto.handleFunction(output.function.name, output.function.arguments);
@@ -67,8 +66,12 @@ class CustomOpenAIService {
       cycleCount += 1;
 
       if (!hasFunctionCall) {
-        aiMessages.push(aiResponse);
-        this.messagesCache.set(chatId, aiMessages, CONFIG.BotConfig.nodeCacheTime);
+        aiMessages.push(cleanChatCompletionMessage(aiResponse));
+
+        const max = chatConfig.maxMsgsLimit ?? 30;
+        const sanitized = aiMessages.length > max + 10 ? trimCachePreserveMessageStart(aiMessages, max): aiMessages;
+
+        this.messagesCache.set(chatId, sanitized, CONFIG.BotConfig.nodeCacheTime);
         return aiResponse.content;
       }
     }
