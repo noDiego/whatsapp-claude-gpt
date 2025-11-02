@@ -3,7 +3,7 @@ import { OpenAI, toFile } from 'openai';
 import { AIConfig, CONFIG } from '../config';
 import { ResponseInput, ResponseInputItem, Tool } from "openai/resources/responses/responses";
 
-import { sanitizeLogImages } from "../utils";
+import { sanitizeLogImages, trimCachePreserveMessageStart } from "../utils";
 import { AIRole } from "../interfaces/ai-interfaces";
 import NodeCache from "node-cache";
 import Roboto from "../bot/roboto";
@@ -22,7 +22,10 @@ class OpenaiService {
   public addMessageToCache(item: ResponseInputItem, chatId: string){
     const openAiMessages: ResponseInput = this.messagesCache.get(chatId) || [];
     openAiMessages.push(item);
-    this.messagesCache.set(chatId, openAiMessages, CONFIG.BotConfig.nodeCacheTime);
+
+    const max = CONFIG.BotConfig.maxMsgsLimit ?? 50;
+    const sanitized = openAiMessages.length + 20 > max ? trimCachePreserveMessageStart(openAiMessages, max): openAiMessages;
+    this.messagesCache.set(chatId, sanitized, CONFIG.BotConfig.nodeCacheTime);
   }
 
   public hasChatCache(chatId: string): boolean {

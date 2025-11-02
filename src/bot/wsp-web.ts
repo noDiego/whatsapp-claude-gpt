@@ -92,6 +92,7 @@ class WspWeb {
     const botName = inputBotName ?? (await chatConfigurationManager.getChatConfig(chat.id._serialized, chat.name)).botName;
 
     const isImage = wspMsg.type === MessageTypes.IMAGE || wspMsg.type === MessageTypes.STICKER;
+    const isSticker = wspMsg.type === MessageTypes.STICKER;
     const isAudio = wspMsg.type === MessageTypes.VOICE || wspMsg.type === MessageTypes.AUDIO;
     const isDocument = wspMsg.type === MessageTypes.DOCUMENT;
 
@@ -113,6 +114,7 @@ class WspWeb {
           value: mediaData.data,
           mimetype: mediaData.mimetype,
           msg_id: wspMsg.id._serialized,
+          filename: isSticker? 'sticker':'image',
           author_id,
           dateString: getFormattedDate(msgDate)
         });

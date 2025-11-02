@@ -5,6 +5,7 @@ import { MessageParam, TextBlock } from '@anthropic-ai/sdk/resources';
 import Roboto from "../bot/roboto";
 import NodeCache from "node-cache";
 import { AIRole } from "../interfaces/ai-interfaces";
+import { trimCachePreserveMessageStart } from "../utils";
 
 class AnthropicService {
 
@@ -24,7 +25,10 @@ class AnthropicService {
   public addMessageToCache(item: MessageParam, chatId: string){
     const aiMessages: any[] = this.messagesCache.get(chatId) || [];
     aiMessages.push(item);
-    this.messagesCache.set(chatId, aiMessages, CONFIG.BotConfig.nodeCacheTime);
+
+    const max = CONFIG.BotConfig.maxMsgsLimit ?? 50;
+    const sanitized = aiMessages.length + 20 > max ? trimCachePreserveMessageStart(aiMessages, max): aiMessages;
+    this.messagesCache.set(chatId, sanitized, CONFIG.BotConfig.nodeCacheTime);
   }
   public hasChatCache(chatId: string): boolean {
     return this.messagesCache.has(chatId);

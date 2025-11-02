@@ -514,3 +514,23 @@ export function convertCompletionsToolsToResponses(tools) {
 export function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
+
+export function trimCachePreserveMessageStart(messages: any[], maxItems: number): any[] {
+  if (!Array.isArray(messages)) return messages;
+  if (messages.length > maxItems) {
+    messages.splice(0, messages.length - maxItems);
+  }
+  const isValidStart = (el: any) => {
+    if (!el) return false;
+    if (el.role) return true;
+    if (el.type && el.type === 'message') return true;
+    if (el.type && (el.type === 'input_text' || el.type === 'output_text')) return true;
+    return false;
+  };
+
+  // eliminar encabezados inválidos hasta que el primero sea válido
+  while (messages.length > 0 && !isValidStart(messages[0])) {
+    messages.shift();
+  }
+  return messages;
+}

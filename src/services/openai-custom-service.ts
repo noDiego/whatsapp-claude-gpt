@@ -6,7 +6,7 @@ import { ChatCompletion } from 'openai/src/resources/chat/completions';
 import { Tool } from "openai/resources/responses/responses";
 import NodeCache from "node-cache";
 import { AIRole } from "../interfaces/ai-interfaces";
-import { sanitizeLogImages } from "../utils";
+import { sanitizeLogImages, trimCachePreserveMessageStart } from "../utils";
 import Roboto from "../bot/roboto";
 
 class CustomOpenAIService {
@@ -23,7 +23,10 @@ class CustomOpenAIService {
   public addMessageToCache(item: ChatCompletionMessageParam, chatId: string){
     const aiMessages: ChatCompletionMessageParam[] = this.messagesCache.get(chatId) || [];
     aiMessages.push(item);
-    this.messagesCache.set(chatId, aiMessages, CONFIG.BotConfig.nodeCacheTime);
+
+    const max = CONFIG.BotConfig.maxMsgsLimit ?? 50;
+    const sanitized = aiMessages.length + 20 > max ? trimCachePreserveMessageStart(aiMessages, max): aiMessages;
+    this.messagesCache.set(chatId, sanitized, CONFIG.BotConfig.nodeCacheTime);
   }
 
   public hasChatCache(chatId: string): boolean {
