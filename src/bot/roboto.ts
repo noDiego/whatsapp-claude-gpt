@@ -4,7 +4,16 @@ import { AIConfig, CONFIG } from "../config";
 import WspWeb from "./wsp-web";
 import OpenAISvc from "../services/openai-service";
 import logger from "../logger";
-import { bufferToStream, extractAnswer, getAuthorId, includeName, parseCommand, parseIfJson, sleep } from "../utils";
+import {
+  bufferToStream,
+  extractAnswer,
+  getAuthorId,
+  handleOpenAIError,
+  includeName,
+  parseCommand,
+  parseIfJson,
+  sleep
+} from "../utils";
 import { ChatConfiguration, chatConfigurationManager } from "../config/chat-configurations";
 import { getTools } from "../config/functions";
 import { convertIaMessagesLang } from "./message-conversion";
@@ -107,7 +116,7 @@ class RobotoClass {
             this.chatImageRetry.set(args.chatId, 0);
             return { success: true, result: 'The image has been generated and sent to the chat.'};
           } catch (e){
-            logger.error(`[${e.code}]: ${e.message}`);
+            handleOpenAIError(e);
             if (imageRetryCount >= 3 || e.code == '400' || !e.message.toLowerCase().includes('safety system')) {
               this.chatImageRetry.set(args.chatId, 0);
               return {success: false, result: `Error generating image: ${e.message}.`};

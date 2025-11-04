@@ -542,3 +542,59 @@ export function countMessages(aiMessageList: any): number {
   if(!aiMessageList || aiMessageList.length === 0) return 0;
   return aiMessageList.filter((i: any) => i.role === AIRole.USER || i.role === AIRole.SYSTEM || i.role === AIRole.ASSISTANT).length;
 }
+
+/**
+ * Maneja e imprime errores de OpenAI (o genéricos) de forma segura y detallada.
+ * @param {any} e - El error capturado (por ejemplo, en un catch).
+ * @param {object} logger - Un logger compatible (por ejemplo, console o winston).
+ */
+export function handleOpenAIError(e) {
+  try {
+    logger.error('--- OpenAI Error Log ---');
+
+    // 1️⃣ Tipo y mensaje base
+    logger.error(`Name: ${e.name || 'UnknownError'}`);
+    logger.error(`Message: ${e.message || 'No message provided'}`);
+
+    // 2️⃣ Código o estado HTTP
+    if (e.code || e.status) {
+      logger.error(`Code/Status: ${e.code || e.status}`);
+    }
+
+    // 3️⃣ Stack trace (si existe)
+    if (e.stack) {
+      logger.error('Stack trace:');
+      logger.error(e.stack);
+    }
+
+    // 4️⃣ Si viene del SDK de OpenAI y tiene respuesta HTTP
+    if (e.response) {
+      logger.error('--- Response details ---');
+      if (e.response.status) logger.error(`HTTP Status: ${e.response.status}`);
+      if (e.response.headers) {
+        logger.error(`Headers: ${JSON.stringify(e.response.headers, null, 2)}`);
+      }
+      if (e.response.data) {
+        logger.error(`Data: ${JSON.stringify(e.response.data, null, 2)}`);
+      }
+    }
+
+    // 5️⃣ Si tiene error interno anidado (por ejemplo e.error)
+    if (e.error) {
+      logger.error('--- Nested error object ---');
+      logger.error(JSON.stringify(e.error, null, 2));
+    }
+
+    // 6️⃣ Si nada de lo anterior aplica, logueá el objeto completo
+    if (!e.name && !e.message && !e.response) {
+      logger.error('Raw error object:');
+      logger.error(JSON.stringify(e, null, 2));
+    }
+
+    logger.error('--- OpenAI Error Handler End ---');
+  } catch (innerErr) {
+    // fallback si incluso el manejo falla
+    logger.error('Error while logging the original error:');
+    logger.error(innerErr);
+  }
+}
