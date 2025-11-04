@@ -5,7 +5,7 @@ import WspWeb from "./wsp-web";
 import OpenAISvc from "../services/openai-service";
 import logger from "../logger";
 import { bufferToStream, extractAnswer, getAuthorId, includeName, parseCommand, parseIfJson, sleep } from "../utils";
-import { chatConfigurationManager } from "../config/chat-configurations";
+import { ChatConfiguration, chatConfigurationManager } from "../config/chat-configurations";
 import { getTools } from "../config/functions";
 import { convertIaMessagesLang } from "./message-conversion";
 import CustomOpenAISvc from "../services/openai-custom-service";
@@ -20,6 +20,7 @@ class RobotoClass {
 
   private busyChats = new Set<string>();
   private botEnabled = true;
+  private chatImageRetry = new Map();
 
   constructor() {
   }
@@ -50,7 +51,7 @@ class RobotoClass {
       const systemPrompt = CONFIG.getSystemPrompt(chatConfig, memoriesContext);
 
       const aiMessages: AiMessage[] = await WspWeb.generateMessageArray(wspMessage, chatData, chatConfig, this.hasChatCache(chatId));
-      const aiResponse = await this.sendMessageToAi(aiMessages, systemPrompt, chatId);
+      const aiResponse = await this.sendMessageToAi(aiMessages, systemPrompt, chatConfig);
 
       let chatResponse: AIAnswer = extractAnswer(aiResponse, botName);
       if (!chatResponse || !chatResponse.message) return false;
@@ -74,17 +75,17 @@ class RobotoClass {
 
   }
 
-  public async sendMessageToAi(aiMessages: AiMessage[], systemPrompt, chatId){
+  public async sendMessageToAi(aiMessages: AiMessage[], systemPrompt, chatConfig: ChatConfiguration){
     const messagesList = convertIaMessagesLang(aiMessages) as any;
-    const chat = await wspWeb.getWspClient().getChatById(chatId);
+    const chat = await wspWeb.getWspClient().getChatById(chatConfig.chatId);
 
     switch (AIConfig.ChatConfig.provider){
       case AIProvider.OPENAI:
-        return await OpenAISvc.sendMessage(messagesList, systemPrompt, chatId, getTools(chat));
+        return await OpenAISvc.sendMessage(messagesList, systemPrompt, chatConfig, getTools(chat));
       case AIProvider.CLAUDE:
-        return await AnthropicSvc.sendMessage(messagesList, systemPrompt, chatId, getTools(chat));
+        return await AnthropicSvc.sendMessage(messagesList, systemPrompt, chatConfig, getTools(chat));
       default:
-        return await CustomOpenAISvc.sendMessage(messagesList, systemPrompt, chatId, getTools(chat));
+        return await CustomOpenAISvc.sendMessage(messagesList, systemPrompt, chatConfig, getTools(chat));
     }
   }
 
@@ -97,8 +98,22 @@ class RobotoClass {
       const handlers: Record<string, (args: any) => Promise<OperationResult>> = {
 
         generate_image: async (args: any) => {
-          this.createImage(args);
-          return {success: true, result: 'The image is being generated. It may take a few seconds'};
+          const imageRetryCount = this.chatImageRetry.get(args.chatId);
+          try {
+            await this.createImage(args);
+            this.chatImageRetry.set(args.chatId, 0);
+            return { success: true, result: 'The image has been generated and sent to the chat.'};
+          } catch (e){
+            logger.error(`[${e.code}]: ${e.message}`);
+            if (imageRetryCount >= 3 || e.code == '400' || !e.message.toLowerCase().includes('safety system')) {
+              this.chatImageRetry.set(args.chatId, 0);
+              return {success: false, result: `Error generating image: ${e.message}.`};
+            }
+            this.chatImageRetry.set(args.chatId, imageRetryCount ? imageRetryCount + 1 : 1);
+            const match = e.message.match(/safety_violations=\[([^\]]*)\]/);
+            const safety_violations = match ? match[1] : null;
+            return { success: false, result: `Safety filters blocked the request (safety_violations:${safety_violations}). Please call generate_image again with a different phrasing. Rephrase the prompt to avoid sensitive content.`};
+          }
         },
         generate_speech: async (args: any) => {
           const {input, instructions, msg_id, voice_gender} = args;
@@ -127,6 +142,8 @@ class RobotoClass {
   private async shouldProcessMessage(wspMessage: Message, chatData: Chat, botName: string){
 
     if(!this.botEnabled) return false;
+
+    if(wspMessage.fromMe) return false;
 
     const contactData = await wspMessage.getContact();
 
@@ -213,7 +230,11 @@ class RobotoClass {
     msg_id: string,
     chatId: string,
     background: string,
-    image_msg_ids: string[]
+    output_format: "png" | "jpg" | "webp",
+    send_as: "image"| "sticker",
+    size: any,
+    image_msg_ids: string[],
+    quality: 'low'|'medium' | 'high'| 'auto',
   }) {
 
     const wspClient = WspWeb.getWspClient();
@@ -240,14 +261,18 @@ class RobotoClass {
         prompt: args.prompt,
         imageStreams: imageStreams,
         background: args.background as any,
-        quality: 'medium'
+        output_format: args.output_format,
+        quality: args.quality ?? 'auto'
       });
     } else {
       images = await OpenaiCustomService.generateImage(args.prompt);
     }
 
-    const media = new MessageMedia("image/png", images[0].b64_json, "image.png");
-    const message = await wspMsg.reply(media);
+    let message;
+    const media = new MessageMedia(`image/${args.output_format=='jpg'?'jpeg':args.output_format}`, images[0].b64_json, `image.${args.output_format}`);
+    const isSticker = args.send_as == 'sticker'
+
+    message = await WspWeb.getWspClient().sendMessage(args.chatId, media, {sendMediaAsSticker: isSticker});
 
     this.addMessageToCache(message, args.chatId);
   }

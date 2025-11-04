@@ -3,10 +3,11 @@ import { OpenAI, toFile } from 'openai';
 import { AIConfig, CONFIG } from '../config';
 import { ResponseInput, ResponseInputItem, Tool } from "openai/resources/responses/responses";
 
-import { sanitizeLogImages } from "../utils";
+import { countMessages, sanitizeLogImages, trimCachePreserveMessageStart } from "../utils";
 import { AIRole } from "../interfaces/ai-interfaces";
 import NodeCache from "node-cache";
 import Roboto from "../bot/roboto";
+import { ChatConfiguration } from "../config/chat-configurations";
 
 class OpenaiService {
 
@@ -29,21 +30,22 @@ class OpenaiService {
       return this.messagesCache.has(chatId);
   }
 
-  public async sendMessage(openAiMessageInputList: ResponseInputItem[], systemPrompt: string, chatId: string, tools: Tool[]): Promise<string> {
+  public async sendMessage(aiMessageInputList: ResponseInputItem[], systemPrompt: string, chatConfig: ChatConfiguration, tools: Tool[]): Promise<string> {
     let cycleCount = 0;
     const maxCycles = 6;
+    const chatId = chatConfig.chatId;
 
-    const openAiMessages: ResponseInput = this.messagesCache.get(chatId) || [];
-    openAiMessages.push(...openAiMessageInputList)
+    const aiMessages: ResponseInput = this.messagesCache.get(chatId) || [];
+    aiMessages.push(...aiMessageInputList)
 
     while (cycleCount < maxCycles) {
-      const aiResponse = await this.sendToResponsesAPI(openAiMessages, 'text', tools, systemPrompt);
+      const aiResponse = await this.sendToResponsesAPI(aiMessages, 'text', tools, systemPrompt);
 
       let hasFunctionCall = false;
       const functionOutputs= [];
 
       for (const output of aiResponse.output) {
-        openAiMessages.push(output);
+        aiMessages.push(output);
         if (output.type === 'function_call') {
           hasFunctionCall = true;
           const functionResult = await Roboto.handleFunction(output.name, output.arguments);
@@ -57,12 +59,13 @@ class OpenaiService {
         }
       }
 
-      openAiMessages.push(...functionOutputs);
+      aiMessages.push(...functionOutputs);
 
       cycleCount += 1;
 
       if (!hasFunctionCall) {
-        this.messagesCache.set(chatId, openAiMessages, CONFIG.BotConfig.nodeCacheTime);
+        const finalMsgList = trimCachePreserveMessageStart(aiMessages, chatConfig.maxMsgsLimit ?? 30);
+        this.messagesCache.set(chatId, finalMsgList, CONFIG.BotConfig.nodeCacheTime);
         return aiResponse.output_text;
       }
     }
@@ -76,13 +79,15 @@ class OpenaiService {
       tools: Array<Tool>,
       systemPrompt?: string
   ): Promise<OpenAI.Responses.Response> {
-    logger.info(`[OpenAI] Sending ${messageList.length} messages`);
+    logger.info(`[OpenAI] Sending ${countMessages(messageList)} messages`);
     logger.debug(`[OpenAI] Sending Msg: ${sanitizeLogImages(JSON.stringify(messageList[messageList.length - 1]))}`);
 
     const client = new OpenAI({
       baseURL: AIConfig.ChatConfig.baseURL,
       apiKey: AIConfig.ChatConfig.apiKey,
     });
+
+    const isGpt4 = AIConfig.ChatConfig.model.toLowerCase().includes('gpt-4');
 
     const hasSystemMsg = (messageList[0] as any).role == AIRole.SYSTEM;
     if(systemPrompt) {
@@ -93,8 +98,8 @@ class OpenaiService {
     const responseResult = await client.responses.create({
       model: AIConfig.ChatConfig.model,
       input: messageList,
-      text: { format: { type: responseType } },
-      reasoning: { summary: null },
+      text: { format: { type: responseType }, verbosity: isGpt4? undefined : "low" },
+      reasoning: { summary: null, effort: isGpt4? undefined : 'low' },
       tools: tools,
       // max_output_tokens: 4096,
       store: true
@@ -177,6 +182,7 @@ class OpenaiService {
     imageStreams?: Array<NodeJS.ReadableStream | Blob>;
     maskStream?: NodeJS.ReadableStream | Blob;
     n?: number;
+    output_format?: "png" | "jpg" | "webp";
     size?: "1024x1024" | "1536x1024" | "1024x1536" | "auto";
     quality?: "low" | "medium" | "high" | "auto";
     background?: "opaque" | "transparent" | "auto";
@@ -186,16 +192,22 @@ class OpenaiService {
       apiKey: AIConfig.ImageConfig.apiKey,
     });
 
-    logger.debug(`[${AIConfig.ImageConfig.provider}->generateImage] Creating image with params: ${JSON.stringify(params)}`);
+    logger.debug(`[${AIConfig.ImageConfig.provider}->generateImage] Creating image with params: ${JSON.stringify({prompt: params.prompt, imageStreamLength: params.imageStreams? params.imageStreams.length : [],
+      quality: params.quality ?? AIConfig.ImageConfig.quality })}`);
+
+    const isEdit = params.imageStreams && params.imageStreams.length > 0;
+    const quality = params.quality ?? AIConfig.ImageConfig.quality;
+    const isMini = AIConfig.ImageConfig.model.includes("mini");
 
     const baseParams: any = {
+      input_fidelity: isEdit && !isMini? 'high': undefined,
       model: AIConfig.ImageConfig.model,
       prompt: params.prompt,
       n: params.n ?? 1,
       size: params.size ?? "auto",
-      quality: params.quality ?? "medium",
+      quality: quality == 'high' && isMini? 'auto': quality,
       background: params.background ?? "auto",
-      output_format: "jpeg",
+      output_format: params.output_format ?? "jpeg",
       moderation: 'low'
     };
 

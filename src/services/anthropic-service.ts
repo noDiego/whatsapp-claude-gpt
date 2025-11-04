@@ -5,6 +5,8 @@ import { MessageParam, TextBlock } from '@anthropic-ai/sdk/resources';
 import Roboto from "../bot/roboto";
 import NodeCache from "node-cache";
 import { AIRole } from "../interfaces/ai-interfaces";
+import { countMessages, trimCachePreserveMessageStart } from "../utils";
+import { ChatConfiguration } from "../config/chat-configurations";
 
 class AnthropicService {
 
@@ -30,9 +32,10 @@ class AnthropicService {
     return this.messagesCache.has(chatId);
   }
 
-  public async sendMessage(aiMessagesInputList: MessageParam[], systemPrompt: string, chatId: string, tools: any): Promise<string> {
+  public async sendMessage(aiMessagesInputList: MessageParam[], systemPrompt: string, chatConfig: ChatConfiguration, tools: any): Promise<string> {
     let cycleCount = 0;
     const maxCycles = 5;
+    const chatId = chatConfig.chatId;
 
     const aiMessages: any[]  = this.messagesCache.get(chatId) || [];
     aiMessages.push(...aiMessagesInputList)
@@ -56,9 +59,9 @@ class AnthropicService {
           const functionResult = await Roboto.handleFunction(c.name, c.input);
 
           resultContent.push({
-              type: "tool_result",
-              tool_use_id: c.id,
-              content: JSON.stringify(functionResult)
+            type: "tool_result",
+            tool_use_id: c.id,
+            content: JSON.stringify(functionResult)
           })
         }
       }
@@ -72,7 +75,8 @@ class AnthropicService {
       cycleCount += 1;
 
       if (!hasFunctionCall) {
-        this.messagesCache.set(chatId, aiMessages, CONFIG.BotConfig.nodeCacheTime);
+        const finalMsgList = trimCachePreserveMessageStart(aiMessages, chatConfig.maxMsgsLimit ?? 30);
+        this.messagesCache.set(chatId, finalMsgList, CONFIG.BotConfig.nodeCacheTime);
         const content = aiResponse.content[0];
         return (content as TextBlock)?.text || "";
       }
@@ -87,7 +91,7 @@ class AnthropicService {
       tools: any
   ) {
 
-    logger.debug(`[Claude->sendCompletion] Sending ${messageList.length} messages.`);
+    logger.debug(`[Claude->sendCompletion] Sending ${countMessages(messageList)} messages.`);
 
     const response = await this.anthropic.messages.create({
       system: systemPrompt,

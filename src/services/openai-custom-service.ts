@@ -6,8 +6,9 @@ import { ChatCompletion } from 'openai/src/resources/chat/completions';
 import { Tool } from "openai/resources/responses/responses";
 import NodeCache from "node-cache";
 import { AIRole } from "../interfaces/ai-interfaces";
-import { sanitizeLogImages } from "../utils";
+import { cleanChatCompletionMessage, countMessages, sanitizeLogImages, trimCachePreserveMessageStart } from "../utils";
 import Roboto from "../bot/roboto";
+import { ChatConfiguration } from "../config/chat-configurations";
 
 class CustomOpenAIService {
 
@@ -30,9 +31,10 @@ class CustomOpenAIService {
     return this.messagesCache.has(chatId);
   }
 
-  public async sendMessage(aiMessagesInputList: ChatCompletionMessageParam[], systemPrompt: string, chatId: string, tools: any): Promise<string> {
+  public async sendMessage(aiMessagesInputList: ChatCompletionMessageParam[], systemPrompt: string, chatConfig: ChatConfiguration, tools: any): Promise<string> {
     let cycleCount = 0;
     const maxCycles = 5;
+    const chatId = chatConfig.chatId;
 
     const aiMessages: any[]  = this.messagesCache.get(chatId) || [];
     aiMessages.push(...aiMessagesInputList)
@@ -47,7 +49,7 @@ class CustomOpenAIService {
       for (const output of tool_calls) {
 
         if (output.type == 'function') {
-          aiMessages.push(aiResponse);
+          aiMessages.push(cleanChatCompletionMessage(aiResponse));
 
           hasFunctionCall = true;
           const functionResult = await Roboto.handleFunction(output.function.name, output.function.arguments);
@@ -64,8 +66,10 @@ class CustomOpenAIService {
       cycleCount += 1;
 
       if (!hasFunctionCall) {
-        aiMessages.push(aiResponse);
-        this.messagesCache.set(chatId, aiMessages, CONFIG.BotConfig.nodeCacheTime);
+        aiMessages.push(cleanChatCompletionMessage(aiResponse));
+
+        const finalMsgList = trimCachePreserveMessageStart(aiMessages, chatConfig.maxMsgsLimit ?? 30);
+        this.messagesCache.set(chatId, finalMsgList, CONFIG.BotConfig.nodeCacheTime);
         return aiResponse.content;
       }
     }
@@ -102,7 +106,7 @@ class CustomOpenAIService {
       messageList.unshift({role: AIRole.SYSTEM, content: systemPrompt});
     }
 
-    logger.info(`[${AIConfig.ChatConfig.provider}] Sending ${messageList.length} messages`);
+    logger.info(`[${AIConfig.ChatConfig.provider}] Sending ${countMessages(messageList)} messages`);
     logger.debug(`[${AIConfig.ChatConfig.provider}] Sending Msg: ${sanitizeLogImages(JSON.stringify(messageList[messageList.length - 1]))}`);
 
     const params: any = {

@@ -188,11 +188,12 @@ function toOpenAI(messageList: AiMessage[]): ResponseInputItem[] {
                     image_url: toDataUri(c.mimetype, c.value)
                 });
                 if (!hasText) {
+                    const fallbackMsg = c.filename == 'sticker'?ATTACHMENT_FALLBACK_MSG.replace('file/image','sticker'):ATTACHMENT_FALLBACK_MSG;
                     gptContent.push({
                         type: textType,
                         text: JSON.stringify(
                             buildMeta(aiMessage, c, {
-                                message: ATTACHMENT_FALLBACK_MSG,
+                                message: fallbackMsg,
                                 type: "text"
                             })
                         )
@@ -274,6 +275,8 @@ function toOther(messageList: AiMessage[]): any[] {
     const otherMsgList: any[] = [];
 
     for (const aiMessage of messageList) {
+        const textType = aiMessage.role === AIRole.ASSISTANT ? "output_text" : "input_text";
+
         if (aiMessage.role === AIRole.ASSISTANT) {
             const textContent = aiMessage.content.find(c => isTextLike(c.type))!;
             otherMsgList.push({
@@ -282,9 +285,29 @@ function toOther(messageList: AiMessage[]): any[] {
                 role: aiMessage.role
             });
         } else {
-            const aggregated: string[] = [];
+            const aggregated: Array<any> = [];
+            const hasText = hasTextOrASR(aiMessage);
+
             for (const c of aiMessage.content) {
-                if (c.type === "image" || c.type === "file") {
+                if (c.type === "image") {
+                    aggregated.push({
+                        type: "image_url",
+                        image_url: { url: toDataUri(c.mimetype, c.value) }
+                    });
+                    if (!hasText) {
+                        const fallbackMsg = c.filename == 'sticker'?ATTACHMENT_FALLBACK_MSG.replace('file/image','sticker'):ATTACHMENT_FALLBACK_MSG;
+                        aggregated.push({
+                            type: textType,
+                            text: JSON.stringify(
+                                buildMeta(aiMessage, c, {
+                                    message: fallbackMsg,
+                                    type: "text"
+                                })
+                            )
+                        });
+                    }
+                }
+                else if (c.type === "file") {
                     aggregated.push(
                         JSON.stringify(
                             buildMeta(aiMessage, c, {

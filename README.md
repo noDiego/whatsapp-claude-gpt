@@ -274,6 +274,7 @@ QWEN_API_KEY=your_api_key                       # Your API key for Qwen services
 QWEN_COMPLETION_MODEL=qwen2.5-vl-72b-instruct   # Model to use for Qwen text completion
 
 # DEEPINFRA CONFIGURATION
+# For proper operation, the chat model must support "Tools/Functions" and "Multimodal".
 DEEPINFRA_API_KEY=your_api_key                                  # Your API key for DeepInfra services
 DEEPINFRA_BASEURL=https://deepinfra.example.com/v1              # Base URL for DeepInfra API
 DEEPINFRA_COMPLETION_MODEL=meta-llama/Llama-3.3-70B-Instruct    # Model for text completion
@@ -286,6 +287,7 @@ ELEVENLABS_VOICEID=EXAVITQu4vr4xnSDxMaL             # The VoiceID you want to us
 ELEVENLABS_SPEECH_MODEL='eleven_multilingual_v2'    # The Speech Model to use
 
 # CUSTOM AI CONFIGURATION (This might not always work. It is just for testing purposes.)
+# For proper operation, the chat model must support "Tools/Functions" and "Multimodal".
 CUSTOM_API_KEY=your_api_key                  # Your API key for custom AI provider
 CUSTOM_BASEURL=https://ai.aiprovider.com/v1  # Base URL for custom AI provider API
 CUSTOM_COMPLETION_MODEL=custom-model1.0      # Model to use for custom AI text completion
@@ -320,6 +322,28 @@ VOICE_MESSAGES_ENABLED=false                 # Whether voice message processing 
 - [QWEN API Keys](https://bailian.console.alibabacloud.com/?apiKey=1#/api-key-center)
 - [ElevenLabs API Keys](https://elevenlabs.io/app/account)
 
+---
+
+## Known Issue with whatsapp-web.js ExecutionContext Error (Temporary Workaround)**
+
+Some users have encountered an `ExecutionContext` error related to the `whatsapp-web.js` dependency version `^1.34.1`. The error looks like this:
+
+```
+Error: Evaluation failed: b
+    at ExecutionContext._ExecutionContext_evaluate (...) 
+    at async Client.sendMessage (...)
+```
+
+A temporary fix is to edit the file `node_modules/whatsapp-web.js/src/util/Store.js` and comment out the last line:
+
+```js
+// window.injectToFunction({ module: 'WAWebLid1X1MigrationGating', function: 'Lid1X1MigrationUtils.isLidMigrated' }, () => false);
+```
+
+This workaround will not affect normal bot functionality, except if you are using a Store feature.
+
+
+---
 ## Updates in Version 1.1.0
 
 With this update, the bot has gained the ability to understand and respond to voice messages. Users can now send voice messages to the bot, and it will transcribe and interpret them as part of the conversation. Additionally, if a user requests an audio response, the bot can generate and send a voice message in reply.
