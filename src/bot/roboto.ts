@@ -146,6 +146,8 @@ class RobotoClass {
 
     if(!this.botEnabled) return false;
 
+    if(wspMessage.fromMe) return false;
+
     const contactData = await wspMessage.getContact();
 
     if(process.env.DEBUG == "1") {
@@ -287,7 +289,7 @@ class RobotoClass {
       images = await OpenaiCustomService.generateImage(args.prompt);
     }
 
-    const media = new MessageMedia("image/png", images[0].b64_json, "image.png");
+    const media = new MessageMedia(`image/${args.output_format=='jpg'?'jpeg':args.output_format}`, images[0].b64_json, `image.${args.output_format}`);
     let message;
     // if(wspMsg) message = await wspMsg.reply(media, args.chatId, {sendMediaAsSticker: args.send_as == 'sticker'});
     // else message = await WspWeb.getWspClient().sendMessage(args.chatId, media, {sendMediaAsSticker: args.send_as == 'sticker'});

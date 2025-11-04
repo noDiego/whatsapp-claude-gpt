@@ -6,7 +6,7 @@ import { ChatCompletion } from 'openai/src/resources/chat/completions';
 import { Tool } from "openai/resources/responses/responses";
 import NodeCache from "node-cache";
 import { AIRole } from "../interfaces/ai-interfaces";
-import { cleanChatCompletionMessage, sanitizeLogImages, trimCachePreserveMessageStart } from "../utils";
+import { cleanChatCompletionMessage, countMessages, sanitizeLogImages, trimCachePreserveMessageStart } from "../utils";
 import Roboto from "../bot/roboto";
 import { ChatConfiguration } from "../config/chat-configurations";
 
@@ -68,10 +68,8 @@ class CustomOpenAIService {
       if (!hasFunctionCall) {
         aiMessages.push(cleanChatCompletionMessage(aiResponse));
 
-        const max = chatConfig.maxMsgsLimit ?? 30;
-        const sanitized = aiMessages.length > max + 10 ? trimCachePreserveMessageStart(aiMessages, max): aiMessages;
-
-        this.messagesCache.set(chatId, sanitized, CONFIG.BotConfig.nodeCacheTime);
+        const finalMsgList = trimCachePreserveMessageStart(aiMessages, chatConfig.maxMsgsLimit ?? 30);
+        this.messagesCache.set(chatId, finalMsgList, CONFIG.BotConfig.nodeCacheTime);
         return aiResponse.content;
       }
     }
@@ -108,7 +106,7 @@ class CustomOpenAIService {
       messageList.unshift({role: AIRole.SYSTEM, content: systemPrompt});
     }
 
-    logger.info(`[${AIConfig.ChatConfig.provider}] Sending ${messageList.length} messages`);
+    logger.info(`[${AIConfig.ChatConfig.provider}] Sending ${countMessages(messageList)} messages`);
     logger.debug(`[${AIConfig.ChatConfig.provider}] Sending Msg: ${sanitizeLogImages(JSON.stringify(messageList[messageList.length - 1]))}`);
 
     const params: any = {

@@ -3,7 +3,7 @@ import { OpenAI, toFile } from 'openai';
 import { AIConfig, CONFIG } from '../config';
 import { ResponseInput, ResponseInputItem, Tool } from "openai/resources/responses/responses";
 
-import { sanitizeLogImages, trimCachePreserveMessageStart } from "../utils";
+import { countMessages, sanitizeLogImages, trimCachePreserveMessageStart } from "../utils";
 import { AIRole } from "../interfaces/ai-interfaces";
 import NodeCache from "node-cache";
 import Roboto from "../bot/roboto";
@@ -30,22 +30,22 @@ class OpenaiService {
       return this.messagesCache.has(chatId);
   }
 
-  public async sendMessage(openAiMessageInputList: ResponseInputItem[], systemPrompt: string, chatConfig: ChatConfiguration, tools: Tool[]): Promise<string> {
+  public async sendMessage(aiMessagesInputList: ResponseInputItem[], systemPrompt: string, chatConfig: ChatConfiguration, tools: Tool[]): Promise<string> {
     let cycleCount = 0;
     const maxCycles = 6;
     const chatId = chatConfig.chatId;
 
-    const openAiMessages: ResponseInput = this.messagesCache.get(chatId) || [];
-    openAiMessages.push(...openAiMessageInputList)
+    const aiMessages: ResponseInput = this.messagesCache.get(chatId) || [];
+    aiMessages.push(...aiMessagesInputList)
 
     while (cycleCount < maxCycles) {
-      const aiResponse = await this.sendToResponsesAPI(openAiMessages, 'text', tools, systemPrompt);
+      const aiResponse = await this.sendToResponsesAPI(aiMessages, 'text', tools, systemPrompt);
 
       let hasFunctionCall = false;
       const functionOutputs= [];
 
       for (const output of aiResponse.output) {
-        openAiMessages.push(output);
+        aiMessages.push(output);
         if (output.type === 'function_call') {
           hasFunctionCall = true;
           const functionResult = await Roboto.handleFunction(output.name, output.arguments);
@@ -59,16 +59,13 @@ class OpenaiService {
         }
       }
 
-      openAiMessages.push(...functionOutputs);
+      aiMessages.push(...functionOutputs);
 
       cycleCount += 1;
 
       if (!hasFunctionCall) {
-
-        const max = chatConfig.maxMsgsLimit ?? 30;
-        const sanitized = openAiMessages.length > max + 10 ? trimCachePreserveMessageStart(openAiMessages, max): openAiMessages;
-
-        this.messagesCache.set(chatId, sanitized, CONFIG.BotConfig.nodeCacheTime);
+        const finalMsgList = trimCachePreserveMessageStart(aiMessages, chatConfig.maxMsgsLimit ?? 30);
+        this.messagesCache.set(chatId, finalMsgList, CONFIG.BotConfig.nodeCacheTime);
         return aiResponse.output_text;
       }
     }
@@ -82,7 +79,7 @@ class OpenaiService {
       tools: Array<Tool>,
       systemPrompt?: string
   ): Promise<OpenAI.Responses.Response> {
-    logger.info(`[OpenAI] Sending ${messageList.length} messages`);
+    logger.info(`[OpenAI] Sending ${countMessages(messageList)} messages`);
     logger.debug(`[OpenAI] Sending Msg: ${sanitizeLogImages(JSON.stringify(messageList[messageList.length - 1]))}`);
 
     const isGpt4 = AIConfig.ChatConfig.model.toLowerCase().includes('gpt-4');

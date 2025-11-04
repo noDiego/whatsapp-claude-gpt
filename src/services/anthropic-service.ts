@@ -5,7 +5,7 @@ import { MessageParam, TextBlock } from '@anthropic-ai/sdk/resources';
 import Roboto from "../bot/roboto";
 import NodeCache from "node-cache";
 import { AIRole } from "../interfaces/ai-interfaces";
-import { trimCachePreserveMessageStart } from "../utils";
+import { countMessages, trimCachePreserveMessageStart } from "../utils";
 import { ChatConfiguration } from "../config/chat-configurations";
 
 class AnthropicService {
@@ -75,11 +75,8 @@ class AnthropicService {
       cycleCount += 1;
 
       if (!hasFunctionCall) {
-
-        const max = chatConfig.maxMsgsLimit ?? 30;
-        const sanitized = aiMessages.length > max + 10 ? trimCachePreserveMessageStart(aiMessages, max): aiMessages;
-
-        this.messagesCache.set(chatId, sanitized, CONFIG.BotConfig.nodeCacheTime);
+        const finalMsgList = trimCachePreserveMessageStart(aiMessages, chatConfig.maxMsgsLimit ?? 30);
+        this.messagesCache.set(chatId, finalMsgList, CONFIG.BotConfig.nodeCacheTime);
         const content = aiResponse.content[0];
         return (content as TextBlock)?.text || "";
       }
@@ -94,7 +91,7 @@ class AnthropicService {
       tools: any
   ) {
 
-    logger.debug(`[Claude->sendCompletion] Sending ${messageList.length} messages.`);
+    logger.debug(`[Claude->sendCompletion] Sending ${countMessages(messageList)} messages.`);
 
     const response = await this.anthropic.messages.create({
       system: systemPrompt,
