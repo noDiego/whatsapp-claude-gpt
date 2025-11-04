@@ -42,7 +42,7 @@ const Providers = {
 const ChatConfig = {
   provider: process.env.CHAT_PROVIDER?.toUpperCase() || process.env.AI_LANGUAGE?.toUpperCase() || "OPENAI",
   models: {
-    OPENAI: process.env.CHAT_COMPLETION_MODEL ?? process.env.OPENAI_COMPLETION_MODEL ?? 'gpt-4.1-mini',
+    OPENAI: process.env.CHAT_COMPLETION_MODEL ?? process.env.OPENAI_COMPLETION_MODEL ?? 'gpt-5-mini',
     CLAUDE: process.env.CLAUDE_CHAT_MODEL ?? 'claude-sonnet-4-20250514',
     QWEN: process.env.QWEN_COMPLETION_MODEL ?? 'qwen2.5-vl-72b-instruct',
     DEEPSEEK: process.env.DEEPSEEK_COMPLETION_MODEL ?? 'deepseek-chat',
@@ -54,7 +54,7 @@ const ChatConfig = {
 const ImageConfig = {
   provider: process.env.IMAGE_PROVIDER?.toUpperCase() || "OPENAI",
   models: {
-    OPENAI: process.env.IMAGE_CREATION_MODEL?? process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-1',
+    OPENAI: process.env.IMAGE_CREATION_MODEL?? process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-1-mini',
     DEEPINFRA: process.env.DEEPINFRA_IMAGE_MODEL ?? 'stabilityai/sd3.5',
   },
   enabled: process.env.IMAGE_CREATION_ENABLED?.toLocaleLowerCase() === 'true' ,
@@ -98,7 +98,8 @@ export const AIConfig = {
     baseURL: Providers[ImageConfig.provider].baseURL,
     apiKey: Providers[ImageConfig.provider].apiKey,
     enabled: ImageConfig.enabled,
-    catEditImages: Providers[ChatConfig.provider].catEditImages
+    catEditImages: Providers[ChatConfig.provider].catEditImages,
+    quality: process.env.IMAGE_QUALITY ?? 'auto'
   },
   TranscriptionConfig: {
     provider: TranscriptionConfig.provider,

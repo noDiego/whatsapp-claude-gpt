@@ -2,7 +2,7 @@ import logger from '../logger';
 import { Chat, Message } from 'whatsapp-web.js';
 import { Readable } from 'stream';
 import { AIConfig, CONFIG } from '../config';
-import { AIAnswer } from "../interfaces/ai-interfaces";
+import { AIAnswer, AIRole } from "../interfaces/ai-interfaces";
 
 export function getFormattedDate(date?: Date) {
   const now = date || new Date();
@@ -513,4 +513,32 @@ export function convertCompletionsToolsToResponses(tools) {
 
 export function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+export function trimCachePreserveMessageStart(messages: any[], maxItems: number): any[] {
+  if (!Array.isArray(messages)) return messages;
+
+  if (countMessages(messages) > maxItems) {
+    messages.splice(0, messages.length - maxItems);
+  } else
+    return messages;
+
+  while (messages.length > 0 && messages[0].role != AIRole.USER && messages[0].role != AIRole.SYSTEM) {
+    messages.shift();
+  }
+  return messages;
+}
+
+export function cleanChatCompletionMessage(aiResponse: any){
+  for (let key in aiResponse) {
+    if (aiResponse[key] === null || (Array.isArray(aiResponse[key]) && aiResponse[key].length === 0)) {
+      delete aiResponse[key];
+    }
+  }
+  return aiResponse;
+}
+
+export function countMessages(aiMessageList: any): number {
+  if(!aiMessageList || aiMessageList.length === 0) return 0;
+  return aiMessageList.filter((i: any) => i.role === AIRole.USER || i.role === AIRole.SYSTEM || i.role === AIRole.ASSISTANT).length;
 }
