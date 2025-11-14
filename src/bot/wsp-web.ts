@@ -90,6 +90,7 @@ class WspWeb {
     const msgDate = new Date(wspMsg.timestamp * 1000);
     const author_id = getAuthorId(wspMsg);
     const botName = inputBotName ?? (await chatConfigurationManager.getChatConfig(chat.id._serialized, chat.name)).botName;
+    const quoted_msg_id = wspMsg.hasQuotedMsg? (await wspMsg.getQuotedMessage()).id._serialized : undefined;
 
     const isImage = wspMsg.type === MessageTypes.IMAGE || wspMsg.type === MessageTypes.STICKER;
     const isSticker = wspMsg.type === MessageTypes.STICKER;
@@ -114,6 +115,7 @@ class WspWeb {
           value: mediaData.data,
           mimetype: mediaData.mimetype,
           msg_id: wspMsg.id._serialized,
+          quoted_msg_id,
           filename: isSticker? 'sticker':'image',
           author_id,
           dateString: getFormattedDate(msgDate)
@@ -122,6 +124,7 @@ class WspWeb {
         content.push({
           type: 'text',
           msg_id: wspMsg.id._serialized,
+          quoted_msg_id,
           value: '<Unprocessed image>',
           author_id,
           dateString: getFormattedDate(msgDate)
@@ -133,6 +136,7 @@ class WspWeb {
         content.push({
           type: 'ASR',
           msg_id: wspMsg.id._serialized,
+          quoted_msg_id,
           value: await this.transcribeVoice(wspMsg),
           author_id,
           dateString: getFormattedDate(msgDate)
@@ -143,6 +147,7 @@ class WspWeb {
       content.push({
         type: 'file',
         msg_id: wspMsg.id._serialized,
+        quoted_msg_id,
         mimetype: mediaData.mimetype,
         filename: mediaData.filename,
         value: mediaData.data,
@@ -157,6 +162,7 @@ class WspWeb {
       content.push({
         type: 'text',
         msg_id: wspMsg.id._serialized,
+        quoted_msg_id,
         value: errorMessage,
         author_id,
         dateString: getFormattedDate(new Date(wspMsg.timestamp * 1000))
@@ -167,6 +173,7 @@ class WspWeb {
       content.push({
         type: 'text',
         msg_id: wspMsg.id._serialized,
+        quoted_msg_id,
         value: wspMsg.body,
         author_id,
         dateString: getFormattedDate(msgDate)

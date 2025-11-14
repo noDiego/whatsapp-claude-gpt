@@ -45,7 +45,7 @@ class OpenaiService {
       const functionOutputs= [];
 
       for (const output of aiResponse.output) {
-        aiMessages.push(output);
+        aiMessages.push(output as any);
         if (output.type === 'function_call') {
           hasFunctionCall = true;
           const functionResult = await Roboto.handleFunction(output.name, output.arguments);

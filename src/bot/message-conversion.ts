@@ -18,6 +18,7 @@ const toDataUri = (mimetype: string, value: string) =>
 type BaseMeta = {
     message: string;
     msg_id?: string | number | undefined;
+    quoted_msg_id?: string | number | undefined;
     type?: string;
     author_id?: string | number;
     author_name?: string | null;
@@ -42,6 +43,7 @@ function buildMeta(
     return {
         message: overrides?.message ?? c.value,
         msg_id: c.msg_id,
+        quoted_msg_id: c.quoted_msg_id,
         type: overrides?.type ?? c.type,
         author_id: c.author_id,
         author_name: aiMessage.name,

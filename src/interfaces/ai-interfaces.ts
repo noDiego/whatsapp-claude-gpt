@@ -12,6 +12,7 @@ export enum AIRole {
 
 export interface AIContent {
   msg_id?: string;
+  quoted_msg_id?: string;
   value?: string;
   type: 'text' | 'image' | 'ASR' | 'file';
   mimetype?: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' | string;
