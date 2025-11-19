@@ -62,7 +62,7 @@ const generate_image = {
                     type: "string",
                     description: "chatId of the actual chat."
                 },
-                prompt: { type: "string", description: 'Description of the image to generate' },
+                prompt: { type: "string", description: 'Description of the image to generate.     - The prompt must be fully self-contained and describe everything needed for the image. DO NOT reference previous messages, chat history, or “other images/messages in the chat”. The image generation API has NO access to conversation context.' },
                 background: { type: ["string","null"], enum: ["opaque","transparent","auto"], description: "Transparent or opaque background. OPTIONAL", nullable: true },
                 output_format: { type: ["string","null"], enum: ["png","jpeg","webp"], description: "Default png. OPTIONAL", nullable: true },
                 send_as: {
@@ -98,7 +98,10 @@ const generate_image_withedit = {
                     type: "string",
                     description: "chatId of the actual chat."
                 },
-                prompt: { type: "string", description: 'Description of the image to generate or changes to apply. Important: Never use real person names or msg_id in the prompt; always refer to subjects as "the person in the first image", etc.' },
+                prompt: { type: "string", description: 'Description of the image to generate or changes to apply. ' +
+                        '- The prompt must be fully self-contained and describe everything needed for the image.\n' +
+                        '- DO NOT reference previous messages, chat history, or “other images/messages in the chat”. The image generation API has NO access to conversation context.`' +
+                        '- Important: Never use real person names or msg_id in the prompt; always refer to subjects as "the person in the first image", etc.' },
                 image_msg_ids: {
                     type: ["array", "null"],
                     description: "Array of image msg_ids to use as references. Required when: (a) the user asks to modify or edit one or more existing images in the chat; or (b) the request refers to a specific person (e.g., 'edit my friend', 'make a version of me'), in which case include the msg_id(s) of that person's photo(s) as reference. " +
