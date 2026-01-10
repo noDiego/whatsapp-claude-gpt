@@ -5,29 +5,14 @@ import { ResponseInput, ResponseInputItem, Tool } from "openai/resources/respons
 
 import { countMessages, sanitizeLogImages, trimCachePreserveMessageStart } from "../utils";
 import { AIRole } from "../interfaces/ai-interfaces";
-import NodeCache from "node-cache";
 import Roboto from "../bot/roboto";
 import { ChatConfiguration } from "../config/chat-configurations";
+import LLMMessages from "../services/llm-cache";
 
 class OpenaiService {
 
-  private messagesCache = new NodeCache();
 
   constructor() {
-  }
-
-  public deleteChatCache(chatId: string){
-    this.messagesCache.del(chatId);
-  }
-
-  public addMessageToCache(item: ResponseInputItem, chatId: string){
-    const openAiMessages: ResponseInput = this.messagesCache.get(chatId) || [];
-    openAiMessages.push(item);
-    this.messagesCache.set(chatId, openAiMessages, CONFIG.BotConfig.nodeCacheTime);
-  }
-
-  public hasChatCache(chatId: string): boolean {
-      return this.messagesCache.has(chatId);
   }
 
   public async sendMessage(aiMessagesInputList: ResponseInputItem[], systemPrompt: string, chatConfig: ChatConfiguration, tools: Tool[]): Promise<string> {
@@ -35,7 +20,7 @@ class OpenaiService {
     const maxCycles = 6;
     const chatId = chatConfig.chatId;
 
-    const aiMessages: ResponseInput = this.messagesCache.get(chatId) || [];
+    const aiMessages: ResponseInput = LLMMessages.getMessages(chatId);
     aiMessages.push(...aiMessagesInputList)
 
     while (cycleCount < maxCycles) {
@@ -64,8 +49,7 @@ class OpenaiService {
       cycleCount += 1;
 
       if (!hasFunctionCall) {
-        const finalMsgList = trimCachePreserveMessageStart(aiMessages, chatConfig.maxMsgsLimit ?? 30);
-        this.messagesCache.set(chatId, finalMsgList, CONFIG.BotConfig.nodeCacheTime);
+        trimCachePreserveMessageStart(aiMessages, chatConfig.maxMsgsLimit ?? 30);
         return aiResponse.output_text;
       }
     }
@@ -192,7 +176,7 @@ class OpenaiService {
       apiKey: AIConfig.ImageConfig.apiKey,
     });
 
-    logger.debug(`[${AIConfig.ImageConfig.provider}->generateImage] Creating image with params: ${JSON.stringify({prompt: params.prompt, imageStreamLength: params.imageStreams? params.imageStreams.length : [], 
+    logger.debug(`[${AIConfig.ImageConfig.provider}->generateImage] Creating image with params: ${JSON.stringify({prompt: params.prompt, imageStreamLength: params.imageStreams? params.imageStreams.length : [],
       quality: params.quality ?? AIConfig.ImageConfig.quality })}`);
 
     const isEdit = params.imageStreams && params.imageStreams.length > 0;

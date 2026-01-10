@@ -4,31 +4,15 @@ import { ChatCompletionMessageParam } from 'openai/resources';
 import { AIConfig, CONFIG } from '../config';
 import { ChatCompletion } from 'openai/src/resources/chat/completions';
 import { Tool } from "openai/resources/responses/responses";
-import NodeCache from "node-cache";
 import { AIRole } from "../interfaces/ai-interfaces";
 import { cleanChatCompletionMessage, countMessages, sanitizeLogImages, trimCachePreserveMessageStart } from "../utils";
 import Roboto from "../bot/roboto";
 import { ChatConfiguration } from "../config/chat-configurations";
+import LLMMessages from "./llm-cache";
 
 class CustomOpenAIService {
 
-  private messagesCache = new NodeCache();
-
   constructor() {
-  }
-
-  public deleteChatCache(chatId: string){
-    this.messagesCache.del(chatId);
-  }
-
-  public addMessageToCache(item: ChatCompletionMessageParam, chatId: string){
-    const aiMessages: ChatCompletionMessageParam[] = this.messagesCache.get(chatId) || [];
-    aiMessages.push(item);
-    this.messagesCache.set(chatId, aiMessages, CONFIG.BotConfig.nodeCacheTime);
-  }
-
-  public hasChatCache(chatId: string): boolean {
-    return this.messagesCache.has(chatId);
   }
 
   public async sendMessage(aiMessagesInputList: ChatCompletionMessageParam[], systemPrompt: string, chatConfig: ChatConfiguration, tools: any): Promise<string> {
@@ -36,7 +20,7 @@ class CustomOpenAIService {
     const maxCycles = 5;
     const chatId = chatConfig.chatId;
 
-    const aiMessages: any[]  = this.messagesCache.get(chatId) || [];
+    const aiMessages: any[]  = LLMMessages.getMessages(chatId);
     aiMessages.push(...aiMessagesInputList)
 
     while (cycleCount < maxCycles) {
@@ -67,9 +51,7 @@ class CustomOpenAIService {
 
       if (!hasFunctionCall) {
         aiMessages.push(cleanChatCompletionMessage(aiResponse));
-
-        const finalMsgList = trimCachePreserveMessageStart(aiMessages, chatConfig.maxMsgsLimit ?? 30);
-        this.messagesCache.set(chatId, finalMsgList, CONFIG.BotConfig.nodeCacheTime);
+        trimCachePreserveMessageStart(aiMessages, chatConfig.maxMsgsLimit ?? 30);
         return aiResponse.content;
       }
     }

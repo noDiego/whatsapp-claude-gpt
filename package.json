@@ -49,7 +49,7 @@
     "openai": "^6.9.0",
     "qrcode-terminal": "^0.12.0",
     "uuid": "^11.1.0",
-    "whatsapp-web.js": "^1.34.1",
+    "whatsapp-web.js": "github:pedroslopez/whatsapp-web.js#main",
     "winston": "^3.17.0",
     "winston-daily-rotate-file": "^5.0.0"
   },

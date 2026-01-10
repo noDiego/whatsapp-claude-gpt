@@ -24,6 +24,7 @@ import { CVoices, elevenTTS } from "../services/elevenlabs-service";
 import Reminders from "../services/reminder-service";
 import MemoryService from "../services/memory-service";
 import wspWeb from "./wsp-web";
+import LLMMessages from "../services/llm-cache";
 import path from "node:path";
 import fs from "node:fs";
 
@@ -61,7 +62,7 @@ class RobotoClass {
       const memoriesContext = await MemoryService.getMemoryContext(chatId, !chatData.isGroup? getAuthorId(wspMessage): null);
       const systemPrompt = CONFIG.getSystemPrompt(chatConfig, memoriesContext);
 
-      const aiMessages: AiMessage[] = await WspWeb.generateMessageArray(wspMessage, chatData, chatConfig, this.hasChatCache(chatId));
+      const aiMessages: AiMessage[] = await WspWeb.generateMessageArray(wspMessage, chatData, chatConfig, LLMMessages.hasChatCache(chatId));
       const aiResponse = await this.sendMessageToAi(aiMessages, systemPrompt, chatConfig);
 
       let chatResponse: AIAnswer = extractAnswer(aiResponse, botName);
@@ -77,7 +78,7 @@ class RobotoClass {
       //TODO Handle Error
       logger.error('[readWspMessage] ErrorMessage:' + e.message);
       logger.error('[readWspMessage] Chat context is being reset due to errors');
-      this.deleteChatCache(chatId);
+      LLMMessages.deleteChatCache(chatId);
       return false;
     } finally {
       this.busyChats.delete(chatId);
@@ -203,7 +204,7 @@ class RobotoClass {
       case "chatconfig":
         return await this.handleChatConfigCommand(message, commandMessage!);
       case "reset":
-        this.deleteChatCache(chatId);
+        LLMMessages.deleteChatCache(chatId);
         return await message.react('👍');
       case "memory":
         return await this.handleMemoryCommand(message, commandMessage!);
@@ -513,45 +514,9 @@ class RobotoClass {
     try {
       const aiMessage = await WspWeb.convertWspMsgToAiMsg(wspMessage);
       const items = convertIaMessagesLang([aiMessage]) as any;
-
-      switch (AIConfig.ChatConfig.provider) {
-        case AIProvider.OPENAI:
-          return OpenAISvc.addMessageToCache(items[0], chatId);
-        case AIProvider.DEEPSEEK:
-          return CustomOpenAISvc.addMessageToCache(items[0], chatId);
-        case AIProvider.CLAUDE:
-          return AnthropicSvc.addMessageToCache(items[0], chatId);
-        default:
-          return OpenaiCustomService.addMessageToCache(items[0], chatId);
-      }
+      return LLMMessages.getMessages(chatId).push(items[0]);
     } catch (e) {
       logger.error(`Error adding message to cache: ${e}`);
-    }
-  }
-
-  private deleteChatCache(chatId: string){
-    switch (AIConfig.ChatConfig.provider){
-      case AIProvider.OPENAI:
-        return OpenAISvc.deleteChatCache(chatId);
-      case AIProvider.DEEPSEEK:
-        return CustomOpenAISvc.deleteChatCache(chatId);
-      case AIProvider.CLAUDE:
-        return AnthropicSvc.deleteChatCache(chatId);
-      default:
-        return OpenaiCustomService.deleteChatCache(chatId);
-    }
-  }
-
-  private hasChatCache(chatId: string){
-    switch (AIConfig.ChatConfig.provider){
-      case AIProvider.OPENAI:
-        return OpenAISvc.hasChatCache(chatId);
-      case AIProvider.DEEPSEEK:
-        return CustomOpenAISvc.hasChatCache(chatId);
-      case AIProvider.CLAUDE:
-        return AnthropicSvc.hasChatCache(chatId);
-      default:
-        return OpenaiCustomService.hasChatCache(chatId);
     }
   }
 

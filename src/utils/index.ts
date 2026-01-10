@@ -515,18 +515,18 @@ export function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-export function trimCachePreserveMessageStart(messages: any[], maxItems: number): any[] {
+export function trimCachePreserveMessageStart(messages: any[], maxItems: number): void {
   if (!Array.isArray(messages)) return messages;
 
   if (countMessages(messages) > maxItems) {
     messages.splice(0, messages.length - maxItems);
   } else
-    return messages;
+    return;
 
   while (messages.length > 0 && messages[0].role != AIRole.USER && messages[0].role != AIRole.SYSTEM) {
     messages.shift();
   }
-  return messages;
+  return;
 }
 
 export function cleanChatCompletionMessage(aiResponse: any){
