@@ -101,7 +101,7 @@ class WspWeb {
       ({mediaData, errorMedia} = await this.extractMedia(wspMsg));
     }
 
-    const isOther = (!isImage && !isAudio && wspMsg.type != 'chat') || errorMedia == 'type';
+    const isOther = (!isImage && !isDocument && !isAudio && wspMsg.type != 'chat') || errorMedia == 'type';
 
     const role = (!wspMsg.fromMe || isImage) ? AIRole.USER : AIRole.ASSISTANT;
     const name = wspMsg.fromMe ? botName : (await getUserName(wspMsg));
