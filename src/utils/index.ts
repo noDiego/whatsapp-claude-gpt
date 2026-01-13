@@ -516,18 +516,36 @@ export function sleep(ms: number): Promise<void> {
 }
 
 export function trimCachePreserveMessageStart(messages: any[], maxItems: number): void {
-  if (!Array.isArray(messages)) return messages;
+  if (!Array.isArray(messages)) return;
 
-  if (countMessages(messages) > maxItems) {
-    messages.splice(0, messages.length - maxItems);
-  } else
+  if (maxItems <= 0) {
+    messages.length = 0;
     return;
-
-  while (messages.length > 0 && messages[0].role != AIRole.USER && messages[0].role != AIRole.SYSTEM) {
-    messages.shift();
   }
-  return;
+
+  const validRoles = new Set([
+    AIRole.USER,
+    AIRole.SYSTEM,
+    AIRole.ASSISTANT
+  ]);
+
+  const validMessages = messages.filter(m => validRoles.has(m.role));
+
+  let trimmed = validMessages.slice(-maxItems);
+
+  while (
+      trimmed.length > 0 &&
+      trimmed[0].role !== AIRole.USER &&
+      trimmed[0].role !== AIRole.SYSTEM
+      ) {
+    trimmed.shift();
+  }
+
+  messages.length = 0;
+  messages.push(...trimmed);
 }
+
+
 
 export function cleanChatCompletionMessage(aiResponse: any){
   for (let key in aiResponse) {
