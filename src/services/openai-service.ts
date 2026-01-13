@@ -15,47 +15,77 @@ class OpenaiService {
   constructor() {
   }
 
-  public async sendMessage(aiMessagesInputList: ResponseInputItem[], systemPrompt: string, chatConfig: ChatConfiguration, tools: Tool[]): Promise<string> {
+  public async sendMessage(
+      aiMessagesInputList: ResponseInputItem[],
+      systemPrompt: string,
+      chatConfig: ChatConfiguration,
+      tools: Tool[]
+  ): Promise<string> {
     let cycleCount = 0;
     const maxCycles = 6;
     const chatId = chatConfig.chatId;
+    const maxMessages = chatConfig.maxMsgsLimit ?? 30;
 
-    const aiMessages: ResponseInput = LLMMessages.getMessages(chatId);
-    aiMessages.push(...aiMessagesInputList)
+    LLMMessages.lock(chatId);
 
-    while (cycleCount < maxCycles) {
-      const aiResponse = await this.sendToResponsesAPI(aiMessages, 'text', tools, systemPrompt);
+    try {
+      const aiMessages: ResponseInput = LLMMessages.getMessages(chatId);
+      aiMessages.push(...aiMessagesInputList);
 
-      let hasFunctionCall = false;
-      const functionOutputs= [];
+      if (aiMessages.length > maxMessages + 5) {
+        LLMMessages.trimMessages(chatId, maxMessages);
+      }
 
-      for (const output of aiResponse.output) {
-        aiMessages.push(output as any);
-        if (output.type === 'function_call') {
-          hasFunctionCall = true;
-          const functionResult = await Roboto.handleFunction(output.name, output.arguments);
-          functionOutputs.push({
-            type: "function_call_output",
-            call_id: output.call_id,
-            output: JSON.stringify(functionResult)
-          });
-        } else if(output.type !== 'message' && output.type !== 'reasoning' && output.type !== 'web_search_call'){
-          logger.error(`Unknown output type received from OpenAI: "${output.type}". Please report this issue.`);
+      while (cycleCount < maxCycles) {
+        const aiResponse = await this.sendToResponsesAPI(aiMessages, 'text', tools, systemPrompt);
+
+        let hasFunctionCall = false;
+        const functionOutputs = [];
+
+        for (const output of aiResponse.output) {
+          aiMessages.push(output as any);
+
+          if (output.type === 'function_call') {
+            hasFunctionCall = true;
+            const functionResult = await Roboto.handleFunction(output.name, output.arguments);
+            functionOutputs.push({
+              type: "function_call_output",
+              call_id: output.call_id,
+              output: JSON.stringify(functionResult)
+            });
+          } else if (
+              output.type !== 'message' &&
+              output.type !== 'reasoning' &&
+              output.type !== 'web_search_call'
+          ) {
+            logger.error(`Unknown output type: "${output.type}"`);
+          }
+        }
+
+        aiMessages.push(...functionOutputs);
+        cycleCount += 1;
+
+        if (!hasFunctionCall) {
+          if (aiMessages.length > maxMessages) {
+            LLMMessages.trimMessages(chatId, maxMessages);
+          }
+          LLMMessages.saveMessages(chatId);
+          return aiResponse.output_text;
+        }
+
+        if (aiMessages.length > maxMessages + 10) {
+          logger.warn(`[OpenAI] Message count (${aiMessages.length}) exceeded limit during function calls. Trimming...`);
+          LLMMessages.trimMessages(chatId, maxMessages);
         }
       }
 
-      aiMessages.push(...functionOutputs);
+      throw new Error(`Reached the limit of ${maxCycles} communication cycles.`);
 
-      cycleCount += 1;
-
-      if (!hasFunctionCall) {
-        trimCachePreserveMessageStart(aiMessages, chatConfig.maxMsgsLimit ?? 30);
-        return aiResponse.output_text;
-      }
+    } finally {
+      LLMMessages.unlock(chatId);
     }
-
-    throw new Error(`Reached the limit of ${maxCycles} communication cycles with OpenAI.`);
   }
+
 
   private async sendToResponsesAPI(
       messageList: ResponseInput,

@@ -19,44 +19,63 @@ class CustomOpenAIService {
     let cycleCount = 0;
     const maxCycles = 5;
     const chatId = chatConfig.chatId;
+    const maxMessages = chatConfig.maxMsgsLimit ?? 30;
 
-    const aiMessages: any[]  = LLMMessages.getMessages(chatId);
-    aiMessages.push(...aiMessagesInputList)
+    LLMMessages.lock(chatId);
 
-    while (cycleCount < maxCycles) {
-      const aiResponse: OpenAI.ChatCompletionMessage = await this.sendCompletion(aiMessages, 'text', tools, systemPrompt);
+    try {
+      const aiMessages: any[] = LLMMessages.getMessages(chatId);
+      aiMessages.push(...aiMessagesInputList)
 
-      const tool_calls = aiResponse.tool_calls || [];
-      let hasFunctionCall = tool_calls.length > 0;
-      const functionOutputs = [];
+      if (aiMessages.length > maxMessages + 5) {
+        LLMMessages.trimMessages(chatId, maxMessages);
+      }
 
-      for (const output of tool_calls) {
+      while (cycleCount < maxCycles) {
+        const aiResponse: OpenAI.ChatCompletionMessage = await this.sendCompletion(aiMessages, 'text', tools, systemPrompt);
 
-        if (output.type == 'function') {
-          aiMessages.push(cleanChatCompletionMessage(aiResponse));
+        const tool_calls = aiResponse.tool_calls || [];
+        let hasFunctionCall = tool_calls.length > 0;
+        const functionOutputs = [];
 
-          hasFunctionCall = true;
-          const functionResult = await Roboto.handleFunction(output.function.name, output.function.arguments);
+        for (const output of tool_calls) {
 
-          functionOutputs.push({role: "tool", tool_call_id: output.id, content: JSON.stringify(functionResult)})
+          if (output.type == 'function') {
+            aiMessages.push(cleanChatCompletionMessage(aiResponse));
 
-        } else {
-          logger.error(`[CustomOpenAIService] Unknown output type received : "${output.type}". Please report this issue.`);
+            hasFunctionCall = true;
+            const functionResult = await Roboto.handleFunction(output.function.name, output.function.arguments);
+
+            functionOutputs.push({role: "tool", tool_call_id: output.id, content: JSON.stringify(functionResult)})
+
+          } else {
+            logger.error(`[CustomOpenAIService] Unknown output type received : "${output.type}". Please report this issue.`);
+          }
         }
+
+        aiMessages.push(...functionOutputs);
+        cycleCount += 1;
+
+        if (!hasFunctionCall) {
+          aiMessages.push(cleanChatCompletionMessage(aiResponse));
+          if (aiMessages.length > maxMessages) {
+            LLMMessages.trimMessages(chatId, maxMessages);
+          }
+          LLMMessages.saveMessages(chatId);
+          return aiResponse.content;
+        }
+
+        if (aiMessages.length > maxMessages + 10) {
+          logger.warn(`[OpenAI] Message count (${aiMessages.length}) exceeded limit during function calls. Trimming...`);
+          LLMMessages.trimMessages(chatId, maxMessages);
+        }
+
       }
 
-      aiMessages.push(...functionOutputs);
-
-      cycleCount += 1;
-
-      if (!hasFunctionCall) {
-        aiMessages.push(cleanChatCompletionMessage(aiResponse));
-        trimCachePreserveMessageStart(aiMessages, chatConfig.maxMsgsLimit ?? 30);
-        return aiResponse.content;
-      }
+      throw new Error(`Reached the limit of ${maxCycles} communication cycles with OpenAI.`);
+    } finally {
+      LLMMessages.unlock(chatId);
     }
-
-    throw new Error(`Reached the limit of ${maxCycles} communication cycles with OpenAI.`);
   }
 
   /**

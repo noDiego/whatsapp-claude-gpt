@@ -529,7 +529,9 @@ export function trimCachePreserveMessageStart(messages: any[], maxItems: number)
     AIRole.ASSISTANT
   ]);
 
-  const validMessages = messages.filter(m => validRoles.has(m.role));
+  const validMessages = messages.filter(m => {
+    return validRoles.has(m.role) || m.type;
+  });
 
   let trimmed = validMessages.slice(-maxItems);
 

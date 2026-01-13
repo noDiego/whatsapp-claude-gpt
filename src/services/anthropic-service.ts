@@ -7,6 +7,7 @@ import NodeCache from "node-cache";
 import { AIRole } from "../interfaces/ai-interfaces";
 import { countMessages, trimCachePreserveMessageStart } from "../utils";
 import { ChatConfiguration } from "../config/chat-configurations";
+import LLMMessages from "./llm-cache";
 
 class AnthropicService {
 
@@ -32,57 +33,81 @@ class AnthropicService {
     return this.messagesCache.has(chatId);
   }
 
-  public async sendMessage(aiMessagesInputList: MessageParam[], systemPrompt: string, chatConfig: ChatConfiguration, tools: any): Promise<string> {
+  public async sendMessage(
+      aiMessagesInputList: MessageParam[],
+      systemPrompt: string,
+      chatConfig: ChatConfiguration,
+      tools: any
+  ): Promise<string> {
     let cycleCount = 0;
     const maxCycles = 5;
     const chatId = chatConfig.chatId;
+    const maxMessages = chatConfig.maxMsgsLimit ?? 30;
 
-    const aiMessages: any[]  = this.messagesCache.get(chatId) || [];
-    aiMessages.push(...aiMessagesInputList)
+    LLMMessages.lock(chatId);
 
-    while (cycleCount < maxCycles) {
-      const aiResponse: Anthropic.Messages.Message = await this.sendToApi(aiMessages, systemPrompt, tools);
+    try {
+      const aiMessages: any[] = LLMMessages.getMessages(chatId);
+      aiMessages.push(...aiMessagesInputList);
 
-      let hasFunctionCall = false;
+      if (aiMessages.length > maxMessages + 5) {
+        LLMMessages.trimMessages(chatId, maxMessages);
+      }
 
-      aiMessages.push({
-        role: AIRole.ASSISTANT,
-        content: aiResponse.content
-      })
+      while (cycleCount < maxCycles) {
+        const aiResponse = await this.sendToApi(aiMessages, systemPrompt, tools);
+        let hasFunctionCall = false;
 
-      const resultContent = [];
+        aiMessages.push({
+          role: AIRole.ASSISTANT,
+          content: aiResponse.content
+        });
 
-      for (const c of aiResponse.content) {
+        const resultContent = [];
 
-        if (c.type == 'tool_use') {
-          hasFunctionCall = true;
-          const functionResult = await Roboto.handleFunction(c.name, c.input);
+        for (const c of aiResponse.content) {
+          if (c.type == 'tool_use') {
+            hasFunctionCall = true;
+            const functionResult = await Roboto.handleFunction(c.name, c.input);
 
-          resultContent.push({
+            resultContent.push({
               type: "tool_result",
               tool_use_id: c.id,
               content: JSON.stringify(functionResult)
-          })
+            });
+          }
+        }
+
+        if (resultContent.length > 0) {
+          aiMessages.push({
+            role: AIRole.USER,
+            content: resultContent
+          });
+        }
+
+        cycleCount += 1;
+
+        if (!hasFunctionCall) {
+          if (aiMessages.length > maxMessages) {
+            LLMMessages.trimMessages(chatId, maxMessages);
+          }
+
+          LLMMessages.saveMessages(chatId);
+          const content = aiResponse.content[0];
+          return (content as TextBlock)?.text || "";
+        }
+
+        if (aiMessages.length > maxMessages + 10) {
+          logger.warn(`[Claude] Trimming during function cycles`);
+          LLMMessages.trimMessages(chatId, maxMessages);
         }
       }
 
-      if(resultContent.length>0)
-        aiMessages.push({
-          role: AIRole.USER,
-          content: resultContent
-        });
+      throw new Error(`Reached the limit of ${maxCycles} cycles.`);
 
-      cycleCount += 1;
-
-      if (!hasFunctionCall) {
-        const finalMsgList = trimCachePreserveMessageStart(aiMessages, chatConfig.maxMsgsLimit ?? 30);
-        this.messagesCache.set(chatId, finalMsgList, CONFIG.BotConfig.nodeCacheTime);
-        const content = aiResponse.content[0];
-        return (content as TextBlock)?.text || "";
-      }
+    } finally {
+      LLMMessages.unlock(chatId);
     }
-
-    throw new Error(`Reached the limit of ${maxCycles} communication cycles with OpenAI.`);
   }
 
   async sendToApi(
