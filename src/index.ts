@@ -49,8 +49,22 @@ async function start() {
       logger.error(`Authentication failure: ${msg}`);
     });
 
-    wspClient.on('ready', () => {
+    wspClient.on("ready", async () => {
+      // Patch sendSeen to use markSeen instead (fixes markedUnread error)
+      await wspClient.pupPage?.evaluate(`
+    window.WWebJS.sendSeen = async (chatId) => {
+      const chat = await window.WWebJS.getChat(chatId, { getAsModel: false });
+      if (chat) {
+        window.Store.WAWebStreamModel.Stream.markAvailable();
+        await window.Store.SendSeen.markSeen(chat);
+        window.Store.WAWebStreamModel.Stream.markUnavailable();
+        return true;
+      }
+      return false;
+    };
+  `);
       return logger.info('Client is ready!');
+
     });
 
     wspClient.on('message', async (message: Message) => Roboto.readWspMessage(message));
