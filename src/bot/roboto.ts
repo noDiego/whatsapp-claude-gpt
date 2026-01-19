@@ -27,6 +27,7 @@ import wspWeb from "./wsp-web";
 import LLMMessages from "../services/llm-cache";
 import path from "node:path";
 import fs from "node:fs";
+import { requestAppRestart } from "../utils/restart";
 
 class RobotoClass {
 
@@ -75,11 +76,10 @@ class RobotoClass {
       return WspWeb.returnResponse(wspMessage, chatResponse.message, chatData.isGroup);
 
     } catch (e) {
-      //TODO Handle Error
       logger.error('[readWspMessage] ErrorMessage:' + e.message);
       logger.error('[readWspMessage] Chat context is being reset due to errors');
       LLMMessages.deleteChatCache(chatId);
-      return false;
+      return requestAppRestart('Error en readWspMessage', e);
     } finally {
       this.busyChats.delete(chatId);
       chatData.clearState();

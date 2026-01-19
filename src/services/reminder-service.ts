@@ -13,6 +13,7 @@ import WspWeb from "../bot/wsp-web";
 import { db } from "../db";
 import { and, eq } from "drizzle-orm";
 import { Chat, Message } from "whatsapp-web.js";
+import { requestAppRestart } from "../utils/restart";
 
 class ReminderManager {
 
@@ -71,6 +72,9 @@ class ReminderManager {
                 logger.info(`Reminder for ${reminder.chatId} (${reminder.id}) processed.`);
             } catch (err) {
                 logger.error(`Error processing reminder for ${reminder.chatId}: ${err.message}`);
+                if(err.message?.includes('detached Frame')){
+                    requestAppRestart('Detached Frame Error', err);
+                }
             }
         }
     }
