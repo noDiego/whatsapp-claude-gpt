@@ -156,7 +156,7 @@ class RobotoClass {
 
     if(!this.botEnabled) return false;
 
-    if(wspMessage.fromMe) return false;
+    if(wspMessage.fromMe || getAuthorId(wspMessage).includes("0@c.us")) return false;
 
     const contactData = await wspMessage.getContact();
 

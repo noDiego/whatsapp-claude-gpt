@@ -52,7 +52,7 @@ class ReminderManager {
                     logger.info(`Reminder for ${reminder.chatName} has expired. Reminder not sent`);
                 }
 
-                if (reminder.recurrenceType && reminder.recurrenceType !== 'none') {
+                if (reminder.recurrenceType !== 'none') {
                     const nextDate = this.calculateNextRecurrence(reminder);
                     if (nextDate) {
                         const zonedDate = toZonedTime(nextDate, reminder.reminderDateTZ);
