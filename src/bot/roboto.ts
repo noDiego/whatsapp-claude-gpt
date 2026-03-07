@@ -70,8 +70,8 @@ class RobotoClass {
       if (!chatResponse || !chatResponse.message) return false;
 
       // If the response includes emoji reaction, react to the message
-      if (chatResponse.emojiReact)
-        wspMessage.react(chatResponse.emojiReact);
+      // if (chatResponse.emojiReact)
+      //   wspMessage.react(chatResponse.emojiReact); //TODO Habilitar en nueva version
 
       return WspWeb.returnResponse(wspMessage, chatResponse.message, chatData.isGroup);
 
@@ -205,7 +205,8 @@ class RobotoClass {
         return await this.handleChatConfigCommand(message, commandMessage!);
       case "reset":
         LLMMessages.deleteChatCache(chatId);
-        return await message.react('👍');
+        // return await message.react('👍'); //TODO Habilitar en nueva version
+        return true;
       case "memory":
         return await this.handleMemoryCommand(message, commandMessage!);
       case "enable":
