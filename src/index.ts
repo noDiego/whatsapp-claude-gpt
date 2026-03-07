@@ -26,8 +26,7 @@ async function start() {
         ],
       },
       takeoverTimeoutMs: 40000,
-      qrMaxRetries:5,
-      restartOnAuthFail: true
+      qrMaxRetries:5
     });
 
     logger.info('Starting WhatsApp client...');
@@ -47,18 +46,18 @@ async function start() {
 
     wspClient.on("ready", async () => {
       // Patch sendSeen to use markSeen instead (fixes markedUnread error)
-      await wspClient.pupPage?.evaluate(`
-    window.WWebJS.sendSeen = async (chatId) => {
-      const chat = await window.WWebJS.getChat(chatId, { getAsModel: false });
-      if (chat) {
-        window.Store.WAWebStreamModel.Stream.markAvailable();
-        await window.Store.SendSeen.markSeen(chat);
-        window.Store.WAWebStreamModel.Stream.markUnavailable();
-        return true;
-      }
-      return false;
-    };
-  `);
+  //     await wspClient.pupPage?.evaluate(`
+  //   window.WWebJS.sendSeen = async (chatId) => {
+  //     const chat = await window.WWebJS.getChat(chatId, { getAsModel: false });
+  //     if (chat) {
+  //       window.Store.WAWebStreamModel.Stream.markAvailable();
+  //       await window.Store.SendSeen.markSeen(chat);
+  //       window.Store.WAWebStreamModel.Stream.markUnavailable();
+  //       return true;
+  //     }
+  //     return false;
+  //   };
+  // `);
       return logger.info('Client is ready!');
 
     });
