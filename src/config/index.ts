@@ -54,7 +54,7 @@ const ChatConfig = {
 const ImageConfig = {
   provider: process.env.IMAGE_PROVIDER?.toUpperCase() || "OPENAI",
   models: {
-    OPENAI: process.env.IMAGE_CREATION_MODEL?? process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-1',
+    OPENAI: process.env.IMAGE_CREATION_MODEL?? process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-1.5',
     DEEPINFRA: process.env.DEEPINFRA_IMAGE_MODEL ?? 'stabilityai/sd3.5',
   },
   enabled: process.env.IMAGE_CREATION_ENABLED?.toLocaleLowerCase() === 'true' ,
@@ -142,8 +142,8 @@ const BotConfig = {
 
 // Dynamically generate the bot's initial prompt based on configuration parameters
 function getSystemPrompt(chatConfig: ChatConfiguration, memoriesContext?: string){
-  return `You are an assistant operating on WhatsApp.
-- Name: ${chatConfig.botName ?? CONFIG.BotConfig.botName}
+  return `
+- Your Name: ${chatConfig.botName ?? CONFIG.BotConfig.botName}
 - Context: ${chatConfig.isGroup ? 'Group chat' : 'One-to-one chat'} (chatId: ${chatConfig.chatId}${chatConfig.name ? `, name: "${chatConfig.name}"` : ''}).
 ${AIConfig.ChatConfig.analyzeImageDisabled ? "- Image analysis: disabled." : ""}
 - Actual Date: ${new Date().toDateString()}
@@ -171,7 +171,7 @@ Output format (strict):
 
 Tool-use policy:
 - You have access to function tools.
-- When a tool is appropriate, CALL THE TOOL (do not produce a normal user-visible message in the same turn). After tool_result(s) arrive, produce the final JSON answer.
+- When a tool is appropriate, CALL THE TOOL (do not produce a normal user-visible message in the same turn). Once the results from the tool are received, generate the final JSON response only if necessary.
 ${AIConfig.ChatConfig.provider == AIProvider.OPENAI ? `- Use web search for time-sensitive, factual, or uncertain questions. Prefer concise answers and cite succinctly if needed.`: ``}
 
 Memory policy${CONFIG.BotConfig.memoriesEnabled ? " (enabled)" : " (disabled)"}:
