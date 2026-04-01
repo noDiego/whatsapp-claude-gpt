@@ -181,9 +181,9 @@ export function configValidation() {
 
   if (AIConfig.ImageConfig.enabled) {
     const { provider: imageProvider } = AIConfig.ImageConfig;
-    if (!['OPENAI', 'DEEPINFRA'].includes(imageProvider)) {
+    if (!['OPENAI', 'DEEPINFRA', 'FLUX'].includes(imageProvider)) {
       logger.error(`ERROR: Invalid IMAGE_PROVIDER: ${imageProvider}`);
-      logger.error(`Valid options are: OPENAI, DEEPINFRA`);
+      logger.error(`Valid options are: OPENAI, DEEPINFRA, FLUX`);
       logger.error(`Please set a valid IMAGE_PROVIDER in your .env file.`);
       process.exit(1);
     }

@@ -32,6 +32,9 @@ const Providers = {
     apiKey: process.env.DEEPINFRA_API_KEY,
     baseURL: process.env.DEEPINFRA_BASEURL ?? 'https://api.deepinfra.com/v1/openai'
   },
+  FLUX:{
+    apiKey: process.env.FLUX_API_KEY,
+  },
   CUSTOM: {
     baseURL: process.env.CUSTOM_BASEURL,
     apiKey:  process.env.CUSTOM_API_KEY,
@@ -56,8 +59,11 @@ const ImageConfig = {
   models: {
     OPENAI: process.env.IMAGE_CREATION_MODEL?? process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-1.5',
     DEEPINFRA: process.env.DEEPINFRA_IMAGE_MODEL ?? 'stabilityai/sd3.5',
+    FLUX: process.env.FLUX_IMAGE_MODEL ?? 'flux-2-pro-preview',
   },
   enabled: process.env.IMAGE_CREATION_ENABLED?.toLocaleLowerCase() === 'true' ,
+  input_fidelity: process.env.IMAGE_INPUT_FIDELITY?.toLocaleLowerCase() || 'low',
+  image_quality: process.env.IMAGE_QUALITY?.toLocaleLowerCase() || 'medium'
 };
 
 const TranscriptionConfig = {

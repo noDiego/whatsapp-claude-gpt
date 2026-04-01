@@ -214,12 +214,12 @@ class OpenaiService {
     const isMini = AIConfig.ImageConfig.model.includes("mini");
 
     const baseParams: any = {
-      input_fidelity: isEdit && !isMini? 'high': undefined,
+      input_fidelity: CONFIG.ImageConfig.input_fidelity || 'low',
       model: AIConfig.ImageConfig.model,
       prompt: params.prompt,
       n: params.n ?? 1,
       size: params.size ?? "auto",
-      quality: quality == 'high' && isMini? 'auto': quality,
+      quality: CONFIG.ImageConfig.image_quality || 'medium',
       background: params.background ?? "auto",
       output_format: params.output_format ?? "jpeg",
       moderation: 'low'

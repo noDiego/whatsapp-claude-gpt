@@ -28,6 +28,7 @@ import LLMMessages from "../services/llm-cache";
 import path from "node:path";
 import fs from "node:fs";
 import { requestAppRestart } from "../utils/restart";
+import FluxSvc from "../services/flux-service";
 
 class RobotoClass {
 
@@ -294,6 +295,13 @@ class RobotoClass {
         background: args.background as any,
         output_format: args.output_format,
         quality: 'auto',
+        size: args.size
+      });
+    } else if (AIConfig.ImageConfig.provider == AIProvider.FLUX) {
+      images = await FluxSvc.generateImage({
+        prompt: args.prompt,
+        imageStreams: imageStreams ?? undefined,
+        output_format: args.output_format == 'jpg'? 'jpeg':'png',
         size: args.size
       });
     } else {
