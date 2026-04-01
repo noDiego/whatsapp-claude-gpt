@@ -206,24 +206,24 @@ class OpenaiService {
       apiKey: AIConfig.ImageConfig.apiKey,
     });
 
-    logger.debug(`[${AIConfig.ImageConfig.provider}->generateImage] Creating image with params: ${JSON.stringify({prompt: params.prompt, imageStreamLength: params.imageStreams? params.imageStreams.length : [],
-      quality: params.quality ?? AIConfig.ImageConfig.quality })}`);
-
     const isEdit = params.imageStreams && params.imageStreams.length > 0;
-    const quality = params.quality ?? AIConfig.ImageConfig.quality;
+    const quality = CONFIG.ImageConfig.image_quality;
     const isMini = AIConfig.ImageConfig.model.includes("mini");
 
     const baseParams: any = {
-      input_fidelity: CONFIG.ImageConfig.input_fidelity || 'low',
+      input_fidelity: isEdit && !isMini? CONFIG.ImageConfig.input_fidelity: undefined,
       model: AIConfig.ImageConfig.model,
       prompt: params.prompt,
       n: params.n ?? 1,
       size: params.size ?? "auto",
-      quality: CONFIG.ImageConfig.image_quality || 'medium',
+      quality: quality == 'high' && isMini? 'auto': quality  || 'medium',
       background: params.background ?? "auto",
       output_format: params.output_format ?? "jpeg",
       moderation: 'low'
     };
+
+    logger.debug(`[${AIConfig.ImageConfig.provider}->generateImage] Creating image with params: ${JSON.stringify({prompt: params.prompt, imageStreamLength: params.imageStreams? params.imageStreams.length : [],
+      quality: params.quality ?? AIConfig.ImageConfig.quality, inputFidelity: baseParams.input_fidelity })}`);
 
     if (isEdit) {
       const imageFiles = await Promise.all(
