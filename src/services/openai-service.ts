@@ -222,8 +222,8 @@ class OpenaiService {
       moderation: 'low'
     };
 
-    logger.debug(`[${AIConfig.ImageConfig.provider}->generateImage] Creating image with params: ${JSON.stringify({prompt: params.prompt, imageStreamLength: params.imageStreams? params.imageStreams.length : [],
-      quality: params.quality ?? AIConfig.ImageConfig.quality, inputFidelity: baseParams.input_fidelity })}`);
+    logger.debug(`[${AIConfig.ImageConfig.provider}->generateImage] Creating image with params: ${JSON.stringify({model: baseParams.model, imageStreamLength: params.imageStreams? params.imageStreams.length : [],
+      quality: baseParams.quality, inputFidelity: baseParams.input_fidelity, prompt: params.prompt })}`);
 
     if (isEdit) {
       const imageFiles = await Promise.all(
