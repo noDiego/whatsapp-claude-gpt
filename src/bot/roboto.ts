@@ -71,8 +71,8 @@ class RobotoClass {
       if (!chatResponse || !chatResponse.message) return false;
 
       // If the response includes emoji reaction, react to the message
-      // if (chatResponse.emojiReact)
-      //   wspMessage.react(chatResponse.emojiReact); //TODO Habilitar en nueva version
+      if (chatResponse.emojiReact)
+        wspMessage.react(chatResponse.emojiReact);
 
       return WspWeb.returnResponse(wspMessage, chatResponse.message, chatData.isGroup);
 

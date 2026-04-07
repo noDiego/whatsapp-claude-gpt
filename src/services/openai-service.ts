@@ -96,7 +96,7 @@ class OpenaiService {
     logger.info(`[OpenAI] Sending ${countMessages(messageList)} messages`);
     logger.debug(`[OpenAI] Sending Msg: ${sanitizeLogImages(JSON.stringify(messageList[messageList.length - 1]))}`);
 
-    const isGpt4 = AIConfig.ChatConfig.model.toLowerCase().includes('gpt-4');
+    const reasoningProfile = getReasoningProfile(AIConfig.ChatConfig.model);
 
     const client = new OpenAI({
       baseURL: AIConfig.ChatConfig.baseURL,
@@ -112,12 +112,16 @@ class OpenaiService {
     const responseResult = await client.responses.create({
       model: AIConfig.ChatConfig.model,
       input: messageList,
-      text: { format: { type: responseType }, verbosity: isGpt4? undefined : "low" },
-      reasoning: { summary: null, effort: isGpt4? undefined : 'low' },
-      tools: tools,
-      // max_output_tokens: 4096,
+      text: {
+        format: { type: responseType },
+        verbosity: reasoningProfile.enabled ? "low" : undefined
+      },
+      reasoning: reasoningProfile.enabled
+          ? { summary: reasoningProfile.summary, effort: reasoningProfile.effort }
+          : undefined,
+      tools,
       store: true
-    });
+    } as any);
 
     logger.debug(`[OpenAI] ResponsesAPI Usage: Input=${responseResult.usage.input_tokens}` + ` Cached=${responseResult.usage.input_tokens_details?.cached_tokens}` + ` Output=${responseResult.usage.output_tokens}`);
     logger.debug('[OpenAI] ResponsesAPI Response:' + sanitizeLogImages(JSON.stringify(responseResult.output_text)));
@@ -245,6 +249,51 @@ class OpenaiService {
     }
   }
 
+}
+
+type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
+
+type ReasoningProfile =
+    | { enabled: false }
+    | { enabled: true; effort: ReasoningEffort; summary: null };
+
+const MODEL_REASONING: Record<string, ReasoningProfile> = {
+  // GPT-5.x
+  "gpt-5.4":      { enabled: true, effort: "low",    summary: null },
+  "gpt-5.4-mini": { enabled: true, effort: "low",    summary: null },
+  "gpt-5.4-nano": { enabled: true, effort: "low",    summary: null },
+  "gpt-5.4-pro":  { enabled: true, effort: "medium", summary: null },
+
+  "gpt-5.2":      { enabled: true, effort: "low",    summary: null },
+  "gpt-5.2-pro":  { enabled: true, effort: "medium", summary: null },
+
+  "gpt-5.1":      { enabled: true, effort: "low",    summary: null },
+
+  "gpt-5":        { enabled: true, effort: "low",    summary: null },
+  "gpt-5-mini":   { enabled: true, effort: "low",    summary: null },
+  "gpt-5-nano":   { enabled: true, effort: "low",    summary: null },
+  "gpt-5-pro":    { enabled: true, effort: "high",   summary: null },
+
+  // Si usas modelos codex:
+  "gpt-5.3-codex": { enabled: true, effort: "low", summary: null },
+  "gpt-5.2-codex": { enabled: true, effort: "low", summary: null },
+
+  // No reasoning
+  "gpt-5.3-chat-latest":  { enabled: false },
+  "gpt-4.1":              { enabled: false },
+  "gpt-4.1-mini":         { enabled: false },
+  "gpt-4.1-nano":         { enabled: false },
+  "gpt-4o":               { enabled: false },
+  "gpt-4o-mini":          { enabled: false },
+};
+
+function normalizeModel(model: string): string {
+  return model.replace(/-\d{4}-\d{2}-\d{2}$/, "");
+}
+
+function getReasoningProfile(model: string): ReasoningProfile {
+  const normalized = normalizeModel(model);
+  return MODEL_REASONING[normalized] ?? { enabled: false };
 }
 
 const OpenAISvc = new OpenaiService();
