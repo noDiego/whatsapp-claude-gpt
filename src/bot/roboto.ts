@@ -75,17 +75,18 @@ class RobotoClass {
 
   }
 
-  public async sendMessageToAi(aiMessages: AiMessage[], systemPrompt, chatConfig: ChatConfiguration){
+  public async sendMessageToAi(aiMessages: AiMessage[], systemPrompt, chatConfig: ChatConfiguration, withTools = true){
     const messagesList = convertIaMessagesLang(aiMessages) as any;
     const chat = await wspWeb.getWspClient().getChatById(chatConfig.chatId);
+    const tools = withTools ? getTools(chat) : undefined;
 
     switch (AIConfig.ChatConfig.provider){
       case AIProvider.OPENAI:
-        return await OpenAISvc.sendMessage(messagesList, systemPrompt, chatConfig, getTools(chat));
+        return await OpenAISvc.sendMessage(messagesList, systemPrompt, chatConfig, tools);
       case AIProvider.CLAUDE:
-        return await AnthropicSvc.sendMessage(messagesList, systemPrompt, chatConfig, getTools(chat));
+        return await AnthropicSvc.sendMessage(messagesList, systemPrompt, chatConfig, tools);
       default:
-        return await CustomOpenAISvc.sendMessage(messagesList, systemPrompt, chatConfig, getTools(chat));
+        return await CustomOpenAISvc.sendMessage(messagesList, systemPrompt, chatConfig, tools);
     }
   }
 
@@ -143,7 +144,7 @@ class RobotoClass {
 
     if(!this.botEnabled) return false;
 
-    if(wspMessage.fromMe) return false;
+    if(wspMessage.fromMe || getAuthorId(wspMessage).includes("0@c.us")) return false;
 
     const contactData = await wspMessage.getContact();
 

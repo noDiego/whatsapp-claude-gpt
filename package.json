@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-claude-gpt",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "license": "MIT",
   "author": "Diego Beltran <diego.beltran88@gmail.com>",
   "description": "WhatsApp-Claude-GPT is a WhatsApp chatbot that supports multiple AI providers for chat, optional image generation/editing, and voice (speech-to-text and text-to-speech). It’s built for natural, contextual conversations and can now also handle reminders and personalized memory.",
