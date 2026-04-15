@@ -1,4 +1,4 @@
-import { Chat, GroupChat, Message, MessageMedia } from "whatsapp-web.js";
+import { Chat, GroupChat, Message, MessageMedia } from "whatsapp-library.js";
 import { AIAnswer, AiMessage, AIProvider, OperationResult } from "../interfaces/ai-interfaces";
 import { AIConfig, CONFIG } from "../config";
 import WspWeb from "./wsp-web";
