@@ -2,7 +2,7 @@ import { Tool } from "openai/src/resources/responses/responses";
 import { AIProvider } from "../interfaces/ai-interfaces";
 import { AIConfig, CONFIG } from "./index";
 import { convertCompletionsToolsToResponses } from "../utils";
-import { Chat } from "whatsapp-web.js";
+import { Chat } from "whatsapp-library.js";
 
 const openAIWebSearch: Tool =
     {
@@ -286,7 +286,7 @@ const group_memory_manager = {
 export function getTools(chatData: Chat) {
 
     const tools = [];
-    if(AIConfig.ImageConfig.enabled) tools.push(AIConfig.ImageConfig.catEditImages? generate_image_withedit : generate_image);
+    if(AIConfig.ImageConfig.enabled) tools.push(AIConfig.ImageConfig.canEditImages? generate_image_withedit : generate_image);
     tools.push(reminder_manager);
     if(AIConfig.TranscriptionConfig.enabled) tools.push(generate_speech);
     if(CONFIG.BotConfig.memoriesEnabled) {

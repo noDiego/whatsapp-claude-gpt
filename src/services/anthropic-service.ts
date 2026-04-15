@@ -82,7 +82,7 @@ class AnthropicService {
       }
     }
 
-    throw new Error(`Reached the limit of ${maxCycles} communication cycles with OpenAI.`);
+    throw new Error(`Reached the limit of ${maxCycles} communication cycles with Claude.`);
   }
 
   async sendToApi(

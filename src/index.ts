@@ -1,5 +1,5 @@
 import logger from './logger';
-import { Client, LocalAuth, Message } from 'whatsapp-web.js';
+import { Client, LocalAuth, Message } from "whatsapp-library.js";
 import qrcode from 'qrcode-terminal';
 import Roboto from "./bot/roboto";
 import WhatsappHandler from "./bot/wsp-web";
@@ -51,6 +51,21 @@ async function start() {
     await wspClient.initialize();
 
     WhatsappHandler.setWspClient(wspClient);
+
+    const shutdown = async (signal: string) => {
+      logger.info(`Received ${signal}, shutting down gracefully...`);
+      try {
+        await wspClient.destroy();
+        logger.info('WhatsApp client destroyed');
+      } catch (e: any) {
+        logger.error(`Error destroying WhatsApp client: ${e.message}`);
+      }
+      process.exit(0);
+    };
+
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
+
   } catch (e: any) {
     logger.error(`ERROR: ${e.message}`);
   }

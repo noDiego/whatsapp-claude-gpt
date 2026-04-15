@@ -1,5 +1,5 @@
 import logger from '../logger';
-import { Chat, Message } from 'whatsapp-web.js';
+import { Chat, Message } from "whatsapp-library.js";
 import { Readable } from 'stream';
 import { AIConfig, CONFIG } from '../config';
 import { AIAnswer, AIRole } from "../interfaces/ai-interfaces";
@@ -501,10 +501,10 @@ export function convertCompletionsToolsToResponses(tools) {
     }
 
     if (!out.name) {
-      console.warn(`Tool at index ${idx} is missing a function name after conversion.`);
+      logger.warn(`Tool at index ${idx} is missing a function name after conversion.`);
     }
     if (!out.parameters) {
-      console.warn(`Tool "${out.name || idx}" is missing parameters schema after conversion.`);
+      logger.warn(`Tool "${out.name || idx}" is missing parameters schema after conversion.`);
     }
 
     return out;

@@ -12,18 +12,27 @@ import Roboto from "../bot/roboto";
 import WspWeb from "../bot/wsp-web";
 import { db } from "../db";
 import { and, eq } from "drizzle-orm";
-import { Chat, Message } from "whatsapp-web.js";
+import { Chat, Message } from "whatsapp-library.js";
 
 class ReminderManager {
+
+    private reminderInterval: NodeJS.Timeout | null = null;
 
     constructor() {
         this.startReminderChecker();
     }
 
     private startReminderChecker() {
-        setInterval(() => {
+        this.reminderInterval = setInterval(() => {
             this.checkReminders();
         }, 59 * 1000);
+    }
+
+    public stopReminderChecker() {
+        if (this.reminderInterval) {
+            clearInterval(this.reminderInterval);
+            this.reminderInterval = null;
+        }
     }
 
     private async checkReminders() {
@@ -46,6 +55,9 @@ class ReminderManager {
             try {
                 const diffMs = now.getTime() - scheduledDate.getTime();
                 if((diffMs / 60000) <= 60) {
+                    if (diffMs > 60000) {
+                        logger.warn(`Reminder for ${reminder.chatId} (${reminder.id}) is firing ${Math.round(diffMs / 60000)} minute(s) late.`);
+                    }
                     await this.sendReminderMessage(reminder);
                 } else {
                     logger.info(`Reminder for ${reminder.chatName} has expired. Reminder not sent`);

@@ -1,4 +1,4 @@
-import { Chat, Client, Message, MessageMedia, MessageTypes } from "whatsapp-web.js";
+import { Chat, Client, Message, MessageMedia, MessageTypes } from "whatsapp-library.js";
 import { AIContent, AiMessage, AIRole } from "../interfaces/ai-interfaces";
 import { bufferToStream, getAuthorId, getFormattedDate, getUnsupportedMessage, getUserName } from "../utils";
 import logger from "../logger";
@@ -12,7 +12,8 @@ class WspWeb {
   private msgMediaCache: NodeCache = new NodeCache();
   private transcribedMessagesCache: NodeCache = new NodeCache();
   private wspClient: Client;
-  private lastProcessed = new Map();
+  private lastProcessed = new Map<string, string>();
+  private readonly MAX_LAST_PROCESSED = 500;
 
   constructor() {
   }
@@ -33,7 +34,7 @@ class WspWeb {
 
     if(chatCached && !chatData.isGroup) {
       const aiMessage = await this.convertWspMsgToAiMsg(wspMessage, chatCfg.botName);
-      this.lastProcessed.set(chatData.id._serialized, wspMessage.id._serialized);
+      this.setLastProcessed(chatData.id._serialized, wspMessage.id._serialized);
       return [aiMessage];
     }
 
@@ -55,8 +56,16 @@ class WspWeb {
       }
     }
 
-    this.lastProcessed.set(chatData.id._serialized, wspMessage.id._serialized);
+    this.setLastProcessed(chatData.id._serialized, wspMessage.id._serialized);
     return messageList.reverse() || [];
+  }
+
+  private setLastProcessed(chatId: string, messageId: string) {
+    if (this.lastProcessed.size >= this.MAX_LAST_PROCESSED) {
+      const firstKey = this.lastProcessed.keys().next().value;
+      this.lastProcessed.delete(firstKey);
+    }
+    this.lastProcessed.set(chatId, messageId);
   }
 
   async extractMedia(wspMsg: Message): Promise<{errorMedia: string, mediaData: MessageMedia}> {

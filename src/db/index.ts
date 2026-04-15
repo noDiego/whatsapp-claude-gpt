@@ -6,5 +6,6 @@ import * as schema from './schema';
 ensureTablesExist();
 
 
-const sqliteDB: Database = sqlite('roboto.sqlite');
-export const db = drizzle(sqliteDB, { schema });
+const sqliteDB = new sqlite('roboto.sqlite');
+
+export const db = drizzle({ client: sqliteDB, schema });

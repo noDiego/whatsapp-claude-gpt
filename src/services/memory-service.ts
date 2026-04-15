@@ -286,9 +286,9 @@ class MemoryServiceClass {
         return {
             group_interests: this.jsonToArray(row.groupInterests),
             recurring_topics: this.jsonToArray(row.recurringTopics),
-            group_likes: this.jsonToArray(row.recurringTopics),
-            group_dislikes: this.jsonToArray(row.recurringTopics),
-            group_jargon: row.relationships ? JSON.parse(row.groupJargon) : {},
+            group_likes: this.jsonToArray(row.groupLikes),
+            group_dislikes: this.jsonToArray(row.groupDislikes),
+            group_jargon: row.groupJargon ? JSON.parse(row.groupJargon) : {},
             group_running_jokes: this.jsonToArray(row.groupRunningJokes),
             group_notes: this.jsonToArray(row.groupNotes)
         };
