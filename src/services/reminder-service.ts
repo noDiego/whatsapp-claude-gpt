@@ -14,6 +14,8 @@ import { db } from "../db";
 import { and, eq } from "drizzle-orm";
 import { Chat, Message } from "whatsapp-web.js";
 import { requestAppRestart } from "../utils/restart";
+import OpenAISvc from "./openai-service";
+import { convertIaMessagesLang } from "../bot/message-conversion";
 
 class ReminderManager {
 
@@ -83,7 +85,7 @@ class ReminderManager {
     private async sendReminderMessage(reminder: Reminder){
 
         const chatConfig = await chatConfigurationManager.getChatConfig(reminder.chatId, reminder.chatName);
-        const systemPrompt = CONFIG.getSystemPrompt(chatConfig);
+        const systemPrompt = `SYSTEM: Eres un amistoso bot que entrega recordatorios, siempre habla en español.`;
 
         const aiMessage: AiMessage = {
             role: AIRole.USER,
@@ -95,8 +97,9 @@ class ReminderManager {
                 author_id: 'SYSTEM'
             }]
         };
-        const aiResponse = await Roboto.sendMessageToAi([aiMessage], systemPrompt, chatConfig, false);
-        const reminderMsg = extractAnswer(aiResponse, chatConfig.botName);
+        const messagesList = convertIaMessagesLang([aiMessage]) as any;
+        const aiResponse = await OpenAISvc.sendToResponsesAPI(messagesList,'text', [], systemPrompt);
+        const reminderMsg = extractAnswer(aiResponse.output_text, chatConfig.botName);
         if (!reminderMsg || !reminderMsg.message) return false;
         return WspWeb.getWspClient().sendMessage(reminder.chatId, reminderMsg.message);
     }

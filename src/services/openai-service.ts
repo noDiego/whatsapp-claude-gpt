@@ -87,7 +87,7 @@ class OpenaiService {
   }
 
 
-  private async sendToResponsesAPI(
+  public async sendToResponsesAPI(
       messageList: ResponseInput,
       responseType: 'json_object'|'text' = 'json_object',
       tools: Array<Tool>,
@@ -108,9 +108,11 @@ class OpenaiService {
       if(hasSystemMsg) messageList.shift();
       messageList.unshift({role: AIRole.SYSTEM, content: systemPrompt});
     }
+    const model = !tools || tools.length == 0? 'gpt-5.4-mini' : AIConfig.ChatConfig.model;
 
-    const responseResult = await client.responses.create({
-      model: AIConfig.ChatConfig.model,
+
+    const body: any = {
+      model,
       input: messageList,
       text: {
         format: { type: responseType },
@@ -121,7 +123,19 @@ class OpenaiService {
           : undefined,
       tools,
       store: true
-    } as any);
+    };
+
+    logger.debug(JSON.stringify({
+      modell: body.modell,
+      text: {
+        format: body.text.format,
+        verbosity: body.verbosity,
+      },
+      reasoning: body.reasoning
+    }));
+
+
+    const responseResult = await client.responses.create(body);
 
     logger.debug(`[OpenAI] ResponsesAPI Usage: Input=${responseResult.usage.input_tokens}` + ` Cached=${responseResult.usage.input_tokens_details?.cached_tokens}` + ` Output=${responseResult.usage.output_tokens}`);
     logger.debug('[OpenAI] ResponsesAPI Response:' + sanitizeLogImages(JSON.stringify(responseResult.output_text)));
@@ -215,7 +229,7 @@ class OpenaiService {
     const isMini = AIConfig.ImageConfig.model.includes("mini");
 
     const baseParams: any = {
-      input_fidelity: isEdit && !isMini? CONFIG.ImageConfig.input_fidelity: undefined,
+//      input_fidelity: isEdit && !isMini? CONFIG.ImageConfig.input_fidelity: undefined,
       model: AIConfig.ImageConfig.model,
       prompt: params.prompt,
       n: params.n ?? 1,
