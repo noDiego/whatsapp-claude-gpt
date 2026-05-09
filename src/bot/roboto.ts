@@ -48,7 +48,7 @@ class RobotoClass {
       const contactData = await wspMessage.getContact();
       const chatConfig = await chatConfigurationManager.getChatConfig(chatData.id._serialized, chatData.name);
       const botName = chatConfig.botName;
-      const isAdmin = CONFIG.BotConfig.adminNumbers.includes(contactData.number);
+      const isAdmin = CONFIG.BotConfig.adminNumbers.includes(contactData.id.user);
 
       if (this.isCommand(wspMessage, isAdmin)) return this.commandSelect(wspMessage, chatId, isAdmin);
 
@@ -162,10 +162,10 @@ class RobotoClass {
     const contactData = await wspMessage.getContact();
 
     if(process.env.DEBUG == "1") {
-      if (!CONFIG.BotConfig.adminNumbers.includes(contactData.number)) return false;
+      if (!CONFIG.BotConfig.adminNumbers.includes(contactData.id.user)) return false;
     }
-    if(CONFIG.BotConfig.restrictedNumbers.includes(contactData.number)){
-      logger.debug(`Number ${contactData.number} is in the restricted list. Message ignored`);
+    if(CONFIG.BotConfig.restrictedNumbers.includes(contactData.id.user)){
+      logger.debug(`Number ${contactData.id.user} is in the restricted list. Message ignored`);
       return false;
     }
 
@@ -511,7 +511,7 @@ class RobotoClass {
         ];
 
         if (chat.isGroup) {
-          commands.push("• *-memory group*: Shows group memory");
+          commands.push("• *-memory egroup*: Shows group memory");
           commands.push("• *-memory cleargroup*: Clears group memory");
         }
 
