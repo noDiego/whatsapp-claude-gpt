@@ -93,8 +93,11 @@ class OpenaiService {
       tools: Array<Tool>,
       systemPrompt?: string
   ): Promise<OpenAI.Responses.Response> {
-    logger.info(`[OpenAI] Sending ${countMessages(messageList)} messages`);
-    logger.debug(`[OpenAI] Sending Msg: ${sanitizeLogImages(JSON.stringify(messageList[messageList.length - 1]))}`);
+
+    const model = !tools || tools.length == 0? 'gpt-5.4-mini' : AIConfig.ChatConfig.model;
+
+    logger.info(`[OpenAI] (${model}) Sending ${countMessages(messageList)} messages`);
+    logger.debug(`[OpenAI] (${model}) Sending Msg: ${sanitizeLogImages(JSON.stringify(messageList[messageList.length - 1]))}`);
 
     const reasoningProfile = getReasoningProfile(AIConfig.ChatConfig.model);
 
@@ -108,7 +111,6 @@ class OpenaiService {
       if(hasSystemMsg) messageList.shift();
       messageList.unshift({role: AIRole.SYSTEM, content: systemPrompt});
     }
-    const model = !tools || tools.length == 0? 'gpt-5.4-mini' : AIConfig.ChatConfig.model;
 
 
     const body: any = {

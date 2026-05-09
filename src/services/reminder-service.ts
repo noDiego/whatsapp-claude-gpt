@@ -99,9 +99,9 @@ class ReminderManager {
         };
         const messagesList = convertIaMessagesLang([aiMessage]) as any;
         const aiResponse = await OpenAISvc.sendToResponsesAPI(messagesList,'text', [], systemPrompt);
-        const reminderMsg = extractAnswer(aiResponse.output_text, chatConfig.botName);
-        if (!reminderMsg || !reminderMsg.message) return false;
-        return WspWeb.getWspClient().sendMessage(reminder.chatId, reminderMsg.message);
+        const reminderMsg = aiResponse.output_text;
+        if (!reminderMsg) return false;
+        return WspWeb.getWspClient().sendMessage(reminder.chatId, reminderMsg);
     }
 
     /**
@@ -157,9 +157,9 @@ class ReminderManager {
         const wspMsg: Message = await WspWeb.getWspClient().getMessageById(msg_id)
         const chatData: Chat = await wspMsg.getChat();
         const chatId = chatData.id._serialized;
-        const chatName = chatData.name ?? await getUserName(wspMsg);
+        const chatName = await getUserName(wspMsg);
         let responseMessage = '';
-        let reminder;
+        let reminder: Reminder;
 
         switch (action) {
             case 'list':
