@@ -1,6 +1,8 @@
 import makeWASocket, {
+  Browsers,
   DisconnectReason,
   downloadMediaMessage,
+  fetchLatestWaWebVersion,
   getContentType,
   isJidBroadcast,
   isJidNewsletter,
@@ -29,6 +31,7 @@ import { MessageStore, messageStore as globalMessageStore } from './message-stor
 import { normalizeWAMessage } from './baileys-message-normalizer';
 
 const AUTH_DIR = process.env.BAILEYS_AUTH_DIR || 'session-baileys';
+const PAIRING_CODE_PHONE = process.env.BAILEYS_PAIRING_CODE_PHONE || process.env.WHATSAPP_PAIRING_CODE_PHONE;
 
 
 export const MessageTypes = {
@@ -163,23 +166,45 @@ class WhatsAppClientRuntime {
   private readonly groupCache = new NodeCache({ stdTTL: 300 });
   private readonly contactCache = new NodeCache({ stdTTL: 3600 });
   private isReconnecting = false;
+  private pairingCodeRequested = false;
 
   async connect() {
     logger.info('Starting WhatsApp client...');
     const auth = await this.authStore.load();
+
+    if (!this.authStore.isRegistered()) {
+      logger.info('No valid WhatsApp session found yet. Waiting for QR or pairing code.');
+    }
+
     await this.createSocket(auth);
   }
 
   private async createSocket(auth: any) {
+    if (this.socket) {
+      try { this.socket.end(undefined); } catch { /* ignore */ }
+      this.socket = null;
+    }
+
     const baileysLogger = pino({ level: process.env.LOG_LEVEL ?? 'warn' });
+    let version: [number, number, number] | undefined;
+
+    try {
+      const latest = await fetchLatestWaWebVersion({});
+      version = latest.version;
+      logger.info(`Using WhatsApp Web version ${version.join('.')} (latest=${latest.isLatest})`);
+    } catch (error: any) {
+      logger.warn(`Could not fetch latest WhatsApp Web version. Falling back to Baileys defaults: ${error?.message || error}`);
+    }
 
     this.socket = makeWASocket({
       auth,
+      browser: Browsers.appropriate('Chrome'),
       logger: baileysLogger,
       getMessage: async (key: WAMessageKey) => this.messageStore.getProtoMessage(key),
       markOnlineOnConnect: false,
       syncFullHistory: false,
       shouldSyncHistoryMessage: () => false,
+      version,
       cachedGroupMetadata: async (jid: string) => {
         return this.groupCache.get<GroupMetadata>(jid);
       },
@@ -237,15 +262,32 @@ class WhatsAppClientRuntime {
 
   private async handleConnectionUpdate(update: Partial<ConnectionState>) {
     const { connection, lastDisconnect, qr } = update;
+    const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
+    const disconnectMessage =
+      (lastDisconnect?.error as Error | undefined)?.message ||
+      (lastDisconnect?.error as any)?.data?.reason ||
+      'unknown';
 
     if (qr) {
       logger.info('QR Code received, scan please');
       qrcode.generate(qr, { small: true });
     }
 
+    if (
+      this.socket &&
+      PAIRING_CODE_PHONE &&
+      !this.pairingCodeRequested &&
+      !this.authStore.isRegistered() &&
+      !!qr
+    ) {
+      this.pairingCodeRequested = true;
+      void this.requestPairingCodeWithRetry(this.socket);
+    }
+
     if (connection === 'open') {
       logger.info('Client is ready!');
       this.isReconnecting = false;
+      this.pairingCodeRequested = false;
       await this.authStore.flush();
       return;
     }
@@ -254,11 +296,9 @@ class WhatsAppClientRuntime {
       return;
     }
 
-    const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
-
-    if (statusCode === DisconnectReason.loggedOut) {
+    if (statusCode === DisconnectReason.loggedOut && this.authStore.isRegistered()) {
       logger.error('Authentication lost or logged out. A new QR scan is required.');
-      await this.authStore.flush();
+      await this.authStore.reset();
       return;
     }
 
@@ -267,9 +307,58 @@ class WhatsAppClientRuntime {
     }
 
     this.isReconnecting = true;
-    logger.warn(`Connection closed (${statusCode ?? 'unknown'}). Reconnecting...`);
-    await this.authStore.flush();
+    logger.warn(`Connection closed (${statusCode ?? 'unknown'}: ${disconnectMessage}). Reconnecting...`);
+
+    if (!this.authStore.isRegistered()) {
+      logger.warn('Incomplete auth state detected after connection failure. Resetting session state before reconnect.');
+      await this.authStore.reset();
+      this.pairingCodeRequested = false;
+    } else {
+      await this.authStore.flush();
+    }
+
+    this.isReconnecting = false;
     await this.createSocket(await this.authStore.load());
+  }
+
+  private async requestPairingCodeWithRetry(socket: WASocket) {
+    const maxAttempts = 3;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (this.socket !== socket || this.authStore.isRegistered()) {
+        return;
+      }
+
+      try {
+        if (attempt > 1) {
+          await new Promise(resolve => setTimeout(resolve, 1500 * (attempt - 1)));
+        }
+
+        const code = await socket.requestPairingCode(PAIRING_CODE_PHONE);
+
+        if (this.socket !== socket) {
+          return;
+        }
+
+        logger.info(`Pairing code for ${PAIRING_CODE_PHONE}: ${code}`);
+        return;
+      } catch (error: any) {
+        const message = error?.message || String(error);
+        const status = error?.output?.statusCode;
+        const isRetryable =
+          status === DisconnectReason.connectionClosed ||
+          status === DisconnectReason.connectionLost ||
+          /Connection Closed/i.test(message);
+
+        if (attempt === maxAttempts || !isRetryable || this.socket !== socket) {
+          this.pairingCodeRequested = false;
+          logger.error(`Could not request pairing code: ${message}`);
+          return;
+        }
+
+        logger.warn(`Pairing code request failed (${message}). Retrying...`);
+      }
+    }
   }
 
   private async handleMessagesUpsert(event: { messages: WAMessage[]; type: string }) {

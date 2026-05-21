@@ -92,6 +92,20 @@ export class BaileysAuthStore {
     this.scheduleSave();
   }
 
+  isRegistered() {
+    return !!this.state.creds?.registered && !!this.state.creds?.account;
+  }
+
+  async reset() {
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+
+    this.state = emptyState();
+    await this.flush();
+  }
+
   async flush() {
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);
