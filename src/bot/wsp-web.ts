@@ -1,112 +1,121 @@
-import { Chat, Client, Message, MessageMedia, MessageTypes } from "whatsapp-web.js";
 import { AIContent, AiMessage, AIRole } from "../interfaces/ai-interfaces";
-import { bufferToStream, getAuthorId, getFormattedDate, getUnsupportedMessage, getUserName } from "../utils";
+import { bufferToStream, getFormattedDate, getUnsupportedMessage, getUserNameFromWhatsAppMessage } from "../utils";
 import logger from "../logger";
 import NodeCache from "node-cache";
 import OpenAISvc from "../services/openai-service";
 import { CONFIG } from "../config";
-import { Array } from "openai/internal/builtin-types";
 import { ChatConfiguration, chatConfigurationManager } from "../config/chat-configurations";
+import { ClientChat as Chat, ClientMessage as Message, getWhatsAppClient } from "./whatsapp-client";
+import { WhatsAppMedia, WhatsAppMessage } from "./whatsapp-types";
+import { normalizeWAMessage } from "./baileys-message-normalizer";
+import { messageStore } from "./message-store";
 
-class WspWeb {
+class WhatsAppMessageService {
   private msgMediaCache: NodeCache = new NodeCache();
   private transcribedMessagesCache: NodeCache = new NodeCache();
-  private wspClient: Client;
-  private lastProcessed = new Map();
+  private lastProcessed = new Map<string, string>();
 
-  constructor() {
-  }
+  public async generateMessageArray(wspMessage: WhatsAppMessage | Message, chatData: Chat, chatCfg: ChatConfiguration, chatCached: boolean): Promise<AiMessage[]> {
+    const currentMsg = 'raw' in wspMessage ? normalizeWAMessage(wspMessage.raw) : wspMessage;
+    const chatId = currentMsg.chatId;
+    const isGroup = chatId.endsWith('@g.us');
+    const lastChatMsgProcessed = this.lastProcessed.get(chatId);
 
-  public async generateMessageArray(wspMessage: Message, chatData: Chat, chatCfg: ChatConfiguration, chatCached: boolean): Promise<AiMessage[]> {
+    const rawMessages = messageStore.getRecentMessages(chatId, chatCfg.maxMsgsLimit);
+    const messages = rawMessages.map(normalizeWAMessage);
 
-    const messageList: AiMessage[] = [];
-    const lastChatMsgProcessed = this.lastProcessed.get(chatData.id._serialized);
+    const resetIndex = messages.map(m => m.body).lastIndexOf('-reset');
+    const messagesToProcess = resetIndex >= 0 ? messages.slice(resetIndex + 1) : messages;
 
-    const fetchedMessages = await chatData.fetchMessages({limit: chatCfg.maxMsgsLimit});
+    const currentIdx = messagesToProcess.findIndex(m => m.id === currentMsg.id);
+    const endIdx = currentIdx !== -1 ? currentIdx : messagesToProcess.length - 1;
+    const messagesToProcessFiltered = messagesToProcess.slice(0, endIdx + 1);
 
-    const resetIndex = fetchedMessages.map(msg => msg.body).lastIndexOf("-reset");
-    const messagesToProcess = resetIndex >= 0 ? fetchedMessages.slice(resetIndex + 1) : fetchedMessages;
-
-    const wspMessageIndex = messagesToProcess.findIndex(msg => msg.id._serialized === wspMessage.id._serialized);
-    const startIndex = wspMessageIndex !== -1 ? wspMessageIndex : 0;
-    const messagesToProcessFiltered = messagesToProcess.slice(0, startIndex + 1);
-
-    if(chatCached && !chatData.isGroup) {
-      const aiMessage = await this.convertWspMsgToAiMsg(wspMessage, chatCfg.botName);
-      this.lastProcessed.set(chatData.id._serialized, wspMessage.id._serialized);
+    if (chatCached && !isGroup) {
+      const aiMessage = await this.convertWspMsgToAiMsg(currentMsg, chatCfg.botName);
+      this.lastProcessed.set(chatId, currentMsg.id);
       return [aiMessage];
     }
 
-    for (const msg of messagesToProcessFiltered.reverse()) {
+    const messageList: AiMessage[] = [];
+
+    for (const msg of [...messagesToProcessFiltered].reverse()) {
       try {
         const actualDate = new Date();
         const msgDate = new Date(msg.timestamp * 1000);
 
         if ((actualDate.getTime() - msgDate.getTime()) / (1000 * 60 * 60) > chatCfg.maxHoursLimit) break;
-        if (lastChatMsgProcessed == msg.id._serialized ) break;
+        if (lastChatMsgProcessed === msg.id) break;
         if (chatCached && msg.fromMe) break;
-        if (wspMessage.timestamp < msg.timestamp) continue;
+        if (currentMsg.timestamp < msg.timestamp) continue;
 
-        const aiMessage = await this.convertWspMsgToAiMsg(msg, chatCfg.botName);
-
+        const aiMessage = await this.convertNormalizedMsgToAiMsg(msg, chatCfg.botName);
         messageList.push(aiMessage);
       } catch (e: any) {
         logger.error(`Error reading message - msg.type:${msg.type}; msg.body:${msg.body}. Error:${e.message}`);
       }
     }
 
-    this.lastProcessed.set(chatData.id._serialized, wspMessage.id._serialized);
+    this.lastProcessed.set(chatId, currentMsg.id);
     return messageList.reverse() || [];
   }
 
-  async extractMedia(wspMsg: Message): Promise<{errorMedia: string, mediaData: MessageMedia}> {
+  public async extractMedia(wspMsg: WhatsAppMessage | Message): Promise<{ errorMedia: string | null, mediaData: WhatsAppMedia | null }> {
+    const msg = 'raw' in wspMsg ? normalizeWAMessage(wspMsg.raw) : wspMsg;
+    let mediaData: WhatsAppMedia | null = this.msgMediaCache.get<WhatsAppMedia>(msg.id) ?? null;
+    const isImage = msg.type === 'image' || msg.type === 'sticker';
 
-    const mediaData: MessageMedia = this.msgMediaCache.get<MessageMedia>(wspMsg.id._serialized) ?? await wspMsg.downloadMedia();
-    const isImage = wspMsg.type === MessageTypes.IMAGE || wspMsg.type === MessageTypes.STICKER
+    if (!mediaData) {
+      mediaData = await getWhatsAppClient().downloadMedia(msg.id) ?? null;
+    }
 
     if (mediaData) {
-      if(!mediaData.mimetype.startsWith('image') && mediaData.mimetype != 'application/pdf')
-          return { errorMedia: 'type', mediaData: null};
+      if (!mediaData.mimetype.startsWith('image') && mediaData.mimetype !== 'application/pdf')
+        return { errorMedia: 'type', mediaData: null };
 
       const sizeInMB = Buffer.from(mediaData.data, 'base64').length / (1024 * 1024);
       const maxMB = isImage
-          ? CONFIG.BotConfig.maxImageSizeMB
-          : CONFIG.BotConfig.maxDocumentSizeMB;
+        ? CONFIG.BotConfig.maxImageSizeMB
+        : CONFIG.BotConfig.maxDocumentSizeMB;
 
       if (sizeInMB > maxMB) {
         logger.warn(`Rejected file: ${sizeInMB.toFixed(2)}MB (limit: ${maxMB}MB)`);
-        return { errorMedia: 'size', mediaData: null};
+        return { errorMedia: 'size', mediaData: null };
       }
-      this.msgMediaCache.set(wspMsg.id._serialized, mediaData, CONFIG.BotConfig.nodeCacheTime);
-      return { errorMedia:null, mediaData };
+      this.msgMediaCache.set(msg.id, mediaData, CONFIG.BotConfig.nodeCacheTime);
+      return { errorMedia: null, mediaData };
     }
-    return { errorMedia:null, mediaData: null };
+    return { errorMedia: null, mediaData: null };
   }
 
-  public async convertWspMsgToAiMsg(wspMsg: Message, inputBotName?: string): Promise<AiMessage> {
-    let mediaData: MessageMedia = this.msgMediaCache.get<any>(wspMsg.id._serialized);
-    let errorMedia = null;
-    const chat = await wspMsg.getChat();
-    const msgDate = new Date(wspMsg.timestamp * 1000);
-    const author_id = getAuthorId(wspMsg);
-    const botName = inputBotName ?? (await chatConfigurationManager.getChatConfig(chat.id._serialized, chat.name)).botName;
-    const quoted_msg_id = wspMsg.hasQuotedMsg? (await wspMsg.getQuotedMessage()).id._serialized : undefined;
+  public async convertWspMsgToAiMsg(wspMsg: WhatsAppMessage | Message, inputBotName?: string): Promise<AiMessage> {
+    const normalized = 'raw' in wspMsg ? normalizeWAMessage(wspMsg.raw) : wspMsg;
+    return this.convertNormalizedMsgToAiMsg(normalized, inputBotName);
+  }
 
-    const isImage = wspMsg.type === MessageTypes.IMAGE || wspMsg.type === MessageTypes.STICKER;
-    const isSticker = wspMsg.type === MessageTypes.STICKER;
-    const isAudio = wspMsg.type === MessageTypes.VOICE || wspMsg.type === MessageTypes.AUDIO;
-    const isDocument = wspMsg.type === MessageTypes.DOCUMENT;
+  private async convertNormalizedMsgToAiMsg(wspMsg: WhatsAppMessage, inputBotName?: string): Promise<AiMessage> {
+    let mediaData: WhatsAppMedia | null = this.msgMediaCache.get<WhatsAppMedia>(wspMsg.id) ?? null;
+    let errorMedia: string | null = null;
+    const msgDate = new Date(wspMsg.timestamp * 1000);
+    const author_id = wspMsg.authorId;
+    const botName = inputBotName ?? (await chatConfigurationManager.getChatConfig(wspMsg.chatId)).botName;
+    const quoted_msg_id = wspMsg.quotedMsgId;
+
+    const isImage = wspMsg.type === 'image' || wspMsg.type === 'sticker';
+    const isSticker = wspMsg.type === 'sticker';
+    const isAudio = wspMsg.type === 'voice' || wspMsg.type === 'audio';
+    const isDocument = wspMsg.type === 'document';
 
     if (!mediaData && (isImage || isDocument)) {
-      ({mediaData, errorMedia} = await this.extractMedia(wspMsg));
+      ({ mediaData, errorMedia } = await this.extractMedia(wspMsg));
     }
 
-    const isOther = (!isImage && !isDocument && !isAudio && wspMsg.type != 'chat') || errorMedia == 'type';
+    const isOther = (!isImage && !isDocument && !isAudio && wspMsg.type !== 'chat') || errorMedia === 'type';
 
     const role = (!wspMsg.fromMe || isImage) ? AIRole.USER : AIRole.ASSISTANT;
-    const name = wspMsg.fromMe ? botName : (await getUserName(wspMsg));
+    const name = wspMsg.fromMe ? botName : (await getUserNameFromWhatsAppMessage(wspMsg));
 
-    const content: Array<AIContent> = [];
+    const content: AIContent[] = [];
 
     if (isImage) {
       if (mediaData) {
@@ -114,102 +123,92 @@ class WspWeb {
           type: 'image',
           value: mediaData.data,
           mimetype: mediaData.mimetype,
-          msg_id: wspMsg.id._serialized,
+          msg_id: wspMsg.id,
           quoted_msg_id,
-          filename: isSticker? 'sticker':'image',
+          filename: isSticker ? 'sticker' : 'image',
           author_id,
-          dateString: getFormattedDate(msgDate)
+          dateString: getFormattedDate(msgDate),
         });
       } else {
         content.push({
           type: 'text',
-          msg_id: wspMsg.id._serialized,
+          msg_id: wspMsg.id,
           quoted_msg_id,
           value: '<Unprocessed image>',
           author_id,
-          dateString: getFormattedDate(msgDate)
+          dateString: getFormattedDate(msgDate),
         });
       }
     }
 
     if (isAudio) {
-        content.push({
-          type: 'ASR',
-          msg_id: wspMsg.id._serialized,
-          quoted_msg_id,
-          value: await this.transcribeVoice(wspMsg),
-          author_id,
-          dateString: getFormattedDate(msgDate)
-        });
+      content.push({
+        type: 'ASR',
+        msg_id: wspMsg.id,
+        quoted_msg_id,
+        value: await this.transcribeVoice(wspMsg),
+        author_id,
+        dateString: getFormattedDate(msgDate),
+      });
     }
 
-    if (isDocument) {
+    if (isDocument && mediaData) {
       content.push({
         type: 'file',
-        msg_id: wspMsg.id._serialized,
+        msg_id: wspMsg.id,
         quoted_msg_id,
         mimetype: mediaData.mimetype,
         filename: mediaData.filename,
         value: mediaData.data,
         author_id,
-        dateString: getFormattedDate(msgDate)
+        dateString: getFormattedDate(msgDate),
       });
     }
 
-    if (errorMedia || (isOther && !mediaData)){
+    if (errorMedia || (isOther && !mediaData)) {
       let errorMessage = getUnsupportedMessage(wspMsg.type, wspMsg.body);
-      if(errorMedia == 'size') errorMessage = `SYSTEM:⚠️ The file could not be processed because it exceeds the maximum allowed size (${isImage?CONFIG.BotConfig.maxImageSizeMB:CONFIG.BotConfig.maxDocumentSizeMB}MB).`
+      if (errorMedia === 'size')
+        errorMessage = `SYSTEM:⚠️ The file could not be processed because it exceeds the maximum allowed size (${isImage ? CONFIG.BotConfig.maxImageSizeMB : CONFIG.BotConfig.maxDocumentSizeMB}MB).`;
       content.push({
         type: 'text',
-        msg_id: wspMsg.id._serialized,
+        msg_id: wspMsg.id,
         quoted_msg_id,
         value: errorMessage,
         author_id,
-        dateString: getFormattedDate(new Date(wspMsg.timestamp * 1000))
+        dateString: getFormattedDate(msgDate),
       });
     }
 
     if (wspMsg.body && !isOther) {
       content.push({
         type: 'text',
-        msg_id: wspMsg.id._serialized,
+        msg_id: wspMsg.id,
         quoted_msg_id,
         value: wspMsg.body,
         author_id,
-        dateString: getFormattedDate(msgDate)
+        dateString: getFormattedDate(msgDate),
       });
     }
 
-    return {role: role, name: name, content: content};
+    return { role, name, content };
   }
 
-  /**
-   * Transcribes a voice message to text, using cache when possible.
-   *
-   * - Checks NodeCache for existing transcription.
-   * - Converts base64 media to a stream.
-   * - Sends to the configured transcription service (e.g. Whisper).
-   * - Caches the resulting text for future reuse.
-   *
-   * @returns         Promise<string> the transcribed text or error placeholder.
-   * @param wspMsg
-   */
-  private async transcribeVoice(wspMsg: Message): Promise<string> {
+  private async transcribeVoice(wspMsg: WhatsAppMessage): Promise<string> {
     try {
+      const cached = this.transcribedMessagesCache.get<string>(wspMsg.id);
+      if (cached) return cached;
 
-      let transcribedText = this.transcribedMessagesCache.get<string>(wspMsg.id._serialized);
-      if(transcribedText) return transcribedText;
+      const media = await getWhatsAppClient().downloadMedia(wspMsg.id);
+      if (!media) return '<Error transcribing voice message>';
 
-      const media = await wspMsg.downloadMedia();
       const audioBuffer = Buffer.from(media.data, 'base64');
       const audioStream = bufferToStream(audioBuffer);
 
       logger.debug(`[OpenAI->transcribeVoice] Starting audio transcription`);
-      transcribedText = await OpenAISvc.transcription(audioStream);
+      const transcribedText = await OpenAISvc.transcription(audioStream);
       logger.debug(`[OpenAI->transcribeVoice] Transcribed text: ${transcribedText}`);
 
-      this.transcribedMessagesCache.set<string>(wspMsg.id._serialized,transcribedText, CONFIG.BotConfig.nodeCacheTime);
-
+      this.transcribedMessagesCache.set<string>(wspMsg.id, transcribedText, CONFIG.BotConfig.nodeCacheTime);
       return transcribedText;
     } catch (error: any) {
       logger.error(`Error transcribing voice message: ${error.message}`);
@@ -218,19 +217,10 @@ class WspWeb {
   }
 
   public returnResponse(message: Message, responseMsg: string, isGroup: boolean) {
-    if (isGroup) return message.reply(responseMsg, null, {linkPreview: false});
-    else return this.wspClient.sendMessage(message.from, responseMsg, {linkPreview: false});
+    if (isGroup) return message.reply(responseMsg, null, { linkPreview: false });
+    else return getWhatsAppClient().sendMessage(message.from, responseMsg, { linkPreview: false });
   }
-
-  public setWspClient(client) {
-    this.wspClient = client;
-  }
-
-  public getWspClient(): Client {
-    return this.wspClient;
-  }
-
 }
 
-const WhatsappHandler = new WspWeb();
-export default WhatsappHandler;
+const whatsappMessageService = new WhatsAppMessageService();
+export default whatsappMessageService;

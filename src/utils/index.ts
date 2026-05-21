@@ -1,8 +1,32 @@
 import logger from '../logger';
-import { Chat, Message } from 'whatsapp-web.js';
 import { Readable } from 'stream';
 import { AIConfig, CONFIG } from '../config';
 import { AIAnswer, AIRole } from "../interfaces/ai-interfaces";
+import { WhatsAppChat, WhatsAppMessage } from "../bot/whatsapp-types";
+
+type LegacyMessageLike = {
+  author?: string;
+  body?: string;
+  timestamp?: number;
+  getContact?: () => Promise<{
+    shortName?: string;
+    name?: string;
+    pushname?: string;
+    number?: string;
+  }>;
+  id?: {
+    _serialized?: string;
+    remote?: string;
+    participant?: string;
+  };
+};
+
+type LegacyChatLike = Pick<WhatsAppChat, 'isGroup'> & {
+  id?: {
+    _serialized?: string;
+  };
+  name?: string;
+};
 
 export function getFormattedDate(date?: Date) {
   const now = date || new Date();
@@ -28,7 +52,7 @@ export function getFormattedDate(date?: Date) {
   return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offsetString} (${weekdayShort})`;
 }
 
-export function logMessage(message: Message, chat: Chat) {
+export function logMessage(message: LegacyMessageLike, chat: LegacyChatLike) {
   const msgDate = new Date(message.timestamp * 1000);
   logger.info(
       `[ReceivedMessage] {msg:'${message.body}', author:${getAuthorId(message)}, isGroup:${chat.isGroup}, chatId:${chat.id._serialized}, grName:${chat.name}, date:'${getFormattedDate(msgDate)}'}`
@@ -55,7 +79,18 @@ export function parseCommand(input: string): { command?: string, commandMessage?
   return {command: match[1].trim(), commandMessage: match[2].trim()};
 }
 
-export async function getUserName(message: Message) {
+export async function getUserNameFromWhatsAppMessage(msg: WhatsAppMessage): Promise<string> {
+  if (CONFIG.BotConfig.useContactNames) {
+    const { getWhatsAppClient } = await import('../bot/whatsapp-client');
+    const contact = await getWhatsAppClient().getContact(msg.authorId, msg.pushName);
+    const name = (contact as any).shortName || (contact as any).name || (contact as any).pushname || (contact as any).number;
+    return removeNonAlphanumeric(name || '');
+  }
+  const name = msg.pushName || msg.authorId.split('@')[0];
+  return removeNonAlphanumeric(name);
+}
+
+export async function getUserName(message: LegacyMessageLike) {
   const contactInfo = await message.getContact();
   const name = CONFIG.BotConfig.useContactNames? contactInfo.shortName || contactInfo.name || contactInfo.pushname || contactInfo.number :
       contactInfo.pushname || contactInfo.number;
@@ -454,7 +489,7 @@ export function parseIfJson(input: any) {
   return null;
 }
 
-export function getAuthorId(wspMsg: Message): string{
+export function getAuthorId(wspMsg: LegacyMessageLike): string{
   return wspMsg.author || wspMsg.id?.remote || (wspMsg.id as any)?.participant;
 }
 

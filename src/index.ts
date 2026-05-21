@@ -1,8 +1,5 @@
 import logger from './logger';
-import { Client, LocalAuth, Message } from 'whatsapp-web.js';
-import qrcode from 'qrcode-terminal';
-import Roboto from "./bot/roboto";
-import WhatsappHandler from "./bot/wsp-web";
+import { connectWhatsApp } from "./bot/whatsapp-client";
 import { configValidation, logConfigInfo } from "./utils";
 
 require('dotenv').config();
@@ -11,62 +8,7 @@ logConfigInfo();
 
 async function start() {
   try {
-
-    const wspClient = new Client({
-      authStrategy: new LocalAuth({dataPath: 'session'}),
-      puppeteer: {
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--disable-gpu'
-        ],
-      },
-      takeoverTimeoutMs: 40000,
-      qrMaxRetries:5
-    });
-
-    logger.info('Starting WhatsApp client...');
-
-    wspClient.on('qr', qr => {
-      logger.info('QR Code received, scan please');
-      qrcode.generate(qr, { small: true });
-    });
-
-    wspClient.on('authenticated', () => {
-      logger.info('Client authenticated');
-    });
-
-    wspClient.on('auth_failure', async (msg) => {
-      logger.error(`Authentication failure: ${msg}`);
-    });
-
-    wspClient.on("ready", async () => {
-      // Patch sendSeen to use markSeen instead (fixes markedUnread error)
-  //     await wspClient.pupPage?.evaluate(`
-  //   window.WWebJS.sendSeen = async (chatId) => {
-  //     const chat = await window.WWebJS.getChat(chatId, { getAsModel: false });
-  //     if (chat) {
-  //       window.Store.WAWebStreamModel.Stream.markAvailable();
-  //       await window.Store.SendSeen.markSeen(chat);
-  //       window.Store.WAWebStreamModel.Stream.markUnavailable();
-  //       return true;
-  //     }
-  //     return false;
-  //   };
-  // `);
-      return logger.info('Client is ready!');
-
-    });
-
-    wspClient.on('message', async (message: Message) => Roboto.readWspMessage(message));
-
-    await wspClient.initialize();
-
-    WhatsappHandler.setWspClient(wspClient);
+    await connectWhatsApp();
   } catch (e: any) {
     logger.error(`ERROR: ${e.message}`);
   }

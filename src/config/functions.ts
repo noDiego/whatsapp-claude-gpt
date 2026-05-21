@@ -1,7 +1,7 @@
 import { AIProvider } from "../interfaces/ai-interfaces";
 import { AIConfig, CONFIG } from "./index";
 import { convertCompletionsToolsToResponses } from "../utils";
-import { Chat } from "whatsapp-web.js";
+import { WhatsAppChat } from "../bot/whatsapp-types";
 
 const generate_speech = {
     type: "function",
@@ -319,7 +319,7 @@ const group_memory_manager = {
     }
 }
 
-export function getTools(chatData: Chat) {
+export function getTools(chatData: Pick<WhatsAppChat, 'isGroup'>) {
 
     const tools = [];
     if(AIConfig.ImageConfig.enabled) tools.push(AIConfig.ImageConfig.catEditImages? generate_image_withedit : generate_image);

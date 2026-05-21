@@ -40,6 +40,8 @@ WhatsApp-Claude-GPT is a WhatsApp chatbot that supports multiple AI providers fo
 Before initializing the bot, make sure you have [Node.js](https://nodejs.org/en/download/) installed.
 (It was tested with Node v22.14.0)
 
+> **Migrating from an older version?** Starting with v1.5.0 the bot uses [Baileys](https://github.com/WhiskeySockets/Baileys) instead of whatsapp-web.js. Baileys connects via WhatsApp's WebSocket protocol — no Puppeteer or Chromium required. Auth data is stored in the directory set by `BAILEYS_AUTH_DIR` (default: `session-baileys`). Old `session/` auth files from whatsapp-web.js are not compatible; you will need to scan the QR code again on first startup.
+
 ## Quick Setup
 
 1. Clone the repository and navigate to the project directory:

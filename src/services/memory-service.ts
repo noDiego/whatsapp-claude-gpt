@@ -5,7 +5,6 @@ import { v4 as uuidv4 } from 'uuid';
 import logger from '../logger';
 import { OperationResult } from '../interfaces/ai-interfaces';
 import { CONFIG } from "../config";
-import WspWeb from "../bot/wsp-web";
 
 interface MemoryData {
     real_name?: string;
@@ -37,9 +36,9 @@ class MemoryServiceClass {
     public async getMemory(chatId: string, authorId?: string): Promise<MemoryData | null> {
         try {
             if (!chatId) return null;
-            const chat = await WspWeb.getWspClient().getChatById(chatId);
+            const isGroup = chatId.endsWith('@g.us');
 
-            if(chat.isGroup && !authorId){
+            if(isGroup && !authorId){
                 const result = await db.select()
                     .from(groupMemoriesTable)
                     .where(eq(groupMemoriesTable.chatId, chatId))
@@ -66,10 +65,10 @@ class MemoryServiceClass {
     // SAVE: Store/update memory (replaces completely)
     public async saveMemory(chatId: string, memoryData: MemoryData, authorId?: string): Promise<boolean> {
         try {
-            const chat = await WspWeb.getWspClient().getChatById(chatId);
+            const isGroup = chatId.endsWith('@g.us');
             const now = new Date().toISOString();
 
-            if (chat.isGroup && !authorId) {
+            if (isGroup && !authorId) {
                 // Group memory
                 const existing = await db.select()
                     .from(groupMemoriesTable)
@@ -146,7 +145,7 @@ class MemoryServiceClass {
                 }
             }
 
-            logger.info(`Memory saved for ${chat.isGroup ? 'group' : 'user'}: ${chatId}`);
+            logger.info(`Memory saved for ${isGroup ? 'group' : 'user'}: ${chatId}`);
             return true;
 
         } catch (error) {
@@ -158,9 +157,9 @@ class MemoryServiceClass {
     // CLEAR: Delete memory
     public async clearMemory(chatId: string, authorId?: string): Promise<boolean> {
         try {
-            const chat = await WspWeb.getWspClient().getChatById(chatId);
+            const isGroup = chatId.endsWith('@g.us');
 
-            if (chat.isGroup && !authorId) {
+            if (isGroup && !authorId) {
                 const result = await db.delete(groupMemoriesTable)
                     .where(eq(groupMemoriesTable.chatId, chatId))
                     .run();
@@ -237,12 +236,11 @@ class MemoryServiceClass {
     // Format memory for system prompt
     public async getMemoryContext(chatId: string, authorId?: string): Promise<string> {
         try {
-            const chat = await WspWeb.getWspClient().getChatById(chatId);
-
+            const isGroup = chatId.endsWith('@g.us');
             const memory = await this.getMemory(chatId, authorId);
             if (!memory) return '';
 
-            return (chat.isGroup ? `**GROUP MEMORY:**\n` : `**USER MEMORY:**\n`) + JSON.stringify(memory);
+            return (isGroup ? `**GROUP MEMORY:**\n` : `**USER MEMORY:**\n`) + JSON.stringify(memory);
 
         } catch (error) {
             logger.error(`Error formatting memory context: ${error.message}`);
@@ -286,9 +284,9 @@ class MemoryServiceClass {
         return {
             group_interests: this.jsonToArray(row.groupInterests),
             recurring_topics: this.jsonToArray(row.recurringTopics),
-            group_likes: this.jsonToArray(row.recurringTopics),
-            group_dislikes: this.jsonToArray(row.recurringTopics),
-            group_jargon: row.relationships ? JSON.parse(row.groupJargon) : {},
+            group_likes: this.jsonToArray(row.groupLikes),
+            group_dislikes: this.jsonToArray(row.groupDislikes),
+            group_jargon: row.groupJargon ? JSON.parse(row.groupJargon) : {},
             group_running_jokes: this.jsonToArray(row.groupRunningJokes),
             group_notes: this.jsonToArray(row.groupNotes)
         };

@@ -5,15 +5,14 @@ import { v4 as uuidv4 } from 'uuid';
 import { format, fromZonedTime, toZonedTime } from 'date-fns-tz';
 import { AiMessage, AIRole, OperationResult } from "../interfaces/ai-interfaces";
 import { chatConfigurationManager } from "../config/chat-configurations";
-import { addSeconds, extractAnswer, getUserName } from "../utils";
+import { addSeconds, extractAnswer } from "../utils";
+import { deserializeMessageId } from "../bot/whatsapp-types";
 import { addDays, addMonths, addWeeks } from 'date-fns';
 import { CONFIG } from "../config";
 import Roboto from "../bot/roboto";
-import WspWeb from "../bot/wsp-web";
+import { getWhatsAppClient } from "../bot/whatsapp-client";
 import { db } from "../db";
 import { and, eq } from "drizzle-orm";
-import { Chat, Message } from "whatsapp-web.js";
-import { requestAppRestart } from "../utils/restart";
 import OpenAISvc from "./openai-service";
 import { convertIaMessagesLang } from "../bot/message-conversion";
 
@@ -74,9 +73,6 @@ class ReminderManager {
                 logger.info(`Reminder for ${reminder.chatId} (${reminder.id}) processed.`);
             } catch (err) {
                 logger.error(`Error processing reminder for ${reminder.chatId}: ${err.message}`);
-                if(err.message?.includes('detached Frame')){
-                    requestAppRestart('Detached Frame Error', err);
-                }
             }
         }
     }
@@ -101,7 +97,7 @@ class ReminderManager {
         const aiResponse = await OpenAISvc.sendToResponsesAPI(messagesList,'text', [], systemPrompt);
         const reminderMsg = aiResponse.output_text;
         if (!reminderMsg) return false;
-        return WspWeb.getWspClient().sendMessage(reminder.chatId, reminderMsg);
+        return getWhatsAppClient().sendMessage(reminder.chatId, reminderMsg);
     }
 
     /**
@@ -154,10 +150,13 @@ class ReminderManager {
         } = args;
 
 
-        const wspMsg: Message = await WspWeb.getWspClient().getMessageById(msg_id)
-        const chatData: Chat = await wspMsg.getChat();
-        const chatId = chatData.id._serialized;
-        const chatName = await getUserName(wspMsg);
+        const wspMsg = await getWhatsAppClient().getMessageById(msg_id);
+        const parsedKey = deserializeMessageId(msg_id);
+        const chatId = wspMsg?.from ?? parsedKey?.chatId ?? '';
+        if (!chatId) return { success: false, result: 'Could not resolve chatId from msg_id' };
+
+        const chatConfig = await chatConfigurationManager.getChatConfig(chatId, '').catch(() => null);
+        const chatName = chatConfig?.name || chatId.split('@')[0];
         let responseMessage = '';
         let reminder: Reminder;
 

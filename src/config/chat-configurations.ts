@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import logger from '../logger';
 import { CONFIG } from './index';
-import WspWeb from "../bot/wsp-web";
+import { getWhatsAppClient } from "../bot/whatsapp-client";
 
 const OLD_CHATCONFIG_FILE = path.join(process.cwd(), 'chat-configurations.json');
 
@@ -49,7 +49,7 @@ class ChatConfig {
   }
 
   private async withDefaults(partial: Partial<ChatConfiguration>, chatId: string): Promise<ChatConfiguration> {
-    const chat = await WspWeb.getWspClient().getChatById(chatId);
+    const chat = await getWhatsAppClient().getChatById(chatId);
     const base: ChatConfiguration = {
       chatId,
       name: chat.name || '<Unnamed>',
@@ -72,7 +72,7 @@ class ChatConfig {
     return result;
   }
 
-  public async getChatConfig(chatId: string, chatName: string): Promise<ChatConfiguration> {
+  public async getChatConfig(chatId: string, chatName?: string): Promise<ChatConfiguration> {
     let found = await db.select().from(chatConfigsTable).where(eq(chatConfigsTable.chatId, chatId)).get();
 
     if (!found && chatName) {
@@ -84,7 +84,7 @@ class ChatConfig {
 
   public async updateChatConfig(
       chatId: string,
-      chatName: string,
+      chatName: string | undefined,
       isGroup: boolean,
       options: {
         promptInfo?: string;
