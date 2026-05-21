@@ -16,7 +16,7 @@ import makeWASocket, {
   type WAMessage,
   type WAMessageKey,
   type WASocket,
-} from 'baileys';
+} from '@whiskeysockets/baileys';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 import NodeCache from 'node-cache';
@@ -31,7 +31,7 @@ import { MessageStore, messageStore as globalMessageStore } from './message-stor
 import { normalizeWAMessage } from './baileys-message-normalizer';
 
 const AUTH_DIR = process.env.BAILEYS_AUTH_DIR || 'session-baileys';
-const PAIRING_CODE_PHONE = process.env.BAILEYS_PAIRING_CODE_PHONE || process.env.WHATSAPP_PAIRING_CODE_PHONE;
+const PAIRING_CODE_PHONE = (process.env.BAILEYS_PAIRING_CODE_PHONE || process.env.WHATSAPP_PAIRING_CODE_PHONE || '').replace(/\D/g, '');
 
 
 export const MessageTypes = {
@@ -170,16 +170,16 @@ class WhatsAppClientRuntime {
 
   async connect() {
     logger.info('Starting WhatsApp client...');
-    const auth = await this.authStore.load();
+    const { state, saveCreds } = await this.authStore.load();
 
     if (!this.authStore.isRegistered()) {
       logger.info('No valid WhatsApp session found yet. Waiting for QR or pairing code.');
     }
 
-    await this.createSocket(auth);
+    await this.createSocket(state, saveCreds);
   }
 
-  private async createSocket(auth: any) {
+  private async createSocket(auth: any, saveCreds: () => Promise<void>) {
     if (this.socket) {
       try { this.socket.end(undefined); } catch { /* ignore */ }
       this.socket = null;
@@ -203,15 +203,14 @@ class WhatsAppClientRuntime {
       getMessage: async (key: WAMessageKey) => this.messageStore.getProtoMessage(key),
       markOnlineOnConnect: false,
       syncFullHistory: false,
-      shouldSyncHistoryMessage: () => false,
       version,
       cachedGroupMetadata: async (jid: string) => {
         return this.groupCache.get<GroupMetadata>(jid);
       },
     });
 
-    this.socket.ev.on('creds.update', update => {
-      this.authStore.updateCreds(update);
+    this.socket.ev.on('creds.update', () => {
+      void saveCreds();
     });
 
     this.socket.ev.on('connection.update', update => {
@@ -258,6 +257,10 @@ class WhatsAppClientRuntime {
     this.socket.ev.on('messages.upsert', event => {
       void this.handleMessagesUpsert(event);
     });
+
+    if (PAIRING_CODE_PHONE && !this.authStore.isRegistered()) {
+      void this.requestPairingCodeWithRetry(this.socket);
+    }
   }
 
   private async handleConnectionUpdate(update: Partial<ConnectionState>) {
@@ -269,19 +272,15 @@ class WhatsAppClientRuntime {
       'unknown';
 
     if (qr) {
-      logger.info('QR Code received, scan please');
-      qrcode.generate(qr, { small: true });
-    }
-
-    if (
-      this.socket &&
-      PAIRING_CODE_PHONE &&
-      !this.pairingCodeRequested &&
-      !this.authStore.isRegistered() &&
-      !!qr
-    ) {
-      this.pairingCodeRequested = true;
-      void this.requestPairingCodeWithRetry(this.socket);
+      if (PAIRING_CODE_PHONE && !this.authStore.isRegistered()) {
+        if (this.socket && !this.pairingCodeRequested) {
+          logger.info('QR received, requesting pairing code instead...');
+          void this.requestPairingCodeWithRetry(this.socket);
+        }
+      } else {
+        logger.info('QR Code received, scan please');
+        qrcode.generate(qr, { small: true });
+      }
     }
 
     if (connection === 'open') {
@@ -296,7 +295,7 @@ class WhatsAppClientRuntime {
       return;
     }
 
-    if (statusCode === DisconnectReason.loggedOut && this.authStore.isRegistered()) {
+    if (statusCode === DisconnectReason.loggedOut) {
       logger.error('Authentication lost or logged out. A new QR scan is required.');
       await this.authStore.reset();
       return;
@@ -309,34 +308,35 @@ class WhatsAppClientRuntime {
     this.isReconnecting = true;
     logger.warn(`Connection closed (${statusCode ?? 'unknown'}: ${disconnectMessage}). Reconnecting...`);
 
-    if (!this.authStore.isRegistered()) {
-      logger.warn('Incomplete auth state detected after connection failure. Resetting session state before reconnect.');
-      await this.authStore.reset();
-      this.pairingCodeRequested = false;
-    } else {
-      await this.authStore.flush();
-    }
+    await this.authStore.flush();
+    this.pairingCodeRequested = false;
 
     this.isReconnecting = false;
-    await this.createSocket(await this.authStore.load());
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    const { state: reconnectState, saveCreds: reconnectSaveCreds } = await this.authStore.load();
+    await this.createSocket(reconnectState, reconnectSaveCreds);
   }
 
   private async requestPairingCodeWithRetry(socket: WASocket) {
     const maxAttempts = 3;
+    if (!PAIRING_CODE_PHONE) return;
+    if (this.pairingCodeRequested) return;
+
+    this.pairingCodeRequested = true;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       if (this.socket !== socket || this.authStore.isRegistered()) {
+        this.pairingCodeRequested = false;
         return;
       }
 
       try {
-        if (attempt > 1) {
-          await new Promise(resolve => setTimeout(resolve, 1500 * (attempt - 1)));
-        }
+        await new Promise(resolve => setTimeout(resolve, attempt === 1 ? 2500 : 1500 * (attempt - 1)));
 
         const code = await socket.requestPairingCode(PAIRING_CODE_PHONE);
 
         if (this.socket !== socket) {
+          this.pairingCodeRequested = false;
           return;
         }
 

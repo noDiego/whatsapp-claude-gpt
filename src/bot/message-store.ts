@@ -1,4 +1,4 @@
-import type { proto, WAMessage, WAMessageKey } from 'baileys';
+import type { proto, WAMessage, WAMessageKey } from '@whiskeysockets/baileys';
 import { deserializeMessageId, serializeMessageId } from './whatsapp-types';
 
 function serializeKey(key: WAMessageKey): string | null {

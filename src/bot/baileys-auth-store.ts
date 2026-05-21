@@ -1,127 +1,36 @@
 import { promises as fs } from 'fs';
-import path from 'path';
-import { BufferJSON, initAuthCreds, proto } from 'baileys';
-import type {
-  AuthenticationCreds,
-  AuthenticationState,
-  SignalDataSet,
-  SignalDataTypeMap,
-} from 'baileys';
-
-type PersistedAuthState = {
-  creds: AuthenticationCreds;
-  keys: Record<string, Record<string, any>>;
-};
-
-function emptyState(): PersistedAuthState {
-  return {
-    creds: initAuthCreds(),
-    keys: {},
-  };
-}
+import { useMultiFileAuthState } from '@whiskeysockets/baileys';
+import type { AuthenticationState } from '@whiskeysockets/baileys';
 
 export class BaileysAuthStore {
-  private state: PersistedAuthState = emptyState();
-  private saveTimer: NodeJS.Timeout | null = null;
+  private state: AuthenticationState | null = null;
+  private saveCreds: (() => Promise<void>) | null = null;
 
   constructor(private readonly authDir: string) {}
 
-  private get filePath() {
-    return path.join(this.authDir, 'auth-state.json');
-  }
-
-  async load(): Promise<AuthenticationState> {
+  async load(): Promise<{ state: AuthenticationState; saveCreds: () => Promise<void> }> {
     await fs.mkdir(this.authDir, { recursive: true });
 
-    try {
-      const raw = await fs.readFile(this.filePath, 'utf8');
-      this.state = JSON.parse(raw, BufferJSON.reviver);
-    } catch {
-      this.state = emptyState();
-      await this.flush();
+    const result = await useMultiFileAuthState(this.authDir);
+    this.state = result.state;
+    this.saveCreds = result.saveCreds;
+
+    return result;
+  }
+
+  isRegistered(): boolean {
+    return !!this.state?.creds?.registered;
+  }
+
+  async reset(): Promise<void> {
+    this.state = null;
+    this.saveCreds = null;
+    await fs.rm(this.authDir, { recursive: true, force: true });
+  }
+
+  async flush(): Promise<void> {
+    if (this.saveCreds) {
+      await this.saveCreds();
     }
-
-    return {
-      creds: this.state.creds,
-      keys: {
-        get: async <T extends keyof SignalDataTypeMap>(type: T, ids: string[]) => {
-          const bucket = this.state.keys[type] || {};
-          const result: Record<string, SignalDataTypeMap[T]> = {};
-
-          for (const id of ids) {
-            let value = bucket[id];
-            if (type === 'app-state-sync-key' && value) {
-              value = proto.Message.AppStateSyncKeyData.fromObject(value);
-            }
-
-            if (value) {
-              result[id] = value;
-            }
-          }
-
-          return result;
-        },
-        set: async (data: SignalDataSet) => {
-          for (const category of Object.keys(data)) {
-            const categoryData = data[category];
-            if (!categoryData) continue;
-
-            this.state.keys[category] ||= {};
-
-            for (const id of Object.keys(categoryData)) {
-              const value = categoryData[id];
-              if (value) {
-                this.state.keys[category][id] = value;
-              } else {
-                delete this.state.keys[category][id];
-              }
-            }
-          }
-
-          this.scheduleSave();
-        },
-      },
-    };
-  }
-
-  updateCreds(update: Partial<AuthenticationCreds>) {
-    this.state.creds = {
-      ...this.state.creds,
-      ...update,
-    };
-    this.scheduleSave();
-  }
-
-  isRegistered() {
-    return !!this.state.creds?.registered && !!this.state.creds?.account;
-  }
-
-  async reset() {
-    if (this.saveTimer) {
-      clearTimeout(this.saveTimer);
-      this.saveTimer = null;
-    }
-
-    this.state = emptyState();
-    await this.flush();
-  }
-
-  async flush() {
-    if (this.saveTimer) {
-      clearTimeout(this.saveTimer);
-      this.saveTimer = null;
-    }
-
-    await fs.writeFile(this.filePath, JSON.stringify(this.state, BufferJSON.replacer, 2));
-  }
-
-  private scheduleSave() {
-    if (this.saveTimer) {
-      clearTimeout(this.saveTimer);
-    }
-
-    this.saveTimer = setTimeout(() => {
-      this.flush().catch(() => undefined);
-    }, 250);
   }
 }

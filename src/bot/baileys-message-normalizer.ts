@@ -1,4 +1,4 @@
-import { getContentType, normalizeMessageContent, type WAMessage } from 'baileys';
+import { getContentType, normalizeMessageContent, type WAMessage } from '@whiskeysockets/baileys';
 import type { WhatsAppMessage, WhatsAppMessageType } from './whatsapp-types';
 import { normalizeChatId, normalizeAuthorId, serializeMessageId } from './whatsapp-types';
 import { messageStore } from './message-store';

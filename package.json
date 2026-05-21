@@ -42,7 +42,7 @@
     "@anthropic-ai/sdk": "^0.60.0",
     "@fal-ai/serverless-client": "^0.15.0",
     "axios": "^1.13.0",
-    "baileys": "^6.7.19",
+    "@whiskeysockets/baileys": "github:WhiskeySockets/Baileys#master",
     "better-sqlite3": "^12.2.0",
     "date-fns-tz": "^3.2.0",
     "dotenv": "^17.2.0",
