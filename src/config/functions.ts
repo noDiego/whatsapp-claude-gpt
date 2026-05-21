@@ -1,18 +1,7 @@
-import { Tool } from "openai/src/resources/responses/responses";
 import { AIProvider } from "../interfaces/ai-interfaces";
 import { AIConfig, CONFIG } from "./index";
 import { convertCompletionsToolsToResponses } from "../utils";
 import { Chat } from "whatsapp-web.js";
-
-const openAIWebSearch: Tool =
-    {
-        type: "web_search",
-        user_location: {
-            type: "approximate"
-        },
-        search_context_size: "medium"
-    }
-;
 
 const generate_speech = {
     type: "function",
@@ -199,6 +188,48 @@ const reminder_manager = {
     }
 }
 
+const web_search = {
+    type: "function",
+    strict: false,
+    function: {
+        name: "web_search",
+        description: "Search the web for current, factual, or time-sensitive information using Tavily. Use this when the answer may have changed recently or is not in your training data.",
+        parameters: {
+            type: "object",
+            properties: {
+                query: {
+                    type: "string",
+                    description: "The search query."
+                },
+                topic: {
+                    type: ["string", "null"],
+                    enum: ["general", "news", "finance", null],
+                    description: "Topic category. Use 'news' for recent events, 'finance' for market data, 'general' otherwise.",
+                    nullable: true
+                },
+                time_range: {
+                    type: ["string", "null"],
+                    enum: ["day", "week", "month", "year", "d", "w", "m", "y", null],
+                    description: "Limit results to this time range. Optional.",
+                    nullable: true
+                },
+                max_results: {
+                    type: ["number", "null"],
+                    description: "Maximum number of results to return. Optional.",
+                    nullable: true
+                },
+                include_raw_content: {
+                    type: ["boolean", "null"],
+                    description: "Include raw page content in results. Use sparingly as it increases context size.",
+                    nullable: true
+                }
+            },
+            required: ["query"],
+            additionalProperties: false
+        }
+    }
+}
+
 const user_memory_manager = {
     "type": "function",
     "strict": false,
@@ -294,6 +325,7 @@ export function getTools(chatData: Chat) {
     if(AIConfig.ImageConfig.enabled) tools.push(AIConfig.ImageConfig.catEditImages? generate_image_withedit : generate_image);
     tools.push(reminder_manager);
     if(AIConfig.TranscriptionConfig.enabled) tools.push(generate_speech);
+    if(CONFIG.SearchConfig.enabled) tools.push(web_search);
     if(CONFIG.BotConfig.memoriesEnabled) {
         tools.push(user_memory_manager);
          if(chatData.isGroup) tools.push(group_memory_manager);
@@ -303,7 +335,7 @@ export function getTools(chatData: Chat) {
         case AIProvider.CLAUDE:
             return openaiToolsToClaudeTools(tools);
         case AIProvider.OPENAI:
-            return [...convertCompletionsToolsToResponses(tools), openAIWebSearch]
+            return convertCompletionsToolsToResponses(tools);
         default:
             return tools;
     }

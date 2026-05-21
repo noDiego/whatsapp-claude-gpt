@@ -29,6 +29,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { requestAppRestart } from "../utils/restart";
 import FluxSvc from "../services/flux-service";
+import TavilySvc from "../services/tavily-service";
 
 class RobotoClass {
 
@@ -142,6 +143,9 @@ class RobotoClass {
         },
         group_memory_manager: async (args) => {
           return await MemoryService.processFunctionCall(args);
+        },
+        web_search: async (args) => {
+          return await TavilySvc.search(args);
         }
       };
       return await handlers[functionName](args);

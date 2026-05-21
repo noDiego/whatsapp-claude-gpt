@@ -55,8 +55,7 @@ class OpenaiService {
             });
           } else if (
               output.type !== 'message' &&
-              output.type !== 'reasoning' &&
-              output.type !== 'web_search_call'
+              output.type !== 'reasoning'
           ) {
             logger.error(`Unknown output type: "${output.type}"`);
           }

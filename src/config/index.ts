@@ -126,6 +126,16 @@ export const AIConfig = {
 
 }
 
+const SearchConfig = {
+  enabled: process.env.WEB_SEARCH_ENABLED?.toLowerCase() === 'true',
+  provider: process.env.SEARCH_PROVIDER?.toUpperCase() ?? 'TAVILY',
+  tavilyApiKey: process.env.TAVILY_API_KEY,
+  searchDepth: process.env.TAVILY_SEARCH_DEPTH ?? 'basic',
+  maxResults: parseInt(process.env.TAVILY_MAX_RESULTS ?? '5'),
+  includeAnswer: process.env.TAVILY_INCLUDE_ANSWER?.toLowerCase() === 'true',
+  includeRawContent: process.env.TAVILY_INCLUDE_RAW_CONTENT?.toLowerCase() === 'true',
+};
+
 // General bot configuration parameters
 const BotConfig = {
   preferredLanguage: process.env.PREFERRED_LANGUAGE ?? '', // The default language for the bot. If not specified, the bot will use the language of the chat it is responding to
@@ -178,7 +188,7 @@ Output format (strict):
 Tool-use policy:
 - You have access to function tools.
 - When a tool is appropriate, CALL THE TOOL (do not produce a normal user-visible message in the same turn). Once the results from the tool are received, generate the final JSON response only if necessary.
-${AIConfig.ChatConfig.provider == AIProvider.OPENAI ? `- Use web search for time-sensitive, factual, or uncertain questions. Prefer concise answers and cite succinctly if needed.`: ``}
+${CONFIG.SearchConfig.enabled ? `- Use the web_search tool for current events, news, sports, prices, products, legal, or financial questions where your training data may be outdated or uncertain. Cite sources briefly (URL inline) when using search results.` : ``}
 
 Memory policy${CONFIG.BotConfig.memoriesEnabled ? " (enabled)" : " (disabled)"}:
 ${CONFIG.BotConfig.memoriesEnabled ? `
@@ -209,5 +219,6 @@ export const CONFIG = {
   ChatConfig,
   SpeechConfig,
   TranscriptionConfig,
+  SearchConfig,
   getSystemPrompt
 };
