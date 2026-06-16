@@ -1,6 +1,6 @@
-import { Chat, Client, Message, MessageMedia, MessageTypes } from "whatsapp-library.js";
+import { Chat, Client, Message, MessageMedia, MessageTypes } from "whatsapp-web.js";
 import { AIContent, AiMessage, AIRole } from "../interfaces/ai-interfaces";
-import { bufferToStream, getAuthorId, getFormattedDate, getUnsupportedMessage, getUserName } from "../utils";
+import { bufferToStream, getAuthorId, getFormattedDate, getUnsupportedMessage, getUserName, sanitizeForLog } from "../utils";
 import logger from "../logger";
 import NodeCache from "node-cache";
 import OpenAISvc from "../services/openai-service";
@@ -9,8 +9,14 @@ import { Array } from "openai/internal/builtin-types";
 import { ChatConfiguration, chatConfigurationManager } from "../config/chat-configurations";
 
 class WspWeb {
-  private msgMediaCache: NodeCache = new NodeCache();
-  private transcribedMessagesCache: NodeCache = new NodeCache();
+  private msgMediaCache: NodeCache = new NodeCache({
+    stdTTL: CONFIG.BotConfig.mediaCacheTtl || CONFIG.BotConfig.nodeCacheTime,
+    checkperiod: 600,
+  });
+  private transcribedMessagesCache: NodeCache = new NodeCache({
+    stdTTL: CONFIG.BotConfig.transcriptionCacheTtl || CONFIG.BotConfig.nodeCacheTime,
+    checkperiod: 600,
+  });
   private wspClient: Client;
   private lastProcessed = new Map<string, string>();
   private readonly MAX_LAST_PROCESSED = 500;
@@ -19,6 +25,14 @@ class WspWeb {
   }
 
   public async generateMessageArray(wspMessage: Message, chatData: Chat, chatCfg: ChatConfiguration, chatCached: boolean): Promise<AiMessage[]> {
+
+    // Early return for cached direct chats — avoid expensive fetchMessages call.
+    // Safe for -reset: deleteChatCache clears the cache, so chatCached will be false.
+    if (chatCached && !chatData.isGroup) {
+      const aiMessage = await this.convertWspMsgToAiMsg(wspMessage, chatCfg.botName);
+      this.setLastProcessed(chatData.id._serialized, wspMessage.id._serialized);
+      return [aiMessage];
+    }
 
     const messageList: AiMessage[] = [];
     const lastChatMsgProcessed = this.lastProcessed.get(chatData.id._serialized);
@@ -31,12 +45,6 @@ class WspWeb {
     const wspMessageIndex = messagesToProcess.findIndex(msg => msg.id._serialized === wspMessage.id._serialized);
     const startIndex = wspMessageIndex !== -1 ? wspMessageIndex : 0;
     const messagesToProcessFiltered = messagesToProcess.slice(0, startIndex + 1);
-
-    if(chatCached && !chatData.isGroup) {
-      const aiMessage = await this.convertWspMsgToAiMsg(wspMessage, chatCfg.botName);
-      this.setLastProcessed(chatData.id._serialized, wspMessage.id._serialized);
-      return [aiMessage];
-    }
 
     for (const msg of messagesToProcessFiltered.reverse()) {
       try {
@@ -52,7 +60,7 @@ class WspWeb {
 
         messageList.push(aiMessage);
       } catch (e: any) {
-        logger.error(`Error reading message - msg.type:${msg.type}; msg.body:${msg.body}. Error:${e.message}`);
+        logger.error(`Error reading message - msg.type:${msg.type}; msg.body:${sanitizeForLog(msg.body)}. Error:${sanitizeForLog(e.message)}`);
       }
     }
 
@@ -68,12 +76,26 @@ class WspWeb {
     this.lastProcessed.set(chatId, messageId);
   }
 
-  async extractMedia(wspMsg: Message): Promise<{errorMedia: string, mediaData: MessageMedia}> {
+  async extractMedia(wspMsg: Message): Promise<{errorMedia: string | null, mediaData: MessageMedia | null}> {
 
-    const mediaData: MessageMedia = this.msgMediaCache.get<MessageMedia>(wspMsg.id._serialized) ?? await wspMsg.downloadMedia();
+    let mediaData: MessageMedia | null | undefined = this.msgMediaCache.get<MessageMedia>(wspMsg.id._serialized);
+    if (!mediaData) {
+      try {
+        mediaData = await wspMsg.downloadMedia();
+      } catch (e: any) {
+        logger.warn(`[extractMedia] Download failed for msg ${wspMsg.id._serialized}: ${e.message}`);
+        return { errorMedia: 'download', mediaData: null };
+      }
+    }
+
     const isImage = wspMsg.type === MessageTypes.IMAGE || wspMsg.type === MessageTypes.STICKER
 
     if (mediaData) {
+      if (!mediaData.data) {
+        logger.warn(`[extractMedia] Media data is empty for msg ${wspMsg.id._serialized}`);
+        return { errorMedia: 'download', mediaData: null };
+      }
+
       if(!mediaData.mimetype.startsWith('image') && mediaData.mimetype != 'application/pdf')
           return { errorMedia: 'type', mediaData: null};
 
@@ -149,20 +171,31 @@ class WspWeb {
     }
 
     if (isDocument) {
-      content.push({
-        type: 'file',
-        msg_id: wspMsg.id._serialized,
-        mimetype: mediaData.mimetype,
-        filename: mediaData.filename,
-        value: mediaData.data,
-        author_id,
-        dateString: getFormattedDate(msgDate)
-      });
+      if (mediaData) {
+        content.push({
+          type: 'file',
+          msg_id: wspMsg.id._serialized,
+          mimetype: mediaData.mimetype,
+          filename: mediaData.filename,
+          value: mediaData.data,
+          author_id,
+          dateString: getFormattedDate(msgDate)
+        });
+      } else {
+        content.push({
+          type: 'text',
+          msg_id: wspMsg.id._serialized,
+          value: 'SYSTEM:⚠️ The document could not be processed.',
+          author_id,
+          dateString: getFormattedDate(msgDate)
+        });
+      }
     }
 
     if (errorMedia || (isOther && !mediaData)){
       let errorMessage = getUnsupportedMessage(wspMsg.type, wspMsg.body);
       if(errorMedia == 'size') errorMessage = `SYSTEM:⚠️ The file could not be processed because it exceeds the maximum allowed size (${isImage?CONFIG.BotConfig.maxImageSizeMB:CONFIG.BotConfig.maxDocumentSizeMB}MB).`
+      if(errorMedia == 'download') errorMessage = 'SYSTEM:⚠️ The file could not be downloaded and was not processed.'
       content.push({
         type: 'text',
         msg_id: wspMsg.id._serialized,
@@ -202,19 +235,31 @@ class WspWeb {
       let transcribedText = this.transcribedMessagesCache.get<string>(wspMsg.id._serialized);
       if(transcribedText) return transcribedText;
 
-      const media = await wspMsg.downloadMedia();
+      let media;
+      try {
+        media = await wspMsg.downloadMedia();
+      } catch (e: any) {
+        logger.warn(`[transcribeVoice] Download failed for msg ${wspMsg.id._serialized}: ${e.message}`);
+        return '<Error: voice message download failed>';
+      }
+
+      if (!media || !media.data) {
+        logger.warn(`[transcribeVoice] Empty media for msg ${wspMsg.id._serialized}`);
+        return '<Error: voice message media is empty>';
+      }
+
       const audioBuffer = Buffer.from(media.data, 'base64');
       const audioStream = bufferToStream(audioBuffer);
 
       logger.debug(`[OpenAI->transcribeVoice] Starting audio transcription`);
       transcribedText = await OpenAISvc.transcription(audioStream);
-      logger.debug(`[OpenAI->transcribeVoice] Transcribed text: ${transcribedText}`);
+      logger.debug(`[OpenAI->transcribeVoice] Transcribed text: ${sanitizeForLog(transcribedText)}`);
 
       this.transcribedMessagesCache.set<string>(wspMsg.id._serialized,transcribedText, CONFIG.BotConfig.nodeCacheTime);
 
       return transcribedText;
     } catch (error: any) {
-      logger.error(`Error transcribing voice message: ${error.message}`);
+      logger.error(`Error transcribing voice message: ${JSON.stringify(sanitizeForLog(error))}`);
       return '<Error transcribing voice message>';
     }
   }
@@ -224,11 +269,14 @@ class WspWeb {
     else return this.wspClient.sendMessage(message.from, responseMsg, {linkPreview: false});
   }
 
-  public setWspClient(client) {
+  public setWspClient(client: Client) {
     this.wspClient = client;
   }
 
   public getWspClient(): Client {
+    if (!this.wspClient) {
+      throw new Error('WhatsApp client not available yet. Ensure setWspClient() is called before getWspClient().');
+    }
     return this.wspClient;
   }
 

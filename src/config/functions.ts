@@ -2,7 +2,7 @@ import { Tool } from "openai/src/resources/responses/responses";
 import { AIProvider } from "../interfaces/ai-interfaces";
 import { AIConfig, CONFIG } from "./index";
 import { convertCompletionsToolsToResponses } from "../utils";
-import { Chat } from "whatsapp-library.js";
+import { Chat } from "whatsapp-web.js";
 
 const openAIWebSearch: Tool =
     {

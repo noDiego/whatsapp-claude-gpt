@@ -1,6 +1,7 @@
 import axios, { AxiosResponse } from 'axios';
 import logger from '../logger';
 import { AIConfig } from '../config';
+import { sanitizeForLog } from '../utils';
 
 export enum CVoices {
   GEORGE = 'JBFqnCBsd6RMkjVDRZzb',
@@ -10,9 +11,9 @@ export enum CVoices {
   ARIA = '9BWtsMINqrJLrRacOk9x'
 }
 
-export async function elevenTTS(msg: string, voice: CVoices = CVoices.LILY): Promise<string | undefined> {
+export async function elevenTTS(msg: string, voice: CVoices = CVoices.LILY): Promise<string> {
 
-  logger.debug(`[${AIConfig.SpeechConfig.provider}->speech] Creating speech audio for: "${msg}"`);
+  logger.debug(`[${AIConfig.SpeechConfig.provider}->speech] Creating speech audio (${msg?.length ?? 0} chars)`);
 
   const url = `https://api.elevenlabs.io/v1/text-to-speech/${voice ?? AIConfig.SpeechConfig.voice}?output_format=mp3_44100_128`;
   const body = {
@@ -41,9 +42,13 @@ export async function elevenTTS(msg: string, voice: CVoices = CVoices.LILY): Pro
 
   try {
     const response: AxiosResponse<any> = await axios(options);
+    if (!response.data || response.data.length === 0) {
+      throw new Error('ElevenLabs returned empty audio data.');
+    }
     const audioBuffer = Buffer.from(response.data);
     return audioBuffer.toString('base64');
-  } catch (error) {
-    logger.error(error);
+  } catch (error: any) {
+    logger.error(`[ElevenLabs->TTS] Error: ${JSON.stringify(sanitizeForLog(error))}`);
+    throw new Error(`ElevenLabs TTS failed: ${error.message}`);
   }
 }

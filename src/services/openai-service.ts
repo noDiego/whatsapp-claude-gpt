@@ -3,17 +3,35 @@ import { OpenAI, toFile } from 'openai';
 import { AIConfig, CONFIG } from '../config';
 import { ResponseInput, ResponseInputItem, Tool } from "openai/resources/responses/responses";
 
-import { countMessages, sanitizeLogImages, trimCachePreserveMessageStart } from "../utils";
-import { AIRole } from "../interfaces/ai-interfaces";
+import { countMessages, sanitizeForLog, trimCachePreserveMessageStart } from "../utils";
+import { AIRole, ToolExecutionContext } from "../interfaces/ai-interfaces";
 import NodeCache from "node-cache";
 import Roboto from "../bot/roboto";
 import { ChatConfiguration } from "../config/chat-configurations";
 
 class OpenaiService {
 
-  private messagesCache = new NodeCache();
+  private messagesCache = new NodeCache({
+    stdTTL: CONFIG.BotConfig.messageCacheTtl || CONFIG.BotConfig.nodeCacheTime,
+    checkperiod: 600, // Cleanup expired keys every 10 minutes
+  });
+  private static clientCache = new Map<string, OpenAI>();
 
   constructor() {
+  }
+
+  /**
+   * Returns a cached OpenAI client keyed by baseURL+apiKey.
+   * Avoids creating a new HTTP agent per call on the hot path.
+   */
+  private getClient(baseURL?: string, apiKey?: string): OpenAI {
+    const key = `${baseURL ?? ''}::${apiKey ?? ''}`;
+    let client = OpenaiService.clientCache.get(key);
+    if (!client) {
+      client = new OpenAI({ baseURL, apiKey });
+      OpenaiService.clientCache.set(key, client);
+    }
+    return client;
   }
 
   public deleteChatCache(chatId: string){
@@ -30,7 +48,7 @@ class OpenaiService {
       return this.messagesCache.has(chatId);
   }
 
-  public async sendMessage(aiMessageInputList: ResponseInputItem[], systemPrompt: string, chatConfig: ChatConfiguration, tools: Tool[]): Promise<string> {
+  public async sendMessage(aiMessageInputList: ResponseInputItem[], systemPrompt: string, chatConfig: ChatConfiguration, tools: Tool[], toolContext?: ToolExecutionContext): Promise<string> {
     let cycleCount = 0;
     const maxCycles = 6;
     const chatId = chatConfig.chatId;
@@ -48,7 +66,7 @@ class OpenaiService {
         aiMessages.push(output as unknown as ResponseInputItem);
         if (output.type === 'function_call') {
           hasFunctionCall = true;
-          const functionResult = await Roboto.handleFunction(output.name, output.arguments);
+          const functionResult = await Roboto.handleFunction(output.name, output.arguments, toolContext);
           functionOutputs.push({
             type: "function_call_output",
             call_id: output.call_id,
@@ -80,14 +98,11 @@ class OpenaiService {
       systemPrompt?: string
   ): Promise<OpenAI.Responses.Response> {
     logger.info(`[OpenAI] Sending ${countMessages(messageList)} messages`);
-    logger.debug(`[OpenAI] Sending Msg: ${sanitizeLogImages(JSON.stringify(messageList[messageList.length - 1]))}`);
+    logger.debug(`[OpenAI] Sending Msg: ${JSON.stringify(sanitizeForLog(messageList[messageList.length - 1]))}`);
 
     const reasoningProfile = getReasoningProfile(AIConfig.ChatConfig.model);
 
-    const client = new OpenAI({
-      baseURL: AIConfig.ChatConfig.baseURL,
-      apiKey: AIConfig.ChatConfig.apiKey,
-    });
+    const client = this.getClient(AIConfig.ChatConfig.baseURL, AIConfig.ChatConfig.apiKey);
 
     const hasSystemMsg = (messageList[0] as any).role == AIRole.SYSTEM;
     if(systemPrompt) {
@@ -110,7 +125,7 @@ class OpenaiService {
     } as any);
 
     logger.debug(`[OpenAI] ResponsesAPI Usage: Input=${responseResult.usage.input_tokens}` + ` Cached=${responseResult.usage.input_tokens_details?.cached_tokens}` + ` Output=${responseResult.usage.output_tokens}`);
-    logger.debug('[OpenAI] ResponsesAPI Response:' + sanitizeLogImages(JSON.stringify(responseResult.output_text)));
+    logger.debug('[OpenAI] ResponsesAPI Response:' + JSON.stringify(sanitizeForLog(responseResult.output_text)));
 
     return responseResult;
   }
@@ -132,10 +147,7 @@ class OpenaiService {
   async transcription(stream: any) {
     logger.debug(`[${AIConfig.TranscriptionConfig.provider}->transcription] Creating transcription text for audio"`);
 
-    const client = new OpenAI({
-      baseURL: AIConfig.TranscriptionConfig.baseURL,
-      apiKey: AIConfig.TranscriptionConfig.apiKey,
-    });
+    const client = this.getClient(AIConfig.TranscriptionConfig.baseURL, AIConfig.TranscriptionConfig.apiKey);
 
     const file = await toFile(stream, 'audio.ogg', {type: 'audio/ogg'});
     const response = await client.audio.transcriptions.create({
@@ -158,10 +170,7 @@ class OpenaiService {
   async speech(message, responseFormat?, voice = 'nova', instructions?:string) {
 
 
-    const client = new OpenAI({
-      baseURL: AIConfig.SpeechConfig.baseURL,
-      apiKey: AIConfig.SpeechConfig.apiKey,
-    });
+    const client = this.getClient(AIConfig.SpeechConfig.baseURL, AIConfig.SpeechConfig.apiKey);
 
     const params = {
       model: AIConfig.SpeechConfig.model,
@@ -171,7 +180,7 @@ class OpenaiService {
       response_format: responseFormat || 'mp3'
     }
 
-    logger.debug(`[${AIConfig.SpeechConfig.provider}->speech] Creating speech audio for: "${params.input}". Voice:${params.voice}. Instructions:${params.instructions}`);
+    logger.debug(`[${AIConfig.SpeechConfig.provider}->speech] Creating speech audio (${params.input?.length ?? 0} chars, voice:${params.voice})`);
 
 
     const response: any = await client.audio.speech.create(params);
@@ -191,13 +200,9 @@ class OpenaiService {
     quality?: "low" | "medium" | "high" | "auto";
     background?: "opaque" | "transparent" | "auto";
   }) {
-    const client = new OpenAI({
-      baseURL: AIConfig.ImageConfig.baseURL,
-      apiKey: AIConfig.ImageConfig.apiKey,
-    });
+    const client = this.getClient(AIConfig.ImageConfig.baseURL, AIConfig.ImageConfig.apiKey);
 
-    logger.debug(`[${AIConfig.ImageConfig.provider}->generateImage] Creating image with params: ${JSON.stringify({prompt: params.prompt, imageStreamLength: params.imageStreams? params.imageStreams.length : [],
-      quality: params.quality ?? AIConfig.ImageConfig.quality })}`);
+    logger.debug(`[${AIConfig.ImageConfig.provider}->generateImage] Creating image (prompt: ${sanitizeForLog(params.prompt)?.substring(0, 100) ?? 'N/A'}, quality: ${params.quality ?? AIConfig.ImageConfig.quality})`);
 
     const isEdit = params.imageStreams && params.imageStreams.length > 0;
     const quality = params.quality ?? AIConfig.ImageConfig.quality;

@@ -4,8 +4,8 @@ import { AIConfig, CONFIG } from '../config';
 import { MessageParam, TextBlock } from '@anthropic-ai/sdk/resources';
 import Roboto from "../bot/roboto";
 import NodeCache from "node-cache";
-import { AIRole } from "../interfaces/ai-interfaces";
-import { countMessages, trimCachePreserveMessageStart } from "../utils";
+import { AIRole, ToolExecutionContext } from "../interfaces/ai-interfaces";
+import { countMessages, sanitizeForLog, trimCachePreserveMessageStart } from "../utils";
 import { ChatConfiguration } from "../config/chat-configurations";
 
 class AnthropicService {
@@ -32,7 +32,7 @@ class AnthropicService {
     return this.messagesCache.has(chatId);
   }
 
-  public async sendMessage(aiMessagesInputList: MessageParam[], systemPrompt: string, chatConfig: ChatConfiguration, tools: any): Promise<string> {
+  public async sendMessage(aiMessagesInputList: MessageParam[], systemPrompt: string, chatConfig: ChatConfiguration, tools: any, toolContext?: ToolExecutionContext): Promise<string> {
     let cycleCount = 0;
     const maxCycles = 5;
     const chatId = chatConfig.chatId;
@@ -56,7 +56,7 @@ class AnthropicService {
 
         if (c.type == 'tool_use') {
           hasFunctionCall = true;
-          const functionResult = await Roboto.handleFunction(c.name, c.input);
+          const functionResult = await Roboto.handleFunction(c.name, c.input, toolContext);
 
           resultContent.push({
             type: "tool_result",
@@ -78,6 +78,10 @@ class AnthropicService {
         const finalMsgList = trimCachePreserveMessageStart(aiMessages, chatConfig.maxMsgsLimit ?? 30);
         this.messagesCache.set(chatId, finalMsgList, CONFIG.BotConfig.nodeCacheTime);
         const content = aiResponse.content[0];
+        if (!content || content.type !== 'text') {
+          logger.warn(`[Anthropic->sendMessage] Unexpected response block type: ${content?.type ?? 'undefined'} for chat ${chatId}`);
+          return "";
+        }
         return (content as TextBlock)?.text || "";
       }
     }
@@ -102,8 +106,7 @@ class AnthropicService {
       tools
     });
 
-    logger.debug('[Claude->sendCompletion] Completion Response:');
-    logger.debug(response.content[0]);
+    logger.debug(`[Claude->sendCompletion] Completion Response: ${sanitizeForLog(response.content[0])?.type ?? 'unknown'} block`);
 
     return response;
 

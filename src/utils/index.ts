@@ -1,5 +1,5 @@
 import logger from '../logger';
-import { Chat, Message } from "whatsapp-library.js";
+import { Chat, Message } from "whatsapp-web.js";
 import { Readable } from 'stream';
 import { AIConfig, CONFIG } from '../config';
 import { AIAnswer, AIRole } from "../interfaces/ai-interfaces";
@@ -36,7 +36,9 @@ export function logMessage(message: Message, chat: Chat) {
 }
 
 export function includeName(bodyMessage: string, name: string): boolean {
-  const regex = new RegExp(`(^|\\s)${name}($|[!?.]|\\s|,\\s)`, 'i');
+  if (!name || !bodyMessage) return false;
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(^|\\s)${escaped}($|[!?.]|\\s|,\\s)`, 'i');
   return regex.test(bodyMessage);
 }
 
@@ -430,6 +432,68 @@ export function logConfigInfo() {
   }
 
   logger.info('===========================================');
+}
+
+export function safeJsonToObject(value: any): any {
+  if (!value || value === null) return null;
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+export function sanitizeForLog(value: any): any {
+  if (value === null || value === undefined) return value;
+
+  // Error objects: only safe properties, never config/headers
+  if (value instanceof Error) {
+    const result: any = {
+      message: value.message,
+      name: value.name,
+    };
+    if (value.stack) result.stack = sanitizeForLog(value.stack);
+    if ((value as any).isAxiosError) result.isAxiosError = true;
+    if ((value as any).code) result.code = (value as any).code;
+    if ((value as any).status) result.status = (value as any).status;
+    return result;
+  }
+
+  // Strings: redact sensitive patterns, truncate
+  if (typeof value === 'string') {
+    let s = value
+      .replace(/Bearer\s+[A-Za-z0-9\-._~+/=]+/gi, 'Bearer ***REDACTED***')
+      .replace(/Authorization:\s*[A-Za-z0-9\-._~+/=]+/gi, 'Authorization: ***REDACTED***')
+      .replace(/xi-api-key[=:]\s*[A-Za-z0-9\-._~+/=]+/gi, 'xi-api-key=***REDACTED***')
+      .replace(/api[_-]?key[=:]\s*[A-Za-z0-9\-._~+/=]+/gi, 'api-key=***REDACTED***')
+      .replace(/sk-[A-Za-z0-9\-._~]+/g, 'sk-***REDACTED***')
+      .replace(/(data:image\/[a-zA-Z0-9+.-]+;base64,)[A-Za-z0-9+/=]{20,}/g, '$1***REDACTED***')
+      .replace(/\+?\d{7,15}/g, '***PHONE***');
+    return s.length > 500 ? s.substring(0, 500) + '...' : s;
+  }
+
+  // Arrays: limit to 20 elements
+  if (Array.isArray(value)) {
+    return value.slice(0, 20).map(sanitizeForLog);
+  }
+
+  // Objects: redact sensitive keys recursively
+  if (typeof value === 'object') {
+    const sensitiveKeys = ['apiKey', 'secret', 'token', 'authorization', 'credential', 'password', 'key'];
+    const result: any = {};
+    for (const [k, v] of Object.entries(value)) {
+      const lowerKey = k.toLowerCase();
+      if (sensitiveKeys.some(sk => lowerKey.includes(sk))) {
+        result[k] = '***REDACTED***';
+      } else {
+        result[k] = sanitizeForLog(v);
+      }
+    }
+    return result;
+  }
+
+  return value;
 }
 
 export function sanitizeLogImages(str: string) {

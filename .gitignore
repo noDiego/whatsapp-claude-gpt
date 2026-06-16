@@ -1,6 +1,11 @@
 .idea
+.codegraph
 .wwebjs_cache
+.wwebjs_auth
 .env
 build
 node_modules
+roboto.sqlite
+roboto.sqlite-shm
+roboto.sqlite-wal
 whatsapp-gpt.iml

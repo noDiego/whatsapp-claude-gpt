@@ -37,6 +37,15 @@ export interface AIAnswer {
   emojiReact?: string;
 }
 
+export interface ToolExecutionContext {
+  chatId: string;
+  chatName: string;
+  messageId: string;
+  authorId: string;
+  isGroup: boolean;
+  imageMessageIds: string[];
+}
+
 export interface OperationResult {
   success: boolean;
   result: any;

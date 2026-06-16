@@ -1,10 +1,10 @@
-import { Chat, GroupChat, Message, MessageMedia } from "whatsapp-library.js";
-import { AIAnswer, AiMessage, AIProvider, OperationResult } from "../interfaces/ai-interfaces";
+import { Chat, GroupChat, Message, MessageMedia } from "whatsapp-web.js";
+import { AIAnswer, AiMessage, AIProvider, OperationResult, ToolExecutionContext } from "../interfaces/ai-interfaces";
 import { AIConfig, CONFIG } from "../config";
 import WspWeb from "./wsp-web";
 import OpenAISvc from "../services/openai-service";
 import logger from "../logger";
-import { bufferToStream, extractAnswer, getAuthorId, includeName, parseCommand, parseIfJson, sleep } from "../utils";
+import { bufferToStream, extractAnswer, getAuthorId, includeName, parseCommand, parseIfJson, sanitizeForLog, sleep } from "../utils";
 import { ChatConfiguration, chatConfigurationManager } from "../config/chat-configurations";
 import { getTools } from "../config/functions";
 import { convertIaMessagesLang } from "./message-conversion";
@@ -18,18 +18,29 @@ import wspWeb from "./wsp-web";
 
 class RobotoClass {
 
-  private busyChats = new Set<string>();
+  // Per-chat promise queue that serializes message processing.
+  // Each chat's promise chain ensures only one message is processed at a time.
+  private chatProcessingQueue = new Map<string, Promise<void>>();
+  // Per-chat typing flag used by sendStateTyping to know when to stop.
+  private chatTypingFlags = new Map<string, boolean>();
   private botEnabled = true;
   private chatImageRetry = new Map();
+  // Rate limiting: key -> timestamps[] for sliding window.
+  private rateLimitTracker = new Map<string, number[]>();
 
   constructor() {
   }
 
   public async readWspMessage(wspMessage: Message) {
-    const chatData: Chat = await wspMessage.getChat();
-    const chatId = chatData.id._serialized;
+
+    let chatData: Chat | undefined;
+    let chatId: string | undefined;
+    let resolveCurrent: (() => void) | undefined;
 
     try {
+
+      chatData = await wspMessage.getChat();
+      chatId = chatData.id._serialized;
 
       const contactData = await wspMessage.getContact();
       const chatConfig = await chatConfigurationManager.getChatConfig(chatData.id._serialized, chatData.name);
@@ -41,20 +52,57 @@ class RobotoClass {
       const shouldProcess = await this.shouldProcessMessage(wspMessage, chatData, botName);
       if (!shouldProcess) return false;
 
-      while (this.busyChats.has(chatId)) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
+      // Rate limiting: skip AI call if author/chat exceeds the configured window.
+      // Admins bypass rate limiting.
+      const authorId = getAuthorId(wspMessage);
+      if (!isAdmin && !this.checkRateLimit(chatData.isGroup ? chatId : authorId)) {
+        logger.debug(`[readWspMessage] Rate limited: ${chatData.isGroup ? 'chat' : 'author'} ${chatId}`);
+        return false;
       }
-      this.busyChats.add(chatId);
-      this.sendStateTyping(chatData);
 
-      const memoriesContext = await MemoryService.getMemoryContext(chatId, !chatData.isGroup? getAuthorId(wspMessage): null);
+      // Serialize processing per chat using a promise queue.
+      // This replaces the polling-based busyChats Set with a deterministic queue.
+      const previous = this.chatProcessingQueue.get(chatId) ?? Promise.resolve();
+      const current = new Promise<void>((resolve) => { resolveCurrent = resolve; });
+      this.chatProcessingQueue.set(chatId, current);
+
+      await previous;
+
+      // Start typing indicator as a fire-and-forget task.
+      // It stops when chatTypingFlags is cleared in finally.
+      this.chatTypingFlags.set(chatId, true);
+      this.sendStateTyping(chatData).catch((e) => {
+        logger.error(`[sendStateTyping] Error for chat ${chatId}: ${e.message}`);
+      });
+
+      const memoriesContext = await MemoryService.getMemoryContext(chatId, !chatData.isGroup? getAuthorId(wspMessage): null, chatData.isGroup);
       const systemPrompt = CONFIG.getSystemPrompt(chatConfig, memoriesContext);
 
       const aiMessages: AiMessage[] = await WspWeb.generateMessageArray(wspMessage, chatData, chatConfig, this.hasChatCache(chatId));
-      const aiResponse = await this.sendMessageToAi(aiMessages, systemPrompt, chatConfig);
+
+      const toolContext: ToolExecutionContext = {
+        chatId: chatData.id._serialized,
+        chatName: chatData.name,
+        messageId: wspMessage.id._serialized,
+        authorId: getAuthorId(wspMessage),
+        isGroup: chatData.isGroup,
+        imageMessageIds: aiMessages
+          .flatMap(m => m.content)
+          .filter(c => c.type === 'image' && c.msg_id)
+          .map(c => c.msg_id!)
+      };
+
+      const aiResponse = await this.sendMessageToAi(aiMessages, systemPrompt, chatConfig, true, toolContext);
 
       let chatResponse: AIAnswer = extractAnswer(aiResponse, botName);
-      if (!chatResponse || !chatResponse.message) return false;
+      if (!chatResponse || !chatResponse.message) {
+        if (!aiResponse || aiResponse.trim() === '') {
+          logger.warn(`[readWspMessage] AI response was empty for chat ${chatId}`);
+        } else {
+          logger.warn(`[readWspMessage] Failed to extract answer from AI response for chat ${chatId}`);
+        }
+        return false;
+      }
 
       // If the response includes emoji reaction, react to the message
       if (chatResponse.emojiReact)
@@ -64,80 +112,132 @@ class RobotoClass {
 
     } catch (e) {
       //TODO Handle Error
-      logger.error('[readWspMessage] ErrorMessage:' + e.message);
+      logger.error(`[readWspMessage] ErrorMessage: ${JSON.stringify(sanitizeForLog(e))}`);
       logger.error('[readWspMessage] Chat context is being reset due to errors');
-      this.deleteChatCache(chatId);
+      if (chatId) this.deleteChatCache(chatId);
       return false;
     } finally {
-      this.busyChats.delete(chatId);
-      chatData.clearState();
+      // Clean up typing flag so sendStateTyping stops its loop.
+      if (chatId) {
+        this.chatTypingFlags.delete(chatId);
+      }
+      // Resolve the current promise so the next message in the queue can proceed.
+      resolveCurrent?.();
+      // clearState is an external API call that may fail; catch errors to avoid
+      // unhandled rejections that would crash the process.
+      if (chatData) {
+        try {
+          await chatData.clearState();
+        } catch (e: any) {
+          logger.error(`[clearState] Error for chat ${chatId}: ${e.message}`);
+        }
+      }
     }
 
   }
 
-  public async sendMessageToAi(aiMessages: AiMessage[], systemPrompt, chatConfig: ChatConfiguration, withTools = true){
+  public async sendMessageToAi(aiMessages: AiMessage[], systemPrompt, chatConfig: ChatConfiguration, withTools = true, toolContext?: ToolExecutionContext){
     const messagesList = convertIaMessagesLang(aiMessages) as any;
     const chat = await wspWeb.getWspClient().getChatById(chatConfig.chatId);
     const tools = withTools ? getTools(chat) : undefined;
 
     switch (AIConfig.ChatConfig.provider){
       case AIProvider.OPENAI:
-        return await OpenAISvc.sendMessage(messagesList, systemPrompt, chatConfig, tools);
+        return await OpenAISvc.sendMessage(messagesList, systemPrompt, chatConfig, tools, toolContext);
       case AIProvider.CLAUDE:
-        return await AnthropicSvc.sendMessage(messagesList, systemPrompt, chatConfig, tools);
+        return await AnthropicSvc.sendMessage(messagesList, systemPrompt, chatConfig, tools, toolContext);
       default:
-        return await CustomOpenAISvc.sendMessage(messagesList, systemPrompt, chatConfig, tools);
+        return await CustomOpenAISvc.sendMessage(messagesList, systemPrompt, chatConfig, tools, toolContext);
     }
   }
 
-  public async handleFunction(functionName: string, functionArgs: any): Promise<OperationResult> {
+  public async handleFunction(functionName: string, functionArgs: any, context?: ToolExecutionContext): Promise<OperationResult> {
 
     try {
       const args = parseIfJson(functionArgs);
-      logger.info(`[Assistant->handleFunction] Executing function: ${functionName} with args: ${JSON.stringify(args)}`);
 
-      const handlers: Record<string, (args: any) => Promise<OperationResult>> = {
+      // Sanitize args for logging via standard sanitizer.
+      logger.info(`[Assistant->handleFunction] Executing function: ${functionName} with args: ${JSON.stringify(sanitizeForLog(args))}`);
 
-        generate_image: async (args: any) => {
-          const imageRetryCount = this.chatImageRetry.get(args.chatId);
-          try {
-            await this.createImage(args);
-            this.chatImageRetry.set(args.chatId, 0);
-            return { success: true, result: 'The image has been generated and sent to the chat.'};
-          } catch (e){
-            logger.error(`[${e.code}]: ${e.message}`);
-            if (imageRetryCount >= 3 || e.code == '400' || !e.message.toLowerCase().includes('safety system')) {
-              this.chatImageRetry.set(args.chatId, 0);
-              return {success: false, result: `Error generating image: ${e.message}.`};
-            }
-            this.chatImageRetry.set(args.chatId, imageRetryCount ? imageRetryCount + 1 : 1);
-            const match = e.message.match(/safety_violations=\[([^\]]*)\]/);
-            const safety_violations = match ? match[1] : null;
-            return { success: false, result: `Safety filters blocked the request (safety_violations:${safety_violations}). Please call generate_image again with a different phrasing. Rephrase the prompt to avoid sensitive content.`};
-          }
-        },
-        generate_speech: async (args: any) => {
-          const {input, instructions, msg_id, voice_gender} = args;
-          await this.sendAudioResponse(msg_id, {instructions, messageToSay: input, voiceGender: voice_gender});
-          return {success: true, result: 'The audio has been generated and sent to the user. You should respond with { "message" : null } to avoid duplicate messages'};
-        },
-        reminder_manager: async (args) => {
-          return await Reminders.processFunctionCall(args);
-        },
-        user_memory_manager: async (args) => {
-          return await MemoryService.processFunctionCall(args);
-        },
-        group_memory_manager: async (args) => {
-          return await MemoryService.processFunctionCall(args);
-        }
-      };
-      return await handlers[functionName](args);
+      const handler = this.getToolHandler(functionName);
+      if (!handler) {
+        logger.warn(`[Assistant->handleFunction] Unknown function requested: ${functionName}`);
+        return { success: false, result: `Unknown tool: ${functionName}` };
+      }
+
+      return await handler(args, context);
 
     } catch (e) {
-      logger.error(e.message);
+      logger.error(JSON.stringify(sanitizeForLog(e)));
       return {success: false, result: `Error executing function ${functionName}: ${e.message}`};
     }
 
+  }
+
+  private getToolHandler(functionName: string): ((args: any, context?: ToolExecutionContext) => Promise<OperationResult>) | null {
+    const handlers: Record<string, (args: any, context?: ToolExecutionContext) => Promise<OperationResult>> = {
+
+      generate_image: async (args: any, context?: ToolExecutionContext) => {
+        // Overwrite model-supplied IDs with server-side context.
+        if (context) {
+          args.msg_id = context.messageId;
+          args.chatId = context.chatId;
+          // Only allow image_msg_ids that are present in the current context.
+          if (args.image_msg_ids?.length > 0) {
+            args.image_msg_ids = args.image_msg_ids.filter((id: string) =>
+              context.imageMessageIds.includes(id)
+            );
+          }
+        }
+        const imageRetryCount = this.chatImageRetry.get(args.chatId);
+        try {
+          await this.createImage(args);
+          this.chatImageRetry.set(args.chatId, 0);
+          return { success: true, result: 'The image has been generated and sent to the chat.'};
+        } catch (e){
+          logger.error(`[${e.code}]: ${e.message}`);
+          if (imageRetryCount >= 3 || e.code == '400' || !e.message.toLowerCase().includes('safety system')) {
+            this.chatImageRetry.set(args.chatId, 0);
+            return {success: false, result: `Error generating image: ${e.message}.`};
+          }
+          this.chatImageRetry.set(args.chatId, imageRetryCount ? imageRetryCount + 1 : 1);
+          const match = e.message.match(/safety_violations=\[([^\]]*)\]/);
+          const safety_violations = match ? match[1] : null;
+          return { success: false, result: `Safety filters blocked the request (safety_violations:${safety_violations}). Please call generate_image again with a different phrasing. Rephrase the prompt to avoid sensitive content.`};
+        }
+      },
+      generate_speech: async (args: any, context?: ToolExecutionContext) => {
+        // Use server-side messageId instead of model-supplied msg_id.
+        const msgId = context?.messageId ?? args.msg_id;
+        const {input, instructions, voice_gender} = args;
+        await this.sendAudioResponse(msgId, {instructions, messageToSay: input, voiceGender: voice_gender});
+        return {success: true, result: 'The audio has been generated and sent to the user. You should respond with { "message" : null } to avoid duplicate messages'};
+      },
+      reminder_manager: async (args, context?: ToolExecutionContext) => {
+        return await Reminders.processFunctionCall(args, context);
+      },
+      user_memory_manager: async (args, context?: ToolExecutionContext) => {
+        // Overwrite model-supplied IDs with server-side context to prevent
+        // the model from reading/writing another user's memory.
+        if (context) {
+          args.chat_id = context.chatId;
+          args.author_id = context.authorId;
+        }
+        return await MemoryService.processFunctionCall(args, context);
+      },
+      group_memory_manager: async (args, context?: ToolExecutionContext) => {
+        // Overwrite model-supplied chat_id; only allowed in groups.
+        if (context) {
+          if (!context.isGroup) {
+            return { success: false, result: 'Group memory is only available in group chats.' };
+          }
+          args.chat_id = context.chatId;
+        }
+        return await MemoryService.processFunctionCall(args, context);
+      }
+    };
+
+    return handlers[functionName] ?? null;
   }
 
   private async shouldProcessMessage(wspMessage: Message, chatData: Chat, botName: string){
@@ -163,6 +263,39 @@ class RobotoClass {
 
     const isOldMessage = wspMessage.timestamp * 1000 < (Date.now() - 10 * 60000);
     return !isOldMessage;
+  }
+
+  /**
+   * Rate limit check using a sliding window per key (authorId for direct, chatId for groups).
+   * Returns true if the request is allowed, false if rate limited.
+   * Admins bypass rate limiting (checked in caller).
+   */
+  private checkRateLimit(key: string): boolean {
+    const max = CONFIG.BotConfig.rateLimitMax;
+    if (!max || max <= 0) return true; // Disabled
+
+    const windowSec = CONFIG.BotConfig.rateLimitWindowSec;
+    const now = Date.now();
+    const windowStart = now - windowSec * 1000;
+
+    let timestamps = this.rateLimitTracker.get(key);
+    if (!timestamps) {
+      timestamps = [now];
+      this.rateLimitTracker.set(key, timestamps);
+      return true;
+    }
+
+    // Remove expired entries
+    timestamps = timestamps.filter(t => t > windowStart);
+
+    if (timestamps.length >= max) {
+      this.rateLimitTracker.set(key, timestamps);
+      return false;
+    }
+
+    timestamps.push(now);
+    this.rateLimitTracker.set(key, timestamps);
+    return true;
   }
 
   /**
@@ -231,7 +364,7 @@ class RobotoClass {
     msg_id: string,
     chatId: string,
     background: string,
-    output_format: "png" | "jpg" | "webp",
+    output_format: "png" | "jpg" | "webp" | "jpeg",
     send_as: "image"| "sticker",
     size: any,
     image_msg_ids: string[],
@@ -243,15 +376,22 @@ class RobotoClass {
     let imageStreams = null;
     let images;
 
+    // Normalize defaults for optional fields
+    const outputFormat = args.output_format || 'png';
+    // Normalize jpeg/jpg to a consistent internal format
+    const normalizedFormat = outputFormat === 'jpeg' ? 'jpg' : outputFormat;
+    const sendAs = args.send_as || 'image';
+    const background = args.background && args.background !== 'auto' ? args.background : undefined;
+    const quality = args.quality && args.quality !== 'auto' ? args.quality : undefined;
 
     if (args.image_msg_ids?.length > 0) {
       imageStreams = await Promise.all(
           args.image_msg_ids.map(async (imgMsgId: string) => {
             const imgMsg = await wspClient.getMessageById(imgMsgId);
             const media = await WspWeb.extractMedia(imgMsg);
-            if (media.errorMedia) throw new Error(media.errorMedia);
+            if (media.errorMedia) throw new Error(`Image reference error: ${media.errorMedia}`);
 
-            const buffer = Buffer.from(media.mediaData.data, 'base64');
+            const buffer = Buffer.from(media.mediaData!.data, 'base64');
             return bufferToStream(buffer);
           })
       );
@@ -261,19 +401,24 @@ class RobotoClass {
       images = await OpenAISvc.generateImage({
         prompt: args.prompt,
         imageStreams: imageStreams,
-        background: args.background as any,
-        output_format: args.output_format,
-        quality: args.quality ?? 'auto'
+        background: background as any,
+        output_format: normalizedFormat as any,
+        quality: quality as any
       });
     } else {
       images = await OpenaiCustomService.generateImage(args.prompt);
     }
 
-    let message;
-    const media = new MessageMedia(`image/${args.output_format=='jpg'?'jpeg':args.output_format}`, images[0].b64_json, `image.${args.output_format}`);
-    const isSticker = args.send_as == 'sticker'
+    if (!images || !Array.isArray(images) || images.length === 0 || !images[0].b64_json) {
+      throw new Error('Image generation returned no valid image data.');
+    }
 
-    message = await WspWeb.getWspClient().sendMessage(args.chatId, media, {sendMediaAsSticker: isSticker});
+    // Determine MIME type: map jpg->jpeg for MessageMedia, but keep png/webp as-is
+    const mimeSuffix = normalizedFormat === 'jpg' ? 'jpeg' : normalizedFormat;
+    const media = new MessageMedia(`image/${mimeSuffix}`, images[0].b64_json, `image.${normalizedFormat}`);
+    const isSticker = sendAs == 'sticker'
+
+    const message = await WspWeb.getWspClient().sendMessage(args.chatId, media, {sendMediaAsSticker: isSticker});
 
     this.addMessageToCache(message, args.chatId);
   }
@@ -291,6 +436,10 @@ class RobotoClass {
         const voice = params.voiceGender == 'male'? 'ash' : 'nova';
         const audioBuffer = await OpenAISvc.speech(params.messageToSay, params.responseFormat, voice, params.instructions);
         base64Audio = audioBuffer.toString('base64');
+      }
+
+      if (!base64Audio) {
+        throw new Error('Speech generation returned no audio data.');
       }
 
       let audioMedia = new MessageMedia('audio/mp3', base64Audio, 'voice.mp3');
@@ -365,7 +514,7 @@ class RobotoClass {
         );
 
       case 'remove':
-        const removed = chatConfigurationManager.removeChatConfig(chat.id._serialized);
+        const removed = await chatConfigurationManager.removeChatConfig(chat.id._serialized);
         return message.reply(
             removed
                 ? `✅ The custom prompt and bot name have been removed. The bot will use the default configuration.`
@@ -457,10 +606,13 @@ class RobotoClass {
           return message.reply("This command is only available in group chats.");
         }
 
-        await MemoryService.processFunctionCall({
-          action: 'delete',
+        const clearResult = await MemoryService.processFunctionCall({
+          action: 'clear',
           chat_id: chat.id._serialized
         });
+        if (!clearResult.success) {
+          return message.reply(`❌ Failed to clear group memory: ${clearResult.result}`);
+        }
         return message.reply("✅ Group memory has been cleared.");
 
       default:
@@ -526,8 +678,13 @@ class RobotoClass {
   }
 
   private async sendStateTyping(chatData: Chat){
-    while(this.busyChats.has(chatData.id._serialized)){
-      await chatData.sendStateTyping();
+    const chatId = chatData.id._serialized;
+    while(this.chatTypingFlags.has(chatId)){
+      try {
+        await chatData.sendStateTyping();
+      } catch (e: any) {
+        logger.error(`[sendStateTyping] Error sending typing state for chat ${chatId}: ${e.message}`);
+      }
       await sleep(2000);
     }
   }

@@ -2,7 +2,59 @@ import { config } from 'dotenv';
 import { ChatConfiguration } from "./chat-configurations";
 import { AIProvider } from "../interfaces/ai-interfaces";
 
-config();
+const dotenvResult = config();
+if (dotenvResult.error) {
+  console.warn('WARNING: .env file not found or could not be loaded. Using environment variables from the system.');
+}
+
+// --- Env helpers: safe parsing of numbers and comma-separated lists ---
+
+function getIntEnv(key: string, defaultValue: number, min?: number, max?: number): number {
+  const raw = process.env[key];
+  if (raw === undefined || raw === '') return defaultValue;
+  const value = parseInt(raw, 10);
+  if (isNaN(value)) {
+    console.warn(`WARNING: ${key}=${raw} is not a valid integer. Using default ${defaultValue}.`);
+    return defaultValue;
+  }
+  if (min !== undefined && value < min) {
+    console.warn(`WARNING: ${key}=${value} is below minimum ${min}. Using ${min}.`);
+    return min;
+  }
+  if (max !== undefined && value > max) {
+    console.warn(`WARNING: ${key}=${value} is above maximum ${max}. Using ${max}.`);
+    return max;
+  }
+  return value;
+}
+
+function getNumberEnv(key: string, defaultValue: number, min?: number, max?: number): number {
+  const raw = process.env[key];
+  if (raw === undefined || raw === '') return defaultValue;
+  const value = Number(raw);
+  if (isNaN(value)) {
+    console.warn(`WARNING: ${key}=${raw} is not a valid number. Using default ${defaultValue}.`);
+    return defaultValue;
+  }
+  if (min !== undefined && value < min) {
+    console.warn(`WARNING: ${key}=${value} is below minimum ${min}. Using ${min}.`);
+    return min;
+  }
+  if (max !== undefined && value > max) {
+    console.warn(`WARNING: ${key}=${value} is above maximum ${max}. Using ${max}.`);
+    return max;
+  }
+  return value;
+}
+
+function getCsvEnv(key: string): string[] {
+  const raw = process.env[key];
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+}
 
 const systemTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -83,37 +135,48 @@ const SpeechConfig = {
   enabled: process.env.VOICE_MESSAGES_ENABLED?.toLocaleLowerCase() === 'true',
 };
 
+// Helper: look up a provider entry safely, aborting with a clear error if unsupported.
+function safeProviderLookup(provider: string, type: string): any {
+  const entry = Providers[provider as keyof typeof Providers];
+  if (!entry) {
+    console.error(`ERROR: Invalid ${type}: ${provider}. Valid options: ${Object.keys(Providers).filter(k => k !== 'ELEVENLABS').join(', ')}.`);
+    console.error(`Please set a valid ${type} in your .env file.`);
+    process.exit(1);
+  }
+  return entry;
+}
+
 export const AIConfig = {
   ChatConfig:{
     provider: ChatConfig.provider,
-    model: ChatConfig.models[ChatConfig.provider],
-    baseURL: Providers[ChatConfig.provider].baseURL,
-    apiKey: Providers[ChatConfig.provider].apiKey,
-    analyzeImageDisabled: Providers[ChatConfig.provider].analyzeImageDisabled,
+    model: ChatConfig.models[ChatConfig.provider] ?? safeProviderLookup(ChatConfig.provider, 'CHAT_PROVIDER').model,
+    baseURL: safeProviderLookup(ChatConfig.provider, 'CHAT_PROVIDER').baseURL,
+    apiKey: safeProviderLookup(ChatConfig.provider, 'CHAT_PROVIDER').apiKey,
+    analyzeImageDisabled: safeProviderLookup(ChatConfig.provider, 'CHAT_PROVIDER').analyzeImageDisabled,
     reasoningEffort: process.env.REASONING_EFFORT ?? "low"
   },
   ImageConfig:{
     provider: ImageConfig.provider,
-    model: ImageConfig.models[ImageConfig.provider],
-    baseURL: Providers[ImageConfig.provider].baseURL,
-    apiKey: Providers[ImageConfig.provider].apiKey,
+    model: ImageConfig.models[ImageConfig.provider] ?? safeProviderLookup(ImageConfig.provider, 'IMAGE_PROVIDER').model,
+    baseURL: safeProviderLookup(ImageConfig.provider, 'IMAGE_PROVIDER').baseURL,
+    apiKey: safeProviderLookup(ImageConfig.provider, 'IMAGE_PROVIDER').apiKey,
     enabled: ImageConfig.enabled,
-    canEditImages: Providers[ChatConfig.provider].canEditImages,
+    canEditImages: safeProviderLookup(ImageConfig.provider, 'IMAGE_PROVIDER').canEditImages ?? false,
     quality: process.env.IMAGE_QUALITY ?? 'auto'
   },
   TranscriptionConfig: {
     provider: TranscriptionConfig.provider,
-    model: TranscriptionConfig.models[TranscriptionConfig.provider],
-    baseURL: Providers[TranscriptionConfig.provider].baseURL,
-    apiKey: Providers[TranscriptionConfig.provider].apiKey,
+    model: TranscriptionConfig.models[TranscriptionConfig.provider] ?? safeProviderLookup(TranscriptionConfig.provider, 'TRANSCRIPTION_PROVIDER').model,
+    baseURL: safeProviderLookup(TranscriptionConfig.provider, 'TRANSCRIPTION_PROVIDER').baseURL,
+    apiKey: safeProviderLookup(TranscriptionConfig.provider, 'TRANSCRIPTION_PROVIDER').apiKey,
     language: TranscriptionConfig.language,
     enabled: TranscriptionConfig.enabled
   },
   SpeechConfig: {
     provider: SpeechConfig.provider,
-    model: SpeechConfig.models[SpeechConfig.provider],
-    baseURL: Providers[SpeechConfig.provider].baseURL,
-    apiKey: Providers[SpeechConfig.provider].apiKey,
+    model: SpeechConfig.models[SpeechConfig.provider] ?? safeProviderLookup(SpeechConfig.provider, 'SPEECH_PROVIDER').model,
+    baseURL: safeProviderLookup(SpeechConfig.provider, 'SPEECH_PROVIDER').baseURL,
+    apiKey: safeProviderLookup(SpeechConfig.provider, 'SPEECH_PROVIDER').apiKey,
     voice: SpeechConfig.voice[SpeechConfig.provider],
     enabled: SpeechConfig.enabled
   }
@@ -124,20 +187,26 @@ export const AIConfig = {
 const BotConfig = {
   preferredLanguage: process.env.PREFERRED_LANGUAGE ?? '', // The default language for the bot. If not specified, the bot will use the language of the chat it is responding to
   botName: process.env.BOT_NAME ?? 'Roboto', // The name of the bot, used to identify when the bot is being addressed in group chats
-  maxCharacters: parseInt(process.env.MAX_CHARACTERS ?? '2000'), //The maximum number of characters the chat model will output in a single completion
-  maxImages: parseInt(process.env.MAX_IMAGES ?? '5'), // The maximum number of images the bot will process from the last received messages
-  maxMsgsLimit: parseInt(process.env.MAX_MSGS_LIMIT ?? '30'), // The maximum number of recent messages the bot will consider for generating a coherent response
-  maxHoursLimit: parseInt(process.env.MAX_HOURS_LIMIT ?? '24'), // The maximum hours a message's age can be for the bot to consider it in generating responses
-  transcriptionLanguage: process.env.TRANSCRIPTION_LANGUAGE ?? "en", //The language of the input audio for transcriptions. Supplying the input language in [ISO-639-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) format will improve accuracy and latency.
-  nodeCacheTime: parseInt(process.env.NODE_CACHE_TIME ?? '259200'), // The cache duration for stored data, specified in seconds.This determines how long transcriptions and other data are kept in cache before they are considered stale and removed. Example value is 259200, which translates to 3 days.
+  maxCharacters: getIntEnv('MAX_CHARACTERS', 2000, 1, 10000), // The maximum number of characters the chat model will output in a single completion
+  maxImages: getIntEnv('MAX_IMAGES', 5, 1, 50), // The maximum number of images the bot will process from the last received messages
+  maxMsgsLimit: getIntEnv('MAX_MSGS_LIMIT', 30, 1, 200), // The maximum number of recent messages the bot will consider for generating a coherent response
+  maxHoursLimit: getIntEnv('MAX_HOURS_LIMIT', 24, 1, 720), // The maximum hours a message's age can be for the bot to consider it in generating responses
+  transcriptionLanguage: process.env.TRANSCRIPTION_LANGUAGE ?? "en", // The language of the input audio for transcriptions. Supplying the input language in [ISO-639-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) format will improve accuracy and latency.
+  nodeCacheTime: getIntEnv('NODE_CACHE_TIME', 259200, 0), // The cache duration for stored data, specified in seconds. Default: 3 days.
+  messageCacheTtl: getIntEnv('MESSAGE_CACHE_TTL', 0, 0), // Per-chat message cache TTL in seconds. 0 = use NODE_CACHE_TIME.
+  mediaCacheTtl: getIntEnv('MEDIA_CACHE_TTL', 0, 0), // Downloaded media cache TTL in seconds. 0 = use NODE_CACHE_TIME.
+  transcriptionCacheTtl: getIntEnv('TRANSCRIPTION_CACHE_TTL', 0, 0), // Transcribed voice cache TTL in seconds. 0 = use NODE_CACHE_TIME.
   promptInfo: process.env.PROMPT_INFO, // You can use this to customize the bot's personality and provide context about the group or individuals for tailored interactions.
-  maxImageSizeMB: Number(process.env.MAX_IMAGE_SIZEMB ?? 10), // The maximum size of images the bot will process
-  maxDocumentSizeMB: Number(process.env.MAX_DOCUMENT_SIZEMB ?? 20), // The maximum size of documents the bot will process
+  maxImageSizeMB: getNumberEnv('MAX_IMAGE_SIZEMB', 10, 0, 100), // The maximum size of images the bot will process
+  maxDocumentSizeMB: getNumberEnv('MAX_DOCUMENT_SIZEMB', 20, 0, 200), // The maximum size of documents the bot will process
   botTimezone: process.env.BOT_TIMEZONE ?? systemTimezone ?? 'UTC',
   memoriesEnabled: process.env.MEMORIES_ENABLED?.toLocaleLowerCase() === 'true', // Whether the bot should remember user data and use it in responses
-  restrictedNumbers: process.env.RESTRICTED_NUMBERS? (<string>process.env.RESTRICTED_NUMBERS).split(','):[],
-  adminNumbers: process.env.ADMIN_NUMBERS? (<string>process.env.ADMIN_NUMBERS).split(','):[],
-  useContactNames: process.env.USE_CONTACT_NAMES == 'true'
+  restrictedNumbers: getCsvEnv('RESTRICTED_NUMBERS'), // Comma-separated phone numbers restricted from interacting
+  adminNumbers: getCsvEnv('ADMIN_NUMBERS'), // Comma-separated admin phone numbers
+  useContactNames: process.env.USE_CONTACT_NAMES == 'true',
+  puppeteerNoSandbox: process.env.PUPPETEER_NO_SANDBOX?.toLocaleLowerCase() === 'true', // Whether to run Puppeteer with --no-sandbox. Required in some Docker environments. Default: false.
+  rateLimitMax: getIntEnv('RATE_LIMIT_MAX', 0, 0, 600), // Max AI requests per window per chat/author. 0 = disabled. Default: 0 (disabled).
+  rateLimitWindowSec: getIntEnv('RATE_LIMIT_WINDOW_SEC', 60, 5, 3600), // Rate limiting window in seconds. Default: 60.
 };
 
 // Dynamically generate the bot's initial prompt based on configuration parameters

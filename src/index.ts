@@ -1,9 +1,11 @@
 import logger from './logger';
-import { Client, LocalAuth, Message } from "whatsapp-library.js";
+import { Client, LocalAuth, Message } from "whatsapp-web.js";
 import qrcode from 'qrcode-terminal';
 import Roboto from "./bot/roboto";
 import WhatsappHandler from "./bot/wsp-web";
+import Reminders from "./services/reminder-service";
 import { configValidation, logConfigInfo } from "./utils";
+import { CONFIG } from "./config";
 
 require('dotenv').config();
 configValidation()
@@ -12,20 +14,29 @@ logConfigInfo();
 async function start() {
   try {
 
+    const puppeteerArgs: string[] = [
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+      '--no-first-run',
+      '--disable-gpu'
+    ];
+
+    // Chromium only accepts --no-zygote when sandbox is also disabled, so keep
+    // those flags coupled for Docker/root environments that require them.
+    if (CONFIG.BotConfig.puppeteerNoSandbox) {
+      puppeteerArgs.unshift('--no-sandbox', '--disable-setuid-sandbox', '--no-zygote');
+    }
+
     const wspClient = new Client({
       authStrategy: new LocalAuth(),
       puppeteer: {
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--disable-gpu'
-        ],
+        args: puppeteerArgs,
       }
     });
+
+    // Set the WhatsApp client immediately after construction so all downstream
+    // consumers can access it as soon as it becomes available.
+    WhatsappHandler.setWspClient(wspClient);
 
     logger.info('Starting WhatsApp client...');
 
@@ -43,18 +54,25 @@ async function start() {
     });
 
     wspClient.on('ready', () => {
-      return logger.info('Client is ready!');
+      logger.info('Client is ready!');
+      // Start the reminder checker now that the WhatsApp client is available.
+      Reminders.startReminderChecker();
     });
 
-    wspClient.on('message', async (message: Message) => Roboto.readWspMessage(message));
+    // Capture unhandled rejections from the message listener so a single
+    // failing message does not crash the process.
+    wspClient.on('message', (message: Message) => {
+      void Roboto.readWspMessage(message).catch((e) => {
+        logger.error(`[index] Unhandled error in readWspMessage: ${e.message}`);
+      });
+    });
 
     await wspClient.initialize();
-
-    WhatsappHandler.setWspClient(wspClient);
 
     const shutdown = async (signal: string) => {
       logger.info(`Received ${signal}, shutting down gracefully...`);
       try {
+        Reminders.stopReminderChecker();
         await wspClient.destroy();
         logger.info('WhatsApp client destroyed');
       } catch (e: any) {
@@ -70,5 +88,21 @@ async function start() {
     logger.error(`ERROR: ${e.message}`);
   }
 }
+
+// Global handlers for unhandled rejections and uncaught exceptions.
+// These prevent silent process crashes and log the error for debugging.
+process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+  logger.error(`[process] Unhandled Rejection at: ${promise}, reason: ${reason?.message || reason}`);
+});
+
+process.on('uncaughtException', (error: Error) => {
+  logger.error(`[process] Uncaught Exception: ${error.message}`);
+  // For uncaught exceptions we perform a controlled shutdown
+  // because the process may be in an inconsistent state.
+  try {
+    Reminders.stopReminderChecker();
+  } catch (_) { /* ignore errors during emergency cleanup */ }
+  process.exit(1);
+});
 
 start();

@@ -5,16 +5,30 @@ import { AIConfig, CONFIG } from '../config';
 import { ChatCompletion } from 'openai/src/resources/chat/completions';
 import { Tool } from "openai/resources/responses/responses";
 import NodeCache from "node-cache";
-import { AIRole } from "../interfaces/ai-interfaces";
-import { cleanChatCompletionMessage, countMessages, sanitizeLogImages, trimCachePreserveMessageStart } from "../utils";
+import { AIRole, ToolExecutionContext } from "../interfaces/ai-interfaces";
+import { cleanChatCompletionMessage, countMessages, sanitizeForLog, trimCachePreserveMessageStart } from "../utils";
 import Roboto from "../bot/roboto";
 import { ChatConfiguration } from "../config/chat-configurations";
 
 class CustomOpenAIService {
 
-  private messagesCache = new NodeCache();
+  private messagesCache = new NodeCache({
+    stdTTL: CONFIG.BotConfig.messageCacheTtl || CONFIG.BotConfig.nodeCacheTime,
+    checkperiod: 600,
+  });
+  private static clientCache = new Map<string, OpenAI>();
 
   constructor() {
+  }
+
+  private getClient(baseURL?: string, apiKey?: string): OpenAI {
+    const key = `${baseURL ?? ''}::${apiKey ?? ''}`;
+    let client = CustomOpenAIService.clientCache.get(key);
+    if (!client) {
+      client = new OpenAI({ baseURL, apiKey });
+      CustomOpenAIService.clientCache.set(key, client);
+    }
+    return client;
   }
 
   public deleteChatCache(chatId: string){
@@ -31,7 +45,7 @@ class CustomOpenAIService {
     return this.messagesCache.has(chatId);
   }
 
-  public async sendMessage(aiMessagesInputList: ChatCompletionMessageParam[], systemPrompt: string, chatConfig: ChatConfiguration, tools: any): Promise<string> {
+  public async sendMessage(aiMessagesInputList: ChatCompletionMessageParam[], systemPrompt: string, chatConfig: ChatConfiguration, tools: any, toolContext?: ToolExecutionContext): Promise<string> {
     let cycleCount = 0;
     const maxCycles = 5;
     const chatId = chatConfig.chatId;
@@ -52,7 +66,7 @@ class CustomOpenAIService {
           aiMessages.push(cleanChatCompletionMessage(aiResponse));
 
           hasFunctionCall = true;
-          const functionResult = await Roboto.handleFunction(output.function.name, output.function.arguments);
+          const functionResult = await Roboto.handleFunction(output.function.name, output.function.arguments, toolContext);
 
           functionOutputs.push({role: "tool", tool_call_id: output.id, content: JSON.stringify(functionResult)})
 
@@ -95,10 +109,7 @@ class CustomOpenAIService {
       systemPrompt?: string
   ): Promise<OpenAI.ChatCompletionMessage> {
 
-    const client = new OpenAI({
-      baseURL: AIConfig.ChatConfig.baseURL,
-      apiKey: AIConfig.ChatConfig.apiKey,
-    });
+    const client = this.getClient(AIConfig.ChatConfig.baseURL, AIConfig.ChatConfig.apiKey);
 
     const hasSystemMsg = (messageList[0] as any).role == AIRole.SYSTEM;
     if(systemPrompt) {
@@ -107,7 +118,7 @@ class CustomOpenAIService {
     }
 
     logger.info(`[${AIConfig.ChatConfig.provider}] Sending ${countMessages(messageList)} messages`);
-    logger.debug(`[${AIConfig.ChatConfig.provider}] Sending Msg: ${sanitizeLogImages(JSON.stringify(messageList[messageList.length - 1]))}`);
+    logger.debug(`[${AIConfig.ChatConfig.provider}] Sending Msg: ${JSON.stringify(sanitizeForLog(messageList[messageList.length - 1]))}`);
 
     const params: any = {
       model: AIConfig.ChatConfig.model,
@@ -122,19 +133,16 @@ class CustomOpenAIService {
     const response: ChatCompletion = await client.chat.completions.create(params);
 
     logger.debug(`[${AIConfig.ChatConfig.provider}] ResponsesAPI Usage: Input=${response.usage?.prompt_tokens}` + ` Cached=${response.usage?.prompt_tokens_details?.cached_tokens}` + ` Output=${response.usage?.completion_tokens}`);
-    logger.debug(`[${AIConfig.ChatConfig.provider}] ResponsesAPI Response:` + sanitizeLogImages(JSON.stringify(response.choices[0].message)));
+    logger.debug(`[${AIConfig.ChatConfig.provider}] ResponsesAPI Response:` + JSON.stringify(sanitizeForLog(response.choices[0].message)));
 
     return response.choices[0].message;
   }
 
   async generateImage(prompt) {
 
-    const client = new OpenAI({
-      baseURL: AIConfig.ImageConfig.baseURL,
-      apiKey: AIConfig.ImageConfig.apiKey,
-    });
+    const client = this.getClient(AIConfig.ImageConfig.baseURL, AIConfig.ImageConfig.apiKey);
 
-    logger.debug(`[${AIConfig.ImageConfig.provider}->generateImage] Creating image with prompt: ${prompt}`);
+    logger.debug(`[${AIConfig.ImageConfig.provider}->generateImage] Creating image (prompt: ${sanitizeForLog(prompt)?.substring(0, 100) ?? 'N/A'})`);
 
     const response = await client.images.generate({
       prompt: prompt,

@@ -4,6 +4,7 @@ import { ChatCompletionMessageParam } from "openai/resources";
 import { MessageParam } from "@anthropic-ai/sdk/resources";
 import { CONFIG } from "../config";
 import { getUnsupportedMessage } from "../utils";
+import logger from "../logger";
 
 // Constants
 const ATTACHMENT_FALLBACK_MSG =
@@ -347,6 +348,7 @@ export function convertIaMessagesLang(
         case AIProvider.DEEPINFRA:
             return toOther(messageList);
         default:
-            return [];
+            logger.error(`CRITICAL: Unsupported chat provider: ${CONFIG.ChatConfig.provider}. No message conversion available.`);
+            throw new Error(`Unsupported chat provider: ${CONFIG.ChatConfig.provider}. Please configure a valid CHAT_PROVIDER.`);
     }
 }

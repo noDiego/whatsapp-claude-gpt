@@ -3,9 +3,10 @@ import { groupMemoriesTable, userMemoriesTable } from '../db/schema';
 import { and, eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '../logger';
-import { OperationResult } from '../interfaces/ai-interfaces';
+import { OperationResult, ToolExecutionContext } from '../interfaces/ai-interfaces';
 import { CONFIG } from "../config";
 import WspWeb from "../bot/wsp-web";
+import { safeJsonToObject, sanitizeForLog } from "../utils";
 
 interface MemoryData {
     real_name?: string;
@@ -25,7 +26,7 @@ interface MemoryData {
     recurring_topics?: string[];
     group_likes?: string[];
     group_dislikes?: string[];
-    group_jargon?: string[];
+    group_jargon?: Record<string, any>;
     group_running_jokes?: string[];
     group_notes?: string[];
 }
@@ -34,12 +35,15 @@ interface MemoryData {
 class MemoryServiceClass {
 
     // GET: Retrieve memory
-    public async getMemory(chatId: string, authorId?: string): Promise<MemoryData | null> {
+    public async getMemory(chatId: string, authorId?: string, isGroup?: boolean): Promise<MemoryData | null> {
         try {
             if (!chatId) return null;
-            const chat = await WspWeb.getWspClient().getChatById(chatId);
+            if (isGroup === undefined) {
+                const chat = await WspWeb.getWspClient().getChatById(chatId);
+                isGroup = chat.isGroup;
+            }
 
-            if(chat.isGroup && !authorId){
+            if(isGroup && !authorId){
                 const result = await db.select()
                     .from(groupMemoriesTable)
                     .where(eq(groupMemoriesTable.chatId, chatId))
@@ -58,18 +62,21 @@ class MemoryServiceClass {
             }
 
         } catch (error) {
-            logger.error(`Error getting memory: ${error.message}`);
+            logger.error(`Error getting memory: ${JSON.stringify(sanitizeForLog(error))}`);
             return null;
         }
     }
 
     // SAVE: Store/update memory (replaces completely)
-    public async saveMemory(chatId: string, memoryData: MemoryData, authorId?: string): Promise<boolean> {
+    public async saveMemory(chatId: string, memoryData: MemoryData, authorId?: string, isGroup?: boolean): Promise<boolean> {
         try {
-            const chat = await WspWeb.getWspClient().getChatById(chatId);
+            if (isGroup === undefined) {
+                const chat = await WspWeb.getWspClient().getChatById(chatId);
+                isGroup = chat.isGroup;
+            }
             const now = new Date().toISOString();
 
-            if (chat.isGroup && !authorId) {
+            if (isGroup && !authorId) {
                 // Group memory
                 const existing = await db.select()
                     .from(groupMemoriesTable)
@@ -82,7 +89,7 @@ class MemoryServiceClass {
                     recurringTopics: this.arrayToJson(memoryData.recurring_topics),
                     groupLikes: this.arrayToJson(memoryData.group_likes),
                     groupDislikes: this.arrayToJson(memoryData.group_dislikes),
-                    groupJargon: this.arrayToJson(memoryData.group_jargon),
+                    groupJargon: memoryData.group_jargon ? JSON.stringify(memoryData.group_jargon) : null,
                     groupRunningJokes: this.arrayToJson(memoryData.group_running_jokes),
                     groupNotes: this.arrayToJson(memoryData.group_notes),
                     updatedAt: now
@@ -146,21 +153,24 @@ class MemoryServiceClass {
                 }
             }
 
-            logger.info(`Memory saved for ${chat.isGroup ? 'group' : 'user'}: ${chatId}`);
+            logger.info(`Memory saved for ${isGroup ? 'group' : 'user'}: ${chatId}`);
             return true;
 
         } catch (error) {
-            logger.error(`Error saving memory: ${error.message}`);
+            logger.error(`Error saving memory: ${JSON.stringify(sanitizeForLog(error))}`);
             return false;
         }
     }
 
     // CLEAR: Delete memory
-    public async clearMemory(chatId: string, authorId?: string): Promise<boolean> {
+    public async clearMemory(chatId: string, authorId?: string, isGroup?: boolean): Promise<boolean> {
         try {
-            const chat = await WspWeb.getWspClient().getChatById(chatId);
+            if (isGroup === undefined) {
+                const chat = await WspWeb.getWspClient().getChatById(chatId);
+                isGroup = chat.isGroup;
+            }
 
-            if (chat.isGroup && !authorId) {
+            if (isGroup && !authorId) {
                 const result = await db.delete(groupMemoriesTable)
                     .where(eq(groupMemoriesTable.chatId, chatId))
                     .run();
@@ -177,22 +187,23 @@ class MemoryServiceClass {
                 return result.changes > 0;
             }
         } catch (error) {
-            logger.error(`Error clearing memory: ${error.message}`);
+            logger.error(`Error clearing memory: ${JSON.stringify(sanitizeForLog(error))}`);
             return false;
         }
     }
 
     // Main function call processor
-    public async processFunctionCall(args: any): Promise<OperationResult> {
+    public async processFunctionCall(args: any, context?: ToolExecutionContext): Promise<OperationResult> {
         try {
             const {action, chat_id, author_id, memory_data} = args;
+            const isGroup = context?.isGroup;
 
             let result: any;
             let message: string;
 
             switch (action) {
                 case 'get':
-                    result = await this.getMemory(chat_id, author_id);
+                    result = await this.getMemory(chat_id, author_id, isGroup);
                     message = result ? 'Memory retrieved successfully' : 'No memory found';
                     break;
 
@@ -201,13 +212,13 @@ class MemoryServiceClass {
                         return {success: false, result: 'memory_data is required for save action'};
                     }
 
-                    const saved = await this.saveMemory(chat_id, memory_data, author_id);
-                    result = saved ? await this.getMemory(chat_id, author_id) : null;
+                    const saved = await this.saveMemory(chat_id, memory_data, author_id, isGroup);
+                    result = saved ? await this.getMemory(chat_id, author_id, isGroup) : null;
                     message = saved ? 'Memory saved successfully' : 'Failed to save memory';
                     break;
 
                 case 'clear':
-                    const cleared = await this.clearMemory(chat_id, author_id);
+                    const cleared = await this.clearMemory(chat_id, author_id, isGroup);
                     result = null;
                     message = cleared ? 'Memory cleared successfully' : 'No memory found to clear';
                     break;
@@ -226,7 +237,7 @@ class MemoryServiceClass {
             };
 
         } catch (error) {
-            logger.error(`Error processing memory function call: ${error.message}`);
+            logger.error(`Error processing memory function call: ${JSON.stringify(sanitizeForLog(error))}`);
             return {
                 success: false,
                 result: `Error: ${error.message}`
@@ -235,17 +246,28 @@ class MemoryServiceClass {
     }
 
     // Format memory for system prompt
-    public async getMemoryContext(chatId: string, authorId?: string): Promise<string> {
+    public async getMemoryContext(chatId: string, authorId?: string, isGroup?: boolean): Promise<string> {
         try {
-            const chat = await WspWeb.getWspClient().getChatById(chatId);
+            // Resolve isGroup from WhatsApp only if not provided by the caller.
+            // This prevents losing all memory when WhatsApp can't resolve the chat
+            // but the caller already knows the group/private context.
+            if (isGroup === undefined) {
+                try {
+                    const chat = await WspWeb.getWspClient().getChatById(chatId);
+                    isGroup = chat.isGroup;
+                } catch {
+                    // Fall back: without isGroup, default to user memory prefix.
+                    isGroup = false;
+                }
+            }
 
-            const memory = await this.getMemory(chatId, authorId);
+            const memory = await this.getMemory(chatId, authorId, isGroup);
             if (!memory) return '';
 
-            return (chat.isGroup ? `**GROUP MEMORY:**\n` : `**USER MEMORY:**\n`) + JSON.stringify(memory);
+            return (isGroup ? `**GROUP MEMORY:**\n` : `**USER MEMORY:**\n`) + JSON.stringify(memory);
 
         } catch (error) {
-            logger.error(`Error formatting memory context: ${error.message}`);
+            logger.error(`Error formatting memory context: ${JSON.stringify(sanitizeForLog(error))}`);
             return '';
         }
     }
@@ -275,9 +297,9 @@ class MemoryServiceClass {
             interests: this.jsonToArray(row.interests),
             likes: this.jsonToArray(row.likes),
             dislikes: this.jsonToArray(row.dislikes),
-            relationships: row.relationships ? JSON.parse(row.relationships) : {},
+            relationships: safeJsonToObject(row.relationships),
             running_jokes: this.jsonToArray(row.runningJokes),
-            jargon: row.jargon ? JSON.parse(row.jargon) : {},
+            jargon: safeJsonToObject(row.jargon),
             notes: this.jsonToArray(row.personalNotes)
         };
     }
@@ -288,7 +310,7 @@ class MemoryServiceClass {
             recurring_topics: this.jsonToArray(row.recurringTopics),
             group_likes: this.jsonToArray(row.groupLikes),
             group_dislikes: this.jsonToArray(row.groupDislikes),
-            group_jargon: row.groupJargon ? JSON.parse(row.groupJargon) : {},
+            group_jargon: safeJsonToObject(row.groupJargon),
             group_running_jokes: this.jsonToArray(row.groupRunningJokes),
             group_notes: this.jsonToArray(row.groupNotes)
         };

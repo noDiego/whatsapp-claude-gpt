@@ -3,7 +3,7 @@ import { remindersTable as remindersTable } from '../db/schema';
 import logger from '../logger';
 import { v4 as uuidv4 } from 'uuid';
 import { format, fromZonedTime, toZonedTime } from 'date-fns-tz';
-import { AiMessage, AIRole, OperationResult } from "../interfaces/ai-interfaces";
+import { AiMessage, AIRole, OperationResult, ToolExecutionContext } from "../interfaces/ai-interfaces";
 import { chatConfigurationManager } from "../config/chat-configurations";
 import { addSeconds, extractAnswer, getUserName } from "../utils";
 import { addDays, addMonths, addWeeks } from 'date-fns';
@@ -12,19 +12,28 @@ import Roboto from "../bot/roboto";
 import WspWeb from "../bot/wsp-web";
 import { db } from "../db";
 import { and, eq } from "drizzle-orm";
-import { Chat, Message } from "whatsapp-library.js";
+import { Chat, Message } from "whatsapp-web.js";
 
 class ReminderManager {
 
     private reminderInterval: NodeJS.Timeout | null = null;
+    private isChecking = false;
 
     constructor() {
-        this.startReminderChecker();
+        // Reminder checker is now started from the 'ready' event in src/index.ts
+        // to ensure the WhatsApp client is available.
     }
 
-    private startReminderChecker() {
+    public startReminderChecker() {
+        if (this.reminderInterval) {
+            logger.warn('Reminder checker already running, skipping duplicate start.');
+            return;
+        }
+        logger.info('Starting reminder checker');
         this.reminderInterval = setInterval(() => {
-            this.checkReminders();
+            this.checkReminders().catch((e) => {
+                logger.error(`[ReminderManager] Unhandled error in checkReminders: ${e.message}`);
+            });
         }, 59 * 1000);
     }
 
@@ -36,54 +45,65 @@ class ReminderManager {
     }
 
     private async checkReminders() {
-        const now = new Date();
+        // Prevent overlapping runs when a previous check is still in progress.
+        if (this.isChecking) {
+            logger.warn('Reminder check skipped: previous check still in progress.');
+            return;
+        }
+        this.isChecking = true;
 
-        const dueReminders = await db.select()
-            .from(remindersTable)
-            .where(and(
-                eq(remindersTable.isActive, true)
-            ))
-            .all();
+        try {
+            const now = new Date();
 
-        for (const r of dueReminders) {
+            const dueReminders = await db.select()
+                .from(remindersTable)
+                .where(and(
+                    eq(remindersTable.isActive, true)
+                ))
+                .all();
 
-            const reminder = this.mapRowToReminder(r);
+            for (const r of dueReminders) {
 
-            const scheduledDate = fromZonedTime(reminder.reminderDate, reminder.reminderDateTZ);
-            if (scheduledDate > now) continue;
+                const reminder = this.mapRowToReminder(r);
 
-            try {
-                const diffMs = now.getTime() - scheduledDate.getTime();
-                if((diffMs / 60000) <= 60) {
-                    if (diffMs > 60000) {
-                        logger.warn(`Reminder for ${reminder.chatId} (${reminder.id}) is firing ${Math.round(diffMs / 60000)} minute(s) late.`);
-                    }
-                    await this.sendReminderMessage(reminder);
-                } else {
-                    logger.info(`Reminder for ${reminder.chatName} has expired. Reminder not sent`);
-                }
+                const scheduledDate = fromZonedTime(reminder.reminderDate, reminder.reminderDateTZ);
+                if (scheduledDate > now) continue;
 
-                if (reminder.recurrenceType && reminder.recurrenceType !== 'none') {
-                    const nextDate = this.calculateNextRecurrence(reminder);
-                    if (nextDate) {
-                        const zonedDate = toZonedTime(nextDate, reminder.reminderDateTZ);
-                        await this.updateReminder(reminder.id, {
-                            reminderDate: format(zonedDate, "yyyy-MM-dd'T'HH:mm:ss", { timeZone: reminder.reminderDateTZ }),
-                            updatedAt: new Date(),
-                        });
-                        logger.info(`Recurring reminder updated for next occurrence: ${reminder.id}`);
+                try {
+                    const diffMs = now.getTime() - scheduledDate.getTime();
+                    if((diffMs / 60000) <= 60) {
+                        if (diffMs > 60000) {
+                            logger.warn(`Reminder for ${reminder.chatId} (${reminder.id}) is firing ${Math.round(diffMs / 60000)} minute(s) late.`);
+                        }
+                        await this.sendReminderMessage(reminder);
                     } else {
-                        await this.deactivateReminder(reminder.id);
-                        logger.info(`Recurring reminder completed and deactivated: ${reminder.id}`);
+                        logger.info(`Reminder ${reminder.id} for chat ${reminder.chatId} has expired. Reminder not sent`);
                     }
-                } else {
-                    await this.deleteReminder(reminder.id);
-                }
 
-                logger.info(`Reminder for ${reminder.chatId} (${reminder.id}) processed.`);
-            } catch (err) {
-                logger.error(`Error processing reminder for ${reminder.chatId}: ${err.message}`);
+                    if (reminder.recurrenceType && reminder.recurrenceType !== 'none') {
+                        const nextDate = this.calculateNextRecurrence(reminder);
+                        if (nextDate) {
+                            const zonedDate = toZonedTime(nextDate, reminder.reminderDateTZ);
+                            await this.updateReminder(reminder.id, reminder.chatId, {
+                                reminderDate: format(zonedDate, "yyyy-MM-dd'T'HH:mm:ss", { timeZone: reminder.reminderDateTZ }),
+                                updatedAt: new Date(),
+                            });
+                            logger.info(`Recurring reminder updated for next occurrence: ${reminder.id}`);
+                        } else {
+                            await this.deactivateReminder(reminder.id, reminder.chatId);
+                            logger.info(`Recurring reminder completed and deactivated: ${reminder.id}`);
+                        }
+                    } else {
+                        await this.deleteReminder(reminder.id, reminder.chatId);
+                    }
+
+                    logger.info(`Reminder ${reminder.id} for chat ${reminder.chatId} processed.`);
+                } catch (err) {
+                    logger.error(`Error processing reminder ${reminder.id} for chat ${reminder.chatId}: ${err.message}`);
+                }
             }
+        } finally {
+            this.isChecking = false;
         }
     }
 
@@ -144,7 +164,7 @@ class ReminderManager {
         return nextDate;
     }
 
-    public async processFunctionCall(args): Promise<OperationResult>{
+    public async processFunctionCall(args, context?: ToolExecutionContext): Promise<OperationResult>{
         const {
             action,
             message: reminderMessage,
@@ -158,11 +178,20 @@ class ReminderManager {
             msg_id
         } = args;
 
+        let chatId: string;
+        let chatName: string;
 
-        const wspMsg: Message = await WspWeb.getWspClient().getMessageById(msg_id)
-        const chatData: Chat = await wspMsg.getChat();
-        const chatId = chatData.id._serialized;
-        const chatName = chatData.name ?? await getUserName(wspMsg);
+        // Use server-side context when available (AI tool calls); fall back to
+        // deriving from msg_id for backward compatibility with manual flows.
+        if (context) {
+            chatId = context.chatId;
+            chatName = context.chatName;
+        } else {
+            const wspMsg: Message = await WspWeb.getWspClient().getMessageById(msg_id)
+            const chatData: Chat = await wspMsg.getChat();
+            chatId = chatData.id._serialized;
+            chatName = chatData.name ?? await getUserName(wspMsg);
+        }
         let responseMessage = '';
         let reminder;
 
@@ -188,7 +217,7 @@ class ReminderManager {
                 break;
 
             case 'update':
-                reminder = await this.updateReminder(reminder_id, {
+                reminder = await this.updateReminder(reminder_id, chatId, {
                     message: reminderMessage,
                     reminderDate: reminder_date,
                     reminderDateTZ: reminder_date_timezone || CONFIG.BotConfig.botTimezone,
@@ -201,17 +230,17 @@ class ReminderManager {
                 break;
 
             case 'delete':
-                await this.deleteReminder(reminder_id);
+                await this.deleteReminder(reminder_id, chatId);
                 responseMessage = `Reminder deleted successfully`;
                 break;
 
             case 'deactivate':
-                await this.deactivateReminder(reminder_id);
+                await this.deactivateReminder(reminder_id, chatId);
                 responseMessage = `Reminder deactivated successfully`;
                 break;
 
             case 'reactivate':
-                await this.reactivateReminder(reminder_id);
+                await this.reactivateReminder(reminder_id, chatId);
                 responseMessage = `Reminder reactivated successfully`;
                 break;
         }
@@ -253,32 +282,40 @@ class ReminderManager {
     /**
      * Updates an existing reminder
      */
-    private async updateReminder(id: string, updates: Partial<ReminderCreateInput>): Promise<Reminder | null> {
+    private async updateReminder(id: string, chatId: string, updates: Partial<ReminderCreateInput>): Promise<Reminder | null> {
         const updatedAt = new Date().toISOString();
 
         const result = await db.update(remindersTable)
             .set({ ...updates , updatedAt })
-            .where(eq(remindersTable.id, id))
+            .where(and(
+                eq(remindersTable.id, id),
+                eq(remindersTable.chatId, chatId)
+            ))
             .returning();
 
         if (result.length === 0) {
-            logger.warn(`Reminder with ID ${id} not found`);
+            logger.warn(`Reminder with ID ${id} not found for chat ${chatId}`);
             return null;
         }
-        logger.info(`Updated reminder with ID: ${id}`);
+        logger.info(`Updated reminder with ID: ${id} for chat ${chatId}`);
         return this.mapRowToReminder(result[0]);
     }
 
     /**
-     * Deletes a reminder
+     * Deletes a reminder scoped to the owning chat.
      */
-    private async deleteReminder(id: string): Promise<boolean> {
-        const result = await db.delete(remindersTable).where(eq(remindersTable.id, id)).run();
+    private async deleteReminder(id: string, chatId: string): Promise<boolean> {
+        const result = await db.delete(remindersTable)
+            .where(and(
+                eq(remindersTable.id, id),
+                eq(remindersTable.chatId, chatId)
+            ))
+            .run();
         if (result.changes === 0) {
-            logger.warn(`Reminder with ID ${id} not found`);
+            logger.warn(`Reminder with ID ${id} not found for chat ${chatId}`);
             return false;
         }
-        logger.info(`Deleted reminder with ID: ${id}`);
+        logger.info(`Deleted reminder with ID: ${id} for chat ${chatId}`);
         return true;
     }
 
@@ -291,36 +328,42 @@ class ReminderManager {
     }
 
     /**
-     * Deactivates a reminder without deleting it
+     * Deactivates a reminder without deleting it, scoped to the owning chat.
      */
-    private async deactivateReminder(id: string): Promise<boolean> {
+    private async deactivateReminder(id: string, chatId: string): Promise<boolean> {
         const updatedAt = new Date().toISOString();
         const result = await db.update(remindersTable)
             .set({ isActive: false, updatedAt })
-            .where(eq(remindersTable.id, id))
+            .where(and(
+                eq(remindersTable.id, id),
+                eq(remindersTable.chatId, chatId)
+            ))
             .run();
         if (result.changes === 0) {
-            logger.warn(`Reminder with ID ${id} not found`);
+            logger.warn(`Reminder with ID ${id} not found for chat ${chatId}`);
             return false;
         }
-        logger.info(`Deactivated reminder with ID: ${id}`);
+        logger.info(`Deactivated reminder with ID: ${id} for chat ${chatId}`);
         return true;
     }
 
     /**
-     * Reactivates a reminder
+     * Reactivates a reminder, scoped to the owning chat.
      */
-    private async reactivateReminder(id: string): Promise<boolean> {
+    private async reactivateReminder(id: string, chatId: string): Promise<boolean> {
         const updatedAt = new Date().toISOString();
         const result = await db.update(remindersTable)
             .set({ isActive: true, updatedAt })
-            .where(eq(remindersTable.id, id))
+            .where(and(
+                eq(remindersTable.id, id),
+                eq(remindersTable.chatId, chatId)
+            ))
             .run();
         if (result.changes === 0) {
-            logger.warn(`Reminder with ID ${id} not found`);
+            logger.warn(`Reminder with ID ${id} not found for chat ${chatId}`);
             return false;
         }
-        logger.info(`Reactivated reminder with ID: ${id}`);
+        logger.info(`Reactivated reminder with ID: ${id} for chat ${chatId}`);
         return true;
     }
 
