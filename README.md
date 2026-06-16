@@ -73,6 +73,25 @@ OPENAI_API_KEY=your_openai_api_key
 This way, your personal WhatsApp account remains separate from the bot's activities, and you can interact with the bot just like any other contact.
 >
 
+## Reproducible Builds & Validation
+
+This project uses `package-lock.json` (lockfileVersion 3) to guarantee reproducible dependency trees across environments. Running `npm install` with the lockfile present will install the exact versions resolved and tested.
+
+- **Regenerate lockfile** (after changing `package.json`):
+  ```
+  npm install --package-lock-only
+  ```
+- **Build validation** (TypeScript compilation):
+  ```
+  npm run build
+  ```
+- **Security audit** (reports vulnerabilities without modifying dependencies):
+  ```
+  npm audit
+  ```
+
+The lockfile should be committed and kept up to date. Dependency upgrades should be reviewed in a separate PR or change — do not run `npm audit fix` or `npm update` without explicit review, as it may introduce breaking changes.
+
 ## Basic Configuration
 
 At minimum, you need an API key for one of the supported AI providers. For basic usage with OpenAI:
@@ -125,6 +144,12 @@ Memory commands you can type:
 - -memory clear
 - -memory group (in group chats)
 - -memory cleargroup (in group chats)
+
+### Privacy & Data Retention
+
+The bot logs are sanitized to avoid exposing API keys, tokens, phone numbers, or raw user content. All sensitive patterns (Bearer tokens, `xi-api-key`, cookies, etc.) are redacted before logging.
+
+- **SQLite database** (`roboto.sqlite`): Contains reminders, chat configurations, and memories. Since the database is not encrypted, restrict file permissions (`chmod 600 roboto.sqlite`) and ensure the host volume is secured. For maximum privacy, periodically clear old records using the `-memory clear` / `-memory cleargroup` commands.
 
 ### Using `-chatconfig` Command
 
