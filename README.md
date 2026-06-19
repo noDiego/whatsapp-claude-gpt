@@ -20,6 +20,28 @@ WhatsApp-Claude-GPT is a WhatsApp chatbot that supports multiple AI providers fo
 - **Image Edition**: Edit/transform images using references (OpenAI-only)
 - Per-chat configuration and quality-of-life improvements.
 
+## What's New in 1.4.6
+
+- **Privacy & Log Sanitization**: All log output is now sanitized to redact API keys, Bearer tokens, phone numbers, and base64 image data. See [Privacy & Data Retention](#privacy--data-retention).
+- **OpenAI `store` opt-out by default**: API requests now set `store: false` by default. Set `OPENAI_STORE=true` in your `.env` to re-enable server-side conversation storage.
+- **Rate Limiting**: New optional per-chat/per-author rate limiting to prevent abuse. Configure with `RATE_LIMIT_MAX` and `RATE_LIMIT_WINDOW_SEC`. See [Rate Limiting](#rate-limiting).
+- **Granular Cache TTLs**: Fine-tune cache expiration independently for messages (`MESSAGE_CACHE_TTL`), downloaded media (`MEDIA_CACHE_TTL`), and voice transcriptions (`TRANSCRIPTION_CACHE_TTL`).
+- **Configurable `CLAUDE_MAX_TOKENS`**: Claude's `max_tokens` is now configurable via env var (default: 2048).
+- **Puppeteer sandbox is now opt-in** ⚠️: `--no-sandbox` is **no longer enabled by default**. Docker/CI users must set `PUPPETEER_NO_SANDBOX=true`. See [Docker / Puppeteer Note](#docker--puppeteer-note).
+- **Safer env parsing**: Numeric environment variables are now validated with min/max ranges. Invalid values produce a warning and fall back to defaults instead of crashing.
+- **Provider validation**: Invalid provider names (e.g., a typo in `CHAT_PROVIDER`) now produce a clear error message and exit, instead of crashing with an undefined property error.
+- **Stability improvements**:
+  - Message processing per chat now uses a deterministic promise queue (replaces polling-based locking).
+  - Reminder checker starts only after the WhatsApp client is ready, prevents overlapping runs, and stops gracefully on shutdown.
+  - Global `unhandledRejection` and `uncaughtException` handlers prevent silent crashes.
+  - Restricted numbers are now also blocked from running bot commands.
+- **Tests**: Added unit tests for core utilities (`extractAnswer`, `includeName`, `sanitizeForLog`, `messageConversion`, `recurrence`) and new npm scripts `npm test` / `npm run typecheck:strict`.
+- **Bug fixes**:
+  - `includeName` now escapes special regex characters in bot names and handles empty inputs.
+  - `canEditImages` now correctly checks the image provider instead of the chat provider.
+  - Database migration to make `user_memories.real_name` nullable (prevents crashes for users without a stored name).
+
+
 ## Key Features
 
 - **Automatic Responses**: Generates coherent and contextual responses to messages
@@ -89,6 +111,14 @@ This project uses `package-lock.json` (lockfileVersion 3) to guarantee reproduci
   ```
   npm audit
   ```
+- **Run tests** (unit tests for core utilities):
+  ```
+  npm test
+  ```
+- **Strict type-check** (stricter TypeScript validation without emitting):
+  ```
+  npm run typecheck:strict
+  ```
 
 The lockfile should be committed and kept up to date. Dependency upgrades should be reviewed in a separate PR or change — do not run `npm audit fix` or `npm update` without explicit review, as it may introduce breaking changes.
 
@@ -156,6 +186,15 @@ The bot logs are sanitized to avoid exposing API keys, tokens, phone numbers, or
 
 - **OpenAI server-side storage** (`OPENAI_STORE`): By default, `store` is set to `false` in API requests, so OpenAI does not retain your conversations on their servers. If you need server-side storage (e.g., for compliance or debugging via the OpenAI dashboard), set `OPENAI_STORE=true` in your `.env` file.
 - **SQLite database** (`roboto.sqlite`): Contains reminders, chat configurations, and memories. Since the database is not encrypted, restrict file permissions (`chmod 600 roboto.sqlite`) and ensure the host volume is secured. For maximum privacy, periodically clear old records using the `-memory clear` / `-memory cleargroup` commands.
+
+### Rate Limiting
+
+Optional per-chat (groups) or per-author (direct chats) rate limiting prevents a single user or chat from overwhelming the AI backend. Disabled by default.
+
+- `RATE_LIMIT_MAX=0` — Maximum AI requests allowed per sliding window. `0` disables rate limiting (default).
+- `RATE_LIMIT_WINDOW_SEC=60` — Sliding window duration in seconds (default: 60).
+
+When rate limiting is active, messages that exceed the limit are silently dropped (no error is sent to the user). Admin numbers (configured via `ADMIN_NUMBERS`) bypass rate limiting.
 
 ### Using `-chatconfig` Command
 
@@ -291,10 +330,12 @@ OPENAI_IMAGE_MODEL=dall-e-3                  # Model to use for image generation
 OPENAI_SPEECH_MODEL=tts-1                    # Model to use for text-to-speech
 OPENAI_SPEECH_VOICE=nova                     # Voice to use for text-to-speech
 OPENAI_TRANSCRIPTION_MODEL=whisper-1         # Model to use for speech-to-text
+OPENAI_STORE=false                           # Whether to enable OpenAI server-side storage of conversations (default: false)
 
 # CLAUDE CONFIGURATION
 CLAUDE_API_KEY=your_claude_api_key           # Your API key for Anthropic's Claude
 CLAUDE_CHAT_MODEL=claude-3-sonnet-20240229   # Model to use for Claude text completion
+CLAUDE_MAX_TOKENS=2048                       # Maximum tokens for Claude completions (default: 2048)
 
 # DEEPSEEK CONFIGURATION
 DEEPSEEK_API_KEY=your_api_key                # Your API key for DeepSeek services
@@ -335,12 +376,27 @@ TRANSCRIPTION_LANGUAGE=en                    # Default language for voice transc
 USE_CONTACT_NAMES=true                       # Determines whether the name of stored contacts will be used to identify each user
 MEMORIES_ENABLED=true                        # Enable memory feature
 
+# CACHE TTLs (override NODE_CACHE_TIME per category; 0 = use NODE_CACHE_TIME default)
+# MESSAGE_CACHE_TTL=300                      # Per-chat message cache TTL in seconds
+# MEDIA_CACHE_TTL=86400                      # Downloaded media cache TTL in seconds
+# TRANSCRIPTION_CACHE_TTL=86400              # Transcribed voice cache TTL in seconds
+
+# RATE LIMITING (optional; disabled by default)
+# RATE_LIMIT_MAX=30                          # Max AI requests per window per chat/author. 0 = disabled
+# RATE_LIMIT_WINDOW_SEC=60                   # Sliding window for rate limiting in seconds (default: 60)
+
+# PUPPETEER / DOCKER
+PUPPETEER_NO_SANDBOX=false                   # Set to true for Docker/CI environments that require --no-sandbox
+
 # Additional prompt info to tailor the bot's personality (optional)
 PROMPT_INFO="You should adopt a friendly and informal tone, often using emojis in responses"  # Custom instructions for bot personality
 
 # FEATURE TOGGLES
 IMAGE_CREATION_ENABLED=false                 # Whether image creation feature is enabled
 VOICE_MESSAGES_ENABLED=false                 # Whether voice message processing is enabled
+
+LOG_LEVEL=debug                              # Log level (debug, info, warn, error)
+ADMIN_NUMBERS=14255550126                    # Comma-separated admin phone numbers (bypass rate limiting)
 
 ```
 
@@ -352,6 +408,16 @@ VOICE_MESSAGES_ENABLED=false                 # Whether voice message processing 
 - [Deepinfra API Keys](https://deepinfra.com/dash/api_keys)
 - [QWEN API Keys](https://bailian.console.alibabacloud.com/?apiKey=1#/api-key-center)
 - [ElevenLabs API Keys](https://elevenlabs.io/app/account)
+
+
+## Docker / Puppeteer Note
+
+> ⚠️ **Breaking change in v1.4.6**: The Puppeteer `--no-sandbox` flag is **no longer enabled by default**. If you run the bot in a Docker container or CI environment where Chromium requires `--no-sandbox`, you must explicitly set:
+> ```
+> PUPPETEER_NO_SANDBOX=true
+> ```
+> in your `.env` file. Without this, the WhatsApp client may fail to start in sandboxed environments.
+
 
 ---
 
