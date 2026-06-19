@@ -1,3 +1,12 @@
+import type { ChatConfiguration } from '../config/chat-configurations';
+
+export interface AIService<TMessage = any, TTools = any> {
+  sendMessage(messages: TMessage[], systemPrompt: string, chatConfig: ChatConfiguration, tools: TTools, toolContext?: ToolExecutionContext): Promise<string>;
+  addMessageToCache(item: TMessage, chatId: string): void;
+  deleteChatCache(chatId: string): void;
+  hasChatCache(chatId: string): boolean;
+}
+
 export interface AiMessage {
   role: AIRole;
   content: Array<AIContent>;

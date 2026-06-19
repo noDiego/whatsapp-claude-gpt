@@ -73,11 +73,7 @@ class ChatConfig {
   }
 
   public async getChatConfig(chatId: string, chatName: string): Promise<ChatConfiguration> {
-    let found = await db.select().from(chatConfigsTable).where(eq(chatConfigsTable.chatId, chatId)).get();
-
-    if (!found && chatName) {
-      found = await db.select().from(chatConfigsTable).where(eq(chatConfigsTable.name, chatName)).get();
-    }
+    const found = await db.select().from(chatConfigsTable).where(eq(chatConfigsTable.chatId, chatId)).get();
 
     return await this.withDefaults(found || {}, chatId);
   }

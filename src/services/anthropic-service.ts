@@ -4,11 +4,11 @@ import { AIConfig, CONFIG } from '../config';
 import { MessageParam, TextBlock } from '@anthropic-ai/sdk/resources';
 import Roboto from "../bot/roboto";
 import NodeCache from "node-cache";
-import { AIRole, ToolExecutionContext } from "../interfaces/ai-interfaces";
+import { AIRole, AIService, ToolExecutionContext } from "../interfaces/ai-interfaces";
 import { countMessages, sanitizeForLog, trimCachePreserveMessageStart } from "../utils";
 import { ChatConfiguration } from "../config/chat-configurations";
 
-class AnthropicService {
+class AnthropicService implements AIService<MessageParam, any> {
 
   private anthropic : Anthropic;
   private messagesCache = new NodeCache();
@@ -101,7 +101,7 @@ class AnthropicService {
       system: systemPrompt,
       model: AIConfig.ChatConfig.model,
       messages: messageList,
-      max_tokens: 2048,
+      max_tokens: CONFIG.BotConfig.claudeMaxTokens,
       top_p: 1,
       tools
     });

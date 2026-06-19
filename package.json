@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-claude-gpt",
-  "version": "1.4.5",
+  "version": "1.4.6",
   "license": "MIT",
   "author": "Diego Beltran <diego.beltran88@gmail.com>",
   "description": "WhatsApp-Claude-GPT is a WhatsApp chatbot that supports multiple AI providers for chat, optional image generation/editing, and voice (speech-to-text and text-to-speech). It’s built for natural, contextual conversations and can now also handle reminders and personalized memory.",
@@ -39,7 +39,9 @@
   "scripts": {
     "start": "npm run build && node build/index.js",
     "debug": "ts-node src/index.ts",
-    "build": "rimraf ./build && tsc"
+    "build": "rimraf ./build && tsc",
+    "test": "node --test --require ts-node/register tests/*.test.ts",
+    "typecheck:strict": "tsc -p tsconfig.strict.json --noEmit"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",
@@ -52,7 +54,7 @@
     "openai": "^6.7.0",
     "qrcode-terminal": "^0.12.0",
     "uuid": "^11.1.0",
-    "whatsapp-web.js": "github:pedroslopez/whatsapp-web.js#main",
+    "whatsapp-web.js": "github:pedroslopez/whatsapp-web.js#2dc9466facb027caee19dbf285e0a2763f5373bb",
     "winston": "^3.18.3"
   },
   "devDependencies": {

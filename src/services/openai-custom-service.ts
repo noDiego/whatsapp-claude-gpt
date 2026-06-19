@@ -5,12 +5,12 @@ import { AIConfig, CONFIG } from '../config';
 import { ChatCompletion } from 'openai/src/resources/chat/completions';
 import { Tool } from "openai/resources/responses/responses";
 import NodeCache from "node-cache";
-import { AIRole, ToolExecutionContext } from "../interfaces/ai-interfaces";
+import { AIRole, AIService, ToolExecutionContext } from "../interfaces/ai-interfaces";
 import { cleanChatCompletionMessage, countMessages, sanitizeForLog, trimCachePreserveMessageStart } from "../utils";
 import Roboto from "../bot/roboto";
 import { ChatConfiguration } from "../config/chat-configurations";
 
-class CustomOpenAIService {
+class CustomOpenAIService implements AIService<ChatCompletionMessageParam, any> {
 
   private messagesCache = new NodeCache({
     stdTTL: CONFIG.BotConfig.messageCacheTtl || CONFIG.BotConfig.nodeCacheTime,
@@ -128,7 +128,7 @@ class CustomOpenAIService {
         type: responseType
       },
       tools: tools,
-      store: true
+      store: CONFIG.BotConfig.openAIStore
     }
     const response: ChatCompletion = await client.chat.completions.create(params);
 

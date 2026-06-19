@@ -4,12 +4,12 @@ import { AIConfig, CONFIG } from '../config';
 import { ResponseInput, ResponseInputItem, Tool } from "openai/resources/responses/responses";
 
 import { countMessages, sanitizeForLog, trimCachePreserveMessageStart } from "../utils";
-import { AIRole, ToolExecutionContext } from "../interfaces/ai-interfaces";
+import { AIRole, AIService, ToolExecutionContext } from "../interfaces/ai-interfaces";
 import NodeCache from "node-cache";
 import Roboto from "../bot/roboto";
 import { ChatConfiguration } from "../config/chat-configurations";
 
-class OpenaiService {
+class OpenaiService implements AIService<ResponseInputItem, Tool[]> {
 
   private messagesCache = new NodeCache({
     stdTTL: CONFIG.BotConfig.messageCacheTtl || CONFIG.BotConfig.nodeCacheTime,
@@ -121,7 +121,7 @@ class OpenaiService {
           ? { summary: reasoningProfile.summary, effort: reasoningProfile.effort }
           : undefined,
       tools,
-      store: true
+      store: CONFIG.BotConfig.openAIStore
     } as any);
 
     logger.debug(`[OpenAI] ResponsesAPI Usage: Input=${responseResult.usage.input_tokens}` + ` Cached=${responseResult.usage.input_tokens_details?.cached_tokens}` + ` Output=${responseResult.usage.output_tokens}`);

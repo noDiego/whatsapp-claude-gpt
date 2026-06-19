@@ -12,10 +12,12 @@ class WspWeb {
   private msgMediaCache: NodeCache = new NodeCache({
     stdTTL: CONFIG.BotConfig.mediaCacheTtl || CONFIG.BotConfig.nodeCacheTime,
     checkperiod: 600,
+    useClones: false,
   });
   private transcribedMessagesCache: NodeCache = new NodeCache({
     stdTTL: CONFIG.BotConfig.transcriptionCacheTtl || CONFIG.BotConfig.nodeCacheTime,
     checkperiod: 600,
+    useClones: false,
   });
   private wspClient: Client;
   private lastProcessed = new Map<string, string>();

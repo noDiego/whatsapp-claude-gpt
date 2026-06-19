@@ -1,5 +1,5 @@
 import { Chat, GroupChat, Message, MessageMedia } from "whatsapp-web.js";
-import { AIAnswer, AiMessage, AIProvider, OperationResult, ToolExecutionContext } from "../interfaces/ai-interfaces";
+import { AIAnswer, AiMessage, AIProvider, AIService, OperationResult, ToolExecutionContext } from "../interfaces/ai-interfaces";
 import { AIConfig, CONFIG } from "../config";
 import WspWeb from "./wsp-web";
 import OpenAISvc from "../services/openai-service";
@@ -24,9 +24,11 @@ class RobotoClass {
   // Per-chat typing flag used by sendStateTyping to know when to stop.
   private chatTypingFlags = new Map<string, boolean>();
   private botEnabled = true;
-  private chatImageRetry = new Map();
+  private chatImageRetry = new Map<string, number>();
+  private readonly MAX_IMAGE_RETRY_KEYS = 500;
   // Rate limiting: key -> timestamps[] for sliding window.
   private rateLimitTracker = new Map<string, number[]>();
+  private readonly MAX_RATE_LIMIT_TRACKER_KEYS = 500;
 
   constructor() {
   }
@@ -47,7 +49,13 @@ class RobotoClass {
       const botName = chatConfig.botName;
       const isAdmin = CONFIG.BotConfig.adminNumbers.includes(contactData.number);
 
-      if (this.isCommand(wspMessage, isAdmin)) return this.commandSelect(wspMessage, chatId, isAdmin);
+      if (this.isCommand(wspMessage, isAdmin)) {
+        if (CONFIG.BotConfig.restrictedNumbers.includes(contactData.number)) {
+          logger.debug(`[readWspMessage] Restricted number ${contactData.number} attempted command. Ignored.`);
+          return false;
+        }
+        return this.commandSelect(wspMessage, chatId, isAdmin);
+      }
 
       const shouldProcess = await this.shouldProcessMessage(wspMessage, chatData, botName);
       if (!shouldProcess) return false;
@@ -136,19 +144,27 @@ class RobotoClass {
 
   }
 
+  /**
+   * Resolves the AI service instance for the given provider.
+   * Mapping: OPENAI → OpenAISvc, CLAUDE → AnthropicSvc, everything else → CustomOpenAISvc.
+   */
+  private resolveAIService(provider = AIConfig.ChatConfig.provider): AIService {
+    switch (provider) {
+      case AIProvider.OPENAI:
+        return OpenAISvc;
+      case AIProvider.CLAUDE:
+        return AnthropicSvc;
+      default:
+        return CustomOpenAISvc;
+    }
+  }
+
   public async sendMessageToAi(aiMessages: AiMessage[], systemPrompt, chatConfig: ChatConfiguration, withTools = true, toolContext?: ToolExecutionContext){
     const messagesList = convertIaMessagesLang(aiMessages) as any;
     const chat = await wspWeb.getWspClient().getChatById(chatConfig.chatId);
     const tools = withTools ? getTools(chat) : undefined;
 
-    switch (AIConfig.ChatConfig.provider){
-      case AIProvider.OPENAI:
-        return await OpenAISvc.sendMessage(messagesList, systemPrompt, chatConfig, tools, toolContext);
-      case AIProvider.CLAUDE:
-        return await AnthropicSvc.sendMessage(messagesList, systemPrompt, chatConfig, tools, toolContext);
-      default:
-        return await CustomOpenAISvc.sendMessage(messagesList, systemPrompt, chatConfig, tools, toolContext);
-    }
+    return await this.resolveAIService().sendMessage(messagesList, systemPrompt, chatConfig, tools, toolContext);
   }
 
   public async handleFunction(functionName: string, functionArgs: any, context?: ToolExecutionContext): Promise<OperationResult> {
@@ -192,13 +208,18 @@ class RobotoClass {
         const imageRetryCount = this.chatImageRetry.get(args.chatId);
         try {
           await this.createImage(args);
-          this.chatImageRetry.set(args.chatId, 0);
+          this.chatImageRetry.delete(args.chatId);
           return { success: true, result: 'The image has been generated and sent to the chat.'};
         } catch (e){
           logger.error(`[${e.code}]: ${e.message}`);
           if (imageRetryCount >= 3 || e.code == '400' || !e.message.toLowerCase().includes('safety system')) {
-            this.chatImageRetry.set(args.chatId, 0);
+            this.chatImageRetry.delete(args.chatId);
             return {success: false, result: `Error generating image: ${e.message}.`};
+          }
+          // FIFO eviction: cap chatImageRetry to prevent unbounded growth.
+          if (!this.chatImageRetry.has(args.chatId) && this.chatImageRetry.size >= this.MAX_IMAGE_RETRY_KEYS) {
+            const firstKey = this.chatImageRetry.keys().next().value;
+            if (firstKey !== undefined) this.chatImageRetry.delete(firstKey);
           }
           this.chatImageRetry.set(args.chatId, imageRetryCount ? imageRetryCount + 1 : 1);
           const match = e.message.match(/safety_violations=\[([^\]]*)\]/);
@@ -266,6 +287,21 @@ class RobotoClass {
   }
 
   /**
+   * Opportunistic pruning: removes entries from rateLimitTracker whose
+   * timestamps have all expired outside the current window.
+   */
+  private pruneRateLimitTracker(windowStart: number): void {
+    for (const [key, timestamps] of this.rateLimitTracker) {
+      const active = timestamps.filter(t => t > windowStart);
+      if (active.length === 0) {
+        this.rateLimitTracker.delete(key);
+      } else if (active.length !== timestamps.length) {
+        this.rateLimitTracker.set(key, active);
+      }
+    }
+  }
+
+  /**
    * Rate limit check using a sliding window per key (authorId for direct, chatId for groups).
    * Returns true if the request is allowed, false if rate limited.
    * Admins bypass rate limiting (checked in caller).
@@ -278,14 +314,22 @@ class RobotoClass {
     const now = Date.now();
     const windowStart = now - windowSec * 1000;
 
+    // Opportunistic pruning: clean up expired entries across the map.
+    this.pruneRateLimitTracker(windowStart);
+
     let timestamps = this.rateLimitTracker.get(key);
     if (!timestamps) {
+      // FIFO eviction: cap rateLimitTracker to prevent unbounded growth.
+      if (this.rateLimitTracker.size >= this.MAX_RATE_LIMIT_TRACKER_KEYS) {
+        const firstKey = this.rateLimitTracker.keys().next().value;
+        if (firstKey !== undefined) this.rateLimitTracker.delete(firstKey);
+      }
       timestamps = [now];
       this.rateLimitTracker.set(key, timestamps);
       return true;
     }
 
-    // Remove expired entries
+    // Remove expired entries for current key (already pruned above, but filter for safety).
     timestamps = timestamps.filter(t => t > windowStart);
 
     if (timestamps.length >= max) {
@@ -636,45 +680,18 @@ class RobotoClass {
       const aiMessage = await WspWeb.convertWspMsgToAiMsg(wspMessage);
       const items = convertIaMessagesLang([aiMessage]) as any;
 
-      switch (AIConfig.ChatConfig.provider) {
-        case AIProvider.OPENAI:
-          return OpenAISvc.addMessageToCache(items[0], chatId);
-        case AIProvider.DEEPSEEK:
-          return CustomOpenAISvc.addMessageToCache(items[0], chatId);
-        case AIProvider.CLAUDE:
-          return AnthropicSvc.addMessageToCache(items[0], chatId);
-        default:
-          return OpenaiCustomService.addMessageToCache(items[0], chatId);
-      }
+      return this.resolveAIService().addMessageToCache(items[0], chatId);
     } catch (e) {
       logger.error(`Error adding message to cache: ${e}`);
     }
   }
 
   private deleteChatCache(chatId: string){
-    switch (AIConfig.ChatConfig.provider){
-      case AIProvider.OPENAI:
-        return OpenAISvc.deleteChatCache(chatId);
-      case AIProvider.DEEPSEEK:
-        return CustomOpenAISvc.deleteChatCache(chatId);
-      case AIProvider.CLAUDE:
-        return AnthropicSvc.deleteChatCache(chatId);
-      default:
-        return OpenaiCustomService.deleteChatCache(chatId);
-    }
+    return this.resolveAIService().deleteChatCache(chatId);
   }
 
   private hasChatCache(chatId: string){
-    switch (AIConfig.ChatConfig.provider){
-      case AIProvider.OPENAI:
-        return OpenAISvc.hasChatCache(chatId);
-      case AIProvider.DEEPSEEK:
-        return CustomOpenAISvc.hasChatCache(chatId);
-      case AIProvider.CLAUDE:
-        return AnthropicSvc.hasChatCache(chatId);
-      default:
-        return OpenaiCustomService.hasChatCache(chatId);
-    }
+    return this.resolveAIService().hasChatCache(chatId);
   }
 
   private async sendStateTyping(chatData: Chat){

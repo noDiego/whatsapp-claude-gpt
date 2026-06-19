@@ -92,6 +92,11 @@ This project uses `package-lock.json` (lockfileVersion 3) to guarantee reproduci
 
 The lockfile should be committed and kept up to date. Dependency upgrades should be reviewed in a separate PR or change — do not run `npm audit fix` or `npm update` without explicit review, as it may introduce breaking changes.
 
+### Dependency Notes
+
+- **`whatsapp-web.js`** is pinned to a specific commit (`2dc9466`) instead of tracking the `#main` branch, to ensure reproducible installs. Upstream upgrades should be reviewed and tested in a separate PR.
+- **`drizzle-orm`** is currently at a beta version (`1.0.0-beta.21`). Any future upgrade must be validated against the memory and reminder queries (`src/services/memory-service.ts`, `src/services/reminder-service.ts`) as the ORM API may change between beta releases.
+
 ## Basic Configuration
 
 At minimum, you need an API key for one of the supported AI providers. For basic usage with OpenAI:
@@ -149,6 +154,7 @@ Memory commands you can type:
 
 The bot logs are sanitized to avoid exposing API keys, tokens, phone numbers, or raw user content. All sensitive patterns (Bearer tokens, `xi-api-key`, cookies, etc.) are redacted before logging.
 
+- **OpenAI server-side storage** (`OPENAI_STORE`): By default, `store` is set to `false` in API requests, so OpenAI does not retain your conversations on their servers. If you need server-side storage (e.g., for compliance or debugging via the OpenAI dashboard), set `OPENAI_STORE=true` in your `.env` file.
 - **SQLite database** (`roboto.sqlite`): Contains reminders, chat configurations, and memories. Since the database is not encrypted, restrict file permissions (`chmod 600 roboto.sqlite`) and ensure the host volume is secured. For maximum privacy, periodically clear old records using the `-memory clear` / `-memory cleargroup` commands.
 
 ### Using `-chatconfig` Command

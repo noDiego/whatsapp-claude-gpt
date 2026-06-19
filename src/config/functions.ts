@@ -288,7 +288,7 @@ export function getTools(chatData: Chat) {
     const tools = [];
     if(AIConfig.ImageConfig.enabled) tools.push(AIConfig.ImageConfig.canEditImages? generate_image_withedit : generate_image);
     tools.push(reminder_manager);
-    if(AIConfig.TranscriptionConfig.enabled) tools.push(generate_speech);
+    if(AIConfig.SpeechConfig.enabled) tools.push(generate_speech);
     if(CONFIG.BotConfig.memoriesEnabled) {
         tools.push(user_memory_manager);
          if(chatData.isGroup) tools.push(group_memory_manager);

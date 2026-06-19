@@ -207,6 +207,8 @@ const BotConfig = {
   puppeteerNoSandbox: process.env.PUPPETEER_NO_SANDBOX?.toLocaleLowerCase() === 'true', // Whether to run Puppeteer with --no-sandbox. Required in some Docker environments. Default: false.
   rateLimitMax: getIntEnv('RATE_LIMIT_MAX', 0, 0, 600), // Max AI requests per window per chat/author. 0 = disabled. Default: 0 (disabled).
   rateLimitWindowSec: getIntEnv('RATE_LIMIT_WINDOW_SEC', 60, 5, 3600), // Rate limiting window in seconds. Default: 60.
+  openAIStore: process.env.OPENAI_STORE?.toLocaleLowerCase() === 'true', // Whether to enable OpenAI server-side storage of conversations. Default: false.
+  claudeMaxTokens: getIntEnv('CLAUDE_MAX_TOKENS', 2048, 1), // Maximum tokens for Claude completions. Default: 2048.
 };
 
 // Dynamically generate the bot's initial prompt based on configuration parameters
