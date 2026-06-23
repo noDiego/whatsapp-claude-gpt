@@ -14,6 +14,33 @@ const openAIWebSearch: Tool =
     }
 ;
 
+const customWebSearch = {
+    type: "function",
+    function: {
+        "name": "web_search",
+        "description": "Perform a web search using a query and user location and return results",
+        "strict": true,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query to look up"
+                },
+                "user_location": {
+                    "type": "string",
+                    "description": "Geographical location of the user, such as a city or country"
+                }
+            },
+            "required": [
+                "query",
+                "user_location"
+            ],
+            "additionalProperties": false
+        }
+    },
+    strict: false
+}
 const generate_speech = {
     type: "function",
     function: {
@@ -293,6 +320,7 @@ export function getTools(chatData: Chat) {
         tools.push(user_memory_manager);
          if(chatData.isGroup) tools.push(group_memory_manager);
     }
+    if(!!AIConfig.SearchConfig.apiKey) tools.push(customWebSearch);
 
     switch (AIConfig.ChatConfig.provider) {
         case AIProvider.CLAUDE:
@@ -300,7 +328,8 @@ export function getTools(chatData: Chat) {
         case AIProvider.OPENAI:
             if(AIConfig.ChatConfig.model.includes('nano'))
                 return [...convertCompletionsToolsToResponses(tools)]
-            return [openAIWebSearch, ...convertCompletionsToolsToResponses(tools)]
+            //return [openAIWebSearch, ...convertCompletionsToolsToResponses(tools)]
+            return [...convertCompletionsToolsToResponses(tools)]
         default:
             return tools;
     }

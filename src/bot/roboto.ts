@@ -17,6 +17,7 @@ import MemoryService from "../services/memory-service";
 import wspWeb from "./wsp-web";
 import path from "node:path";
 import * as fs from "node:fs";
+import PerplexitySvc from "../services/perplexity_search";
 
 class RobotoClass {
 
@@ -235,6 +236,15 @@ class RobotoClass {
         const {input, instructions, voice_gender} = args;
         await this.sendAudioResponse(msgId, {instructions, messageToSay: input, voiceGender: voice_gender});
         return {success: true, result: 'The audio has been generated and sent to the user. You should respond with { "message" : null } to avoid duplicate messages'};
+      },
+      web_search: async (args: any, context?: ToolExecutionContext) => {
+        const {query, user_location} = args;
+        try{
+          const results = await PerplexitySvc.perplexitySonarSearch(query, user_location);
+          return {success: true, result: results};
+        } catch (e){
+          return { success: false, result: `Web search failed: ${e.message}` };
+        }
       },
       reminder_manager: async (args, context?: ToolExecutionContext) => {
         return await Reminders.processFunctionCall(args, context);

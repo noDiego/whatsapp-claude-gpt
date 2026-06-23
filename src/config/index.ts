@@ -84,6 +84,9 @@ const Providers = {
     apiKey: process.env.DEEPINFRA_API_KEY,
     baseURL: process.env.DEEPINFRA_BASEURL ?? 'https://api.deepinfra.com/v1/openai'
   },
+  PERPLEXITY:{
+    apiKey: process.env.PERPLEXITY_API_KEY
+  },
   CUSTOM: {
     baseURL: process.env.CUSTOM_BASEURL,
     apiKey:  process.env.CUSTOM_API_KEY,
@@ -120,6 +123,10 @@ const TranscriptionConfig = {
   },
   language: process.env.TRANSCRIPTION_LANGUAGE ?? "en",
   enabled: process.env.VOICE_MESSAGES_ENABLED?.toLocaleLowerCase() === 'true',
+};
+
+const SearchConfig = {
+  provider: process.env.SEARCH_PROVIDER?.toUpperCase() || "OPENAI"
 };
 
 const SpeechConfig = {
@@ -179,8 +186,11 @@ export const AIConfig = {
     apiKey: safeProviderLookup(SpeechConfig.provider, 'SPEECH_PROVIDER').apiKey,
     voice: SpeechConfig.voice[SpeechConfig.provider],
     enabled: SpeechConfig.enabled
+  },
+  SearchConfig:{
+    provider: SearchConfig.provider,
+    apiKey: safeProviderLookup(SearchConfig.provider, 'SEARCH_PROVIDER').apiKey
   }
-
 }
 
 // General bot configuration parameters
