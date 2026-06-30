@@ -18,6 +18,7 @@ class ReminderManager {
 
     private reminderInterval: NodeJS.Timeout | null = null;
     private isChecking = false;
+    private fatalErrorReminders: Set<string> = new Set();
 
     constructor() {
         // Reminder checker is now started from the 'ready' event in src/index.ts
@@ -44,6 +45,11 @@ class ReminderManager {
         }
     }
 
+    public clearFatalErrors(): void {
+        this.fatalErrorReminders.clear();
+        logger.info('[ReminderManager] Fatal error tracking cleared.');
+    }
+
     private async checkReminders() {
         // Prevent overlapping runs when a previous check is still in progress.
         if (this.isChecking) {
@@ -68,6 +74,8 @@ class ReminderManager {
 
                 const scheduledDate = fromZonedTime(reminder.reminderDate, reminder.reminderDateTZ);
                 if (scheduledDate > now) continue;
+
+                if (this.fatalErrorReminders.has(reminder.id)) continue;
 
                 try {
                     const diffMs = now.getTime() - scheduledDate.getTime();
@@ -99,7 +107,15 @@ class ReminderManager {
 
                     logger.info(`Reminder ${reminder.id} for chat ${reminder.chatId} processed.`);
                 } catch (err) {
-                    logger.error(`Error processing reminder ${reminder.id} for chat ${reminder.chatId}: ${err.message}`);
+                    const errMsg = err?.message || String(err);
+                    if (this.isFatalPuppeteerError(errMsg)) {
+                        if (!this.fatalErrorReminders.has(reminder.id)) {
+                            logger.error(`[FATAL] Puppeteer error processing reminder ${reminder.id} for chat ${reminder.chatId}: ${errMsg}. Skipping until reconnect.`);
+                            this.fatalErrorReminders.add(reminder.id);
+                        }
+                    } else {
+                        logger.error(`Error processing reminder ${reminder.id} for chat ${reminder.chatId}: ${errMsg}`);
+                    }
                 }
             }
         } finally {
@@ -107,6 +123,22 @@ class ReminderManager {
         }
     }
 
+    /**
+     * Detects Puppeteer/Chromium fatal errors that should suppress further
+     * processing until the client reconnects.
+     */
+    private isFatalPuppeteerError(errMsg: string): boolean {
+        const FATAL_PATTERNS = [
+            'Attempted to use detached Frame',
+            'Target closed',
+            'Session closed',
+            'Protocol error',
+            'Execution context was destroyed',
+            'Browser has been closed',
+            'Page has been closed',
+        ];
+        return FATAL_PATTERNS.some(pattern => errMsg.includes(pattern));
+    }
 
     private async sendReminderMessage(reminder: Reminder){
 
