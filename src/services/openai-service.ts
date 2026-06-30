@@ -121,7 +121,7 @@ class OpenaiService implements AIService<ResponseInputItem, Tool[]> {
           ? { summary: reasoningProfile.summary, effort: reasoningProfile.effort }
           : undefined,
       tools,
-      store: CONFIG.BotConfig.openAIStore
+      store: true
     } as any);
 
     logger.debug(`[OpenAI] ResponsesAPI Usage: Input=${responseResult.usage.input_tokens}` + ` Cached=${responseResult.usage.input_tokens_details?.cached_tokens}` + ` Output=${responseResult.usage.output_tokens}`);
