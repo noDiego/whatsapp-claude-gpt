@@ -209,6 +209,13 @@ const BotConfig = {
   rateLimitWindowSec: getIntEnv('RATE_LIMIT_WINDOW_SEC', 60, 5, 3600), // Rate limiting window in seconds. Default: 60.
   openAIStore: process.env.OPENAI_STORE?.toLocaleLowerCase() === 'true', // Whether to enable OpenAI server-side storage of conversations. Default: false.
   claudeMaxTokens: getIntEnv('CLAUDE_MAX_TOKENS', 2048, 1), // Maximum tokens for Claude completions. Default: 2048.
+
+  // --- Connection watchdog (Task 02) ---
+  watchdogEnabled: process.env.WATCHDOG_ENABLED?.toLocaleLowerCase() !== 'false', // Enable periodic connection probe and auto-reconnect. Default: true.
+  watchdogIntervalSec: getIntEnv('WATCHDOG_INTERVAL_SEC', 30, 10, 300), // Seconds between connection probes. Default: 30.
+  reconnectBaseDelaySec: getIntEnv('RECONNECT_BASE_DELAY_SEC', 5, 1), // Base delay for exponential backoff (seconds). Default: 5.
+  reconnectMaxDelaySec: getIntEnv('RECONNECT_MAX_DELAY_SEC', 300, 5, 3600), // Maximum delay cap for backoff (seconds). Default: 300.
+  reconnectMaxAttempts: getIntEnv('RECONNECT_MAX_ATTEMPTS', 0, 0), // Max reconnect attempts before failAndExit. 0 = infinite (default).
 };
 
 // Dynamically generate the bot's initial prompt based on configuration parameters
