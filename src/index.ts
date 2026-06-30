@@ -4,6 +4,7 @@ import qrcode from 'qrcode-terminal';
 import Roboto from "./bot/roboto";
 import WhatsappHandler from "./bot/wsp-web";
 import Reminders from "./services/reminder-service";
+import ConnectionManager from "./services/connection-service";
 import { configValidation, logConfigInfo } from "./utils";
 import { CONFIG } from "./config";
 
@@ -57,6 +58,16 @@ async function start() {
       logger.info('Client is ready!');
       // Start the reminder checker now that the WhatsApp client is available.
       Reminders.startReminderChecker();
+      // Clear any fatal error tracking from a previous connection cycle.
+      Reminders.clearFatalErrors();
+      // Start the connection watchdog to detect and recover from Puppeteer crashes.
+      ConnectionManager.startWatchdog();
+    });
+
+    // Log disconnection events for visibility. Recovery is handled by the
+    // connection watchdog, not here, to avoid duplicate logic.
+    wspClient.on('disconnected', (reason: string) => {
+      logger.warn(`[index] WhatsApp client disconnected. Reason: ${reason}`);
     });
 
     // Capture unhandled rejections from the message listener so a single
@@ -72,6 +83,7 @@ async function start() {
     const shutdown = async (signal: string) => {
       logger.info(`Received ${signal}, shutting down gracefully...`);
       try {
+        ConnectionManager.stopWatchdog();
         Reminders.stopReminderChecker();
         await wspClient.destroy();
         logger.info('WhatsApp client destroyed');
@@ -100,6 +112,7 @@ process.on('uncaughtException', (error: Error) => {
   // For uncaught exceptions we perform a controlled shutdown
   // because the process may be in an inconsistent state.
   try {
+    ConnectionManager.stopWatchdog();
     Reminders.stopReminderChecker();
   } catch (_) { /* ignore errors during emergency cleanup */ }
   process.exit(1);

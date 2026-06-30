@@ -61,3 +61,34 @@
 **Decisiones pendientes:**
 - [SUPUESTO‑PROBE] y [SUPUESTO‑REUSE] deben validarse en runtime. Pendiente de smoke test.
 - Cableado en `index.ts` (Task 03): este módulo expone `startWatchdog()`/`stopWatchdog()` pero no se auto‑inicia. Task 03 lo cableará en el evento `ready`.
+
+---
+
+## Task 03 — Cableado en index.ts (watchdog + reseteo del set fatal)
+
+**Fecha:** 2026-06-30
+
+**Archivos modificados:**
+- `src/index.ts` — Import de `ConnectionManager`, cableado de `clearFatalErrors()` + `startWatchdog()` en `ready`, handler `disconnected` (solo log), `stopWatchdog()` en `shutdown` y `uncaughtException`.
+
+**Validaciones ejecutadas:**
+
+| Validación | Comando | Resultado |
+|---|---|---|
+| Build | `npm run build` | ✅ Pasó |
+| Tests | `env SPEECH_PROVIDER=OPENAI npm test` | ✅ 77/77 tests pasan |
+| Typecheck strict | `npm run typecheck:strict` | ❌ Falla por deuda preexistente (baseline). Sin errores nuevos en `src/index.ts`. |
+
+**Smoke test manual:** No ejecutado (requiere entorno con WhatsApp Web autenticado y Chromium corriendo). Las tres tasks juntas están listas para smoke test end‑to‑end.
+
+**Resultado:** Implementado según plan. El evento `ready` ahora ejecuta tres efectos idempotentes: `startReminderChecker()`, `clearFatalErrors()`, y `startWatchdog()`. Se agregó handler `disconnected` que solo loguea (la reconexión la maneja el watchdog). `shutdown` y `uncaughtException` paran el watchdog antes de destruir el cliente para evitar reconexiones durante el apagado.
+
+**Riesgos restantes:**
+- [SUPUESTO‑PROBE] y [SUPUESTO‑REUSE] de Task 02 siguen pendientes de validación empírica vía smoke test.
+- El handler `disconnected` con `reason='LOGOUT'` causará que el watchdog reconecte y muestre QR (sesión borrada). Es esperado.
+- Desconexión antes del primer `ready`: el watchdog aún no corre. Fuera de scope de este fix.
+
+**Desviaciones respecto a la task:** Ninguna.
+
+**Decisiones pendientes:**
+- [SUPUESTO‑PROBE] y [SUPUESTO‑REUSE] deben validarse en runtime con smoke test end‑to‑end.
